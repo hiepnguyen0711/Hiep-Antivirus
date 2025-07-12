@@ -11,7 +11,7 @@ $config = array(
         'servername' => 'localhost',
         'username' => 'root',
         'password' => '',
-        'database' => 'database'
+        'database' => '2025_hiep_anti_virus'
     ),
     'lang' => array(
         '0' => array(
@@ -57,6 +57,6 @@ $config = array(
     )
 );
 
-define("URLPATH", "http://" . $_SERVER["SERVER_NAME"] . "/thang4_2024/TN-VANCHUYEN-SCAEXPRESS_2/");
-define("urladmin", "http://" . $_SERVER["SERVER_NAME"] . "/thang4_2024/TN-VANCHUYEN-SCAEXPRESS_2/admin/");
-define('_hiep_code', '199611');
+define("URLPATH", "http://" . $_SERVER["SERVER_NAME"] . "/2025/thang_7/Hiep-Antivirus/");
+define("urladmin", "http://" . $_SERVER["SERVER_NAME"] . "/2025/thang_7/Hiep-Antivirus/admin/");
+define('_hiep_code', '071196');
