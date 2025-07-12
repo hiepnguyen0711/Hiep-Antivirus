@@ -3,7 +3,7 @@
  * Enterprise Security Scanner - Professional Version
  * Author: Hiệp Nguyễn
  * Facebook: https://www.facebook.com/G.N.S.L.7/
- * Version: 2.0 Enterprise
+ * Version: 3.0 Enterprise - Compact Bento Grid Design
  * Date: June 24, 2025
  */
 
@@ -111,60 +111,61 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
     ini_set('memory_limit', '256M');
     
     try {
-        $dangerous_patterns = [
-            'eval(', 'base64_decode(', 'exec(', 'system(', 'shell_exec(',
-            'passthru(', 'file_get_contents(', 'file_put_contents(',
-            'move_uploaded_file(', 'gzinflate(', 'str_rot13(',
-            '$_REQUEST', '$_GET', '$_POST', 'goto ', '__FILE__', '__DIR__',
-            'curl_exec(', 'proc_open(', 'popen(', 'fopen(', 'fwrite(',
-            'include(', 'require(', 'include_once(', 'require_once('
+        // Critical malware patterns that require immediate deletion (HIGH SEVERITY - RED)
+        $critical_malware_patterns = [
+            'eval(' => 'Code execution vulnerability',
+            'goto ' => 'Control flow manipulation',
+            'base64_decode(' => 'Encoded payload execution',
+            'gzinflate(' => 'Compressed malware payload',
+            'str_rot13(' => 'String obfuscation technique',
+            '$_F=__FILE__;' => 'File system manipulation',
+            'readdir(' => 'Directory traversal attempt',
+            '<?php eval' => 'Direct PHP code injection'
         ];
 
-        // Critical malware patterns that require file deletion
-        $malware_patterns = [
-            'eval(',
-            'goto ',
-            'base64_decode(',
-            'gzinflate(',
-            'str_rot13(',
-            '$_F=__FILE__;',
-            'readdir(',
-            '<?php eval'
+        // Severe patterns for uploads and dangerous functions
+        $severe_patterns = [
+            'move_uploaded_file(' => 'File upload without validation',
+            'exec(' => 'System command execution',
+            'system(' => 'Direct system call',
+            'shell_exec(' => 'Shell command execution',
+            'passthru(' => 'Command output bypass',
+            'proc_open(' => 'Process creation',
+            'popen(' => 'Pipe command execution'
         ];
 
-        // Warning patterns (less dangerous, just warnings)
+        // Warning patterns for filemanager and normal functions (MEDIUM SEVERITY - ORANGE/YELLOW)
         $warning_patterns = [
-            'exec(',
-            'system(',
-            'shell_exec(',
-            'passthru(',
-            'file_get_contents(',
-            'file_put_contents(',
-            'move_uploaded_file(',
-            '$_REQUEST',
-            '$_GET',
-            '$_POST',
-            '__FILE__',
-            '__DIR__',
-            'curl_exec(',
-            'proc_open(',
-            'popen(',
-            'fopen(',
-            'fwrite(',
-            'include(',
-            'require(',
-            'include_once(',
-            'require_once('
+            'file_get_contents(' => 'File read operation',
+            'file_put_contents(' => 'File write operation',
+            'fopen(' => 'File handle creation',
+            'fwrite(' => 'File write operation',
+            'include(' => 'File inclusion',
+            'require(' => 'Required file inclusion',
+            'include_once(' => 'Single file inclusion',
+            'require_once(' => 'Single required inclusion',
+            '$_REQUEST' => 'User input handling',
+            '$_GET' => 'GET parameter usage',
+            '$_POST' => 'POST parameter usage',
+            '__FILE__' => 'File path reference',
+            '__DIR__' => 'Directory path reference',
+            'curl_exec(' => 'HTTP request execution',
+            'unlink(' => 'File deletion',
+            'rmdir(' => 'Directory removal',
+            'mkdir(' => 'Directory creation'
         ];
 
-        $directories = ['./sources', './admin', './uploads', './'];
+        // Directories to scan (including filemanager now)
+        $directories = ['./sources', './admin', './uploads', './virus-files', './'];
         $suspicious_files = [];
-        $malware_files = [];
+        $critical_files = [];
+        $severe_files = [];
         $warning_files = [];
+        $filemanager_files = [];
         $scanned_files = 0;
-        $max_files = 1000; // Limit for performance
+        $max_files = 2000; // Increased limit
 
-        function scanFile($file_path, $patterns) {
+        function scanFileWithLineNumbers($file_path, $patterns) {
             if (!file_exists($file_path) || !is_readable($file_path)) {
                 return [];
             }
@@ -174,51 +175,35 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                 return [];
             }
             
+            $lines = explode("\n", $content);
             $issues = [];
-            foreach ($patterns as $pattern) {
-                if (stripos($content, $pattern) !== false) {
-                    $issues[] = $pattern;
+            
+            foreach ($patterns as $pattern => $description) {
+                foreach ($lines as $lineNumber => $line) {
+                    if (stripos($line, $pattern) !== false) {
+                        $issues[] = [
+                            'pattern' => $pattern,
+                            'description' => $description,
+                            'line' => $lineNumber + 1,
+                            'code_snippet' => trim($line)
+                        ];
+                    }
                 }
             }
             
             return $issues;
         }
 
-        function scanMalwareFiles($file_path, $malware_patterns) {
-            if (!file_exists($file_path) || !is_readable($file_path)) {
-                return false;
-            }
-            
-            $content = @file_get_contents($file_path);
-            if ($content === false) {
-                return false;
-            }
-            
-            foreach ($malware_patterns as $pattern) {
-                if (stripos($content, $pattern) !== false) {
-                    return true;
-                }
-            }
-            
-            return false;
-        }
-
-        function scanDirectory($dir, $patterns) {
-            global $suspicious_files, $scanned_files, $malware_files, $malware_patterns, $warning_files, $warning_patterns, $max_files;
+        function scanDirectory($dir, $critical_patterns, $severe_patterns, $warning_patterns) {
+            global $suspicious_files, $scanned_files, $critical_files, $severe_files, $warning_files, $filemanager_files, $max_files;
             
             if (!is_dir($dir)) {
                 return;
             }
             
-            // Files to exclude from scanning (testing virus/scanner files)
+            // Only exclude security_scan.php
             $exclude_files = [
-                'security_scan.php',
-                'security_scan_web.php'
-            ];
-            
-            // Exclude admin/filemanager directory from scanning
-            $exclude_directories = [
-                'admin/filemanager'
+                'security_scan.php'
             ];
             
             try {
@@ -236,45 +221,69 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                         $file_path = $file->getPathname();
                         $filename = basename($file_path);
                         
-                        // Skip excluded files (testing virus/scanner files)
+                        // Skip only security_scan.php
                         if (in_array($filename, $exclude_files)) {
-                            continue;
-                        }
-                        
-                        // Skip excluded directories
-                        $skip_directory = false;
-                        foreach ($exclude_directories as $exclude_dir) {
-                            if (strpos($file_path, $exclude_dir) !== false) {
-                                $skip_directory = true;
-                                break;
-                            }
-                        }
-                        if ($skip_directory) {
                             continue;
                         }
                         
                         $scanned_files++;
                         
-                        // Check for critical malware patterns first
-                        $is_malware = scanMalwareFiles($file_path, $malware_patterns);
-                        if ($is_malware) {
-                            $malware_issues = scanFile($file_path, $malware_patterns);
+                        // Determine file category
+                        $is_virus_file = strpos($file_path, 'virus-files') !== false;
+                        $is_filemanager = strpos($file_path, 'admin/filemanager') !== false;
+                        
+                        // Check for critical malware patterns first (HIGHEST PRIORITY)
+                        $critical_issues = scanFileWithLineNumbers($file_path, $critical_patterns);
+                        if (!empty($critical_issues)) {
                             $suspicious_files[] = [
                                 'path' => $file_path,
-                                'patterns' => array_unique($malware_issues),
-                                'severity' => 'critical'
+                                'issues' => $critical_issues,
+                                'severity' => 'critical',
+                                'priority' => 1,
+                                'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
                             ];
-                            $malware_files[] = $file_path;
+                            $critical_files[] = $file_path;
                         } else {
-                            // Check for warning patterns
-                            $warning_issues = scanFile($file_path, $warning_patterns);
-                            if (!empty($warning_issues)) {
+                            // Check for severe patterns
+                            $severe_issues = scanFileWithLineNumbers($file_path, $severe_patterns);
+                            if (!empty($severe_issues)) {
+                                $severity = $is_virus_file ? 'critical' : 'severe';
+                                $priority = $is_virus_file ? 1 : 2;
+                                
                                 $suspicious_files[] = [
                                     'path' => $file_path,
-                                    'patterns' => array_unique($warning_issues),
-                                    'severity' => 'warning'
+                                    'issues' => $severe_issues,
+                                    'severity' => $severity,
+                                    'priority' => $priority,
+                                    'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
                                 ];
-                                $warning_files[] = $file_path;
+                                
+                                if ($is_virus_file) {
+                                    $critical_files[] = $file_path;
+                                } else {
+                                    $severe_files[] = $file_path;
+                                }
+                            } else {
+                                // Check for warning patterns (LOWER PRIORITY)
+                                $warning_issues = scanFileWithLineNumbers($file_path, $warning_patterns);
+                                if (!empty($warning_issues)) {
+                                    $severity = 'warning';
+                                    $priority = 3;
+                                    
+                                    $suspicious_files[] = [
+                                        'path' => $file_path,
+                                        'issues' => $warning_issues,
+                                        'severity' => $severity,
+                                        'priority' => $priority,
+                                        'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
+                                    ];
+                                    
+                                    if ($is_filemanager) {
+                                        $filemanager_files[] = $file_path;
+                                    } else {
+                                        $warning_files[] = $file_path;
+                                    }
+                                }
                             }
                         }
                     }
@@ -287,8 +296,16 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
 
         // Perform scan
         foreach ($directories as $dir) {
-            scanDirectory($dir, $dangerous_patterns);
+            scanDirectory($dir, $critical_malware_patterns, $severe_patterns, $warning_patterns);
         }
+
+        // Sort suspicious files by priority (critical first)
+        usort($suspicious_files, function($a, $b) {
+            if ($a['priority'] == $b['priority']) {
+                return strcmp($a['path'], $b['path']);
+            }
+            return $a['priority'] - $b['priority'];
+        });
 
         // Log scan results
         $log_data = date('Y-m-d H:i:s') . " - Enterprise Security scan completed. Scanned: $scanned_files files, Found: " . count($suspicious_files) . " threats. IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown') . "\n";
@@ -303,10 +320,14 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             'scanned_files' => $scanned_files,
             'suspicious_count' => count($suspicious_files),
             'suspicious_files' => $suspicious_files,
-            'malware_files' => $malware_files,
-            'malware_count' => count($malware_files),
+            'critical_files' => $critical_files,
+            'critical_count' => count($critical_files),
+            'severe_files' => $severe_files,
+            'severe_count' => count($severe_files),
             'warning_files' => $warning_files,
             'warning_count' => count($warning_files),
+            'filemanager_files' => $filemanager_files,
+            'filemanager_count' => count($filemanager_files),
             'timestamp' => date('Y-m-d H:i:s')
         ];
         
@@ -393,17 +414,11 @@ function performAutoFix($scan_data) {
         }
     }
     
-    // STEP 1: Auto-delete critical malware files (excluding admin/filemanager)
-    if (isset($scan_data['malware_files']) && !empty($scan_data['malware_files'])) {
-        $details[] = "Found " . count($scan_data['malware_files']) . " malware files to delete";
+    // STEP 1: Auto-delete critical malware files
+    if (isset($scan_data['critical_files']) && !empty($scan_data['critical_files'])) {
+        $details[] = "Found " . count($scan_data['critical_files']) . " critical malware files to delete";
         
-        foreach ($scan_data['malware_files'] as $malware_file) {
-            // Skip files in admin/filemanager directory
-            if (strpos($malware_file, 'admin/filemanager') !== false) {
-                $details[] = "Skipped filemanager file: {$malware_file}";
-                continue;
-            }
-            
+        foreach ($scan_data['critical_files'] as $malware_file) {
             // Normalize path (remove ./ and .\ prefixes)
             $normalized_path = ltrim($malware_file, './\\');
             $full_path = './' . $normalized_path;
@@ -419,7 +434,7 @@ function performAutoFix($scan_data) {
                 // Delete malware file
                 if (unlink($full_path)) {
                     $deleted_files++;
-                    $details[] = "✅ Auto-deleted malware file: {$full_path}";
+                    $details[] = "✅ Auto-deleted critical malware: {$full_path}";
                     
                     // Log deletion
                     $log_data = date('Y-m-d H:i:s') . " - AUTO-FIX DELETED: {$full_path}. IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown') . "\n";
@@ -434,42 +449,9 @@ function performAutoFix($scan_data) {
                 $details[] = "⚠️ File not found: {$full_path}";
             }
         }
-    } else {
-        $details[] = "No malware files found in scan data";
     }
     
-    // STEP 2: Fix specific vulnerable files
-    
-    // Fix admin/templates/seo-co-ban/them_tpl.php syntax error
-    $vulnerable_template = './admin/templates/seo-co-ban/them_tpl.php';
-    if (file_exists($vulnerable_template)) {
-        if ($backup_created) {
-            $content = file_get_contents($vulnerable_template);
-            $backup_file = $backup_dir . '/' . basename($vulnerable_template) . '.backup';
-            file_put_contents($backup_file, $content);
-        }
-        
-        $content = file_get_contents($vulnerable_template);
-        $original_content = $content;
-        
-        // Fix the critical syntax error (= vs ==)
-        $content = preg_replace(
-            '/if\s*\(\s*\$_FILES\[([^\]]+)\]\[([^\]]+)\]\s*=\s*([\'"][^\'"]*[\'"])\s*\)/',
-            'if ($_FILES[$1][$2] == $3)',
-            $content,
-            -1,
-            $syntax_fixes
-        );
-        
-        if ($content !== $original_content && $syntax_fixes > 0) {
-            file_put_contents($vulnerable_template, $content);
-            $fixed_files++;
-            $fixes_applied += $syntax_fixes;
-            $details[] = "Fixed critical syntax error in {$vulnerable_template} (= to ==)";
-        }
-    }
-    
-    // STEP 3: Create/Update uploads/.htaccess protection
+    // STEP 2: Create/Update uploads/.htaccess protection
     $htaccess_path = './uploads/.htaccess';
     $htaccess_content = "# Enterprise Security Protection\n";
     $htaccess_content .= "# Generated by Security Scanner - " . date('Y-m-d H:i:s') . "\n\n";
@@ -497,123 +479,8 @@ function performAutoFix($scan_data) {
         $details[] = "Created/Updated security protection: {$htaccess_path}";
     }
     
-    $suspicious_files = $scan_data['suspicious_files'] ?? [];
-    
-    foreach ($suspicious_files as $file_info) {
-        $file_path = $file_info['path'];
-        $patterns = $file_info['patterns'];
-        
-        if (!file_exists($file_path) || !is_readable($file_path)) {
-            continue;
-        }
-        
-        $content = file_get_contents($file_path);
-        $original_content = $content;
-        $file_fixes = 0;
-        
-        // Create backup for files being modified
-        if ($backup_created) {
-            $backup_file = $backup_dir . '/' . basename($file_path) . '.backup';
-            file_put_contents($backup_file, $content);
-        }
-        
-        // Apply security fixes based on detected patterns
-        foreach ($patterns as $pattern) {
-            $fixes_applied_to_pattern = 0;
-            
-            switch ($pattern) {
-                case 'eval(':
-                    // Comment out eval statements
-                    $content = preg_replace('/\beval\s*\(/i', '// FIXED: eval(', $content, -1, $fixes_applied_to_pattern);
-                    break;
-                    
-                case 'base64_decode(':
-                    // Add validation for base64_decode
-                    $content = preg_replace_callback('/base64_decode\s*\(\s*([^)]+)\)/i', function($matches) {
-                        return '// FIXED: Validated base64_decode - ' . $matches[0];
-                    }, $content, -1, $fixes_applied_to_pattern);
-                    break;
-                    
-                case 'exec(':
-                case 'system(':
-                case 'shell_exec(':
-                case 'passthru(':
-                    // Comment out dangerous system functions
-                    $pattern_clean = str_replace('(', '', $pattern);
-                    $content = preg_replace('/\b' . preg_quote($pattern_clean) . '\s*\(/i', '// FIXED: ' . $pattern_clean . '(', $content, -1, $fixes_applied_to_pattern);
-                    break;
-                    
-                case '$_REQUEST':
-                case '$_GET':
-                case '$_POST':
-                    // Add input validation comments
-                    $var_name = str_replace('$', '', $pattern);
-                    $content = preg_replace('/\$' . $var_name . '\s*\[\s*[\'"]([^\'"]+)[\'"]\s*\]/', 
-                        '// TODO: Validate input - $' . $var_name . '[\'$1\']', $content, -1, $fixes_applied_to_pattern);
-                    break;
-                    
-                case 'move_uploaded_file(':
-                    // Add file validation comments
-                    $content = preg_replace('/move_uploaded_file\s*\(/i', 
-                        '// TODO: Add file type validation before - move_uploaded_file(', $content, -1, $fixes_applied_to_pattern);
-                    break;
-                    
-                case 'file_get_contents(':
-                case 'file_put_contents(':
-                    // Add path validation comments
-                    $func_name = str_replace('(', '', $pattern);
-                    $content = preg_replace('/\b' . preg_quote($func_name) . '\s*\(/i', 
-                        '// TODO: Validate path - ' . $func_name . '(', $content, -1, $fixes_applied_to_pattern);
-                    break;
-                    
-                case 'fopen(':
-                case 'fwrite(':
-                    // Add file operation validation
-                    $func_name = str_replace('(', '', $pattern);
-                    $content = preg_replace('/\b' . preg_quote($func_name) . '\s*\(/i', 
-                        '// TODO: Validate file operation - ' . $func_name . '(', $content, -1, $fixes_applied_to_pattern);
-                    break;
-                    
-                case 'include(':
-                case 'require(':
-                case 'include_once(':
-                case 'require_once(':
-                    // Add path validation for includes
-                    $func_name = str_replace('(', '', $pattern);
-                    $content = preg_replace('/\b' . preg_quote($func_name) . '\s*\(/i', 
-                        '// TODO: Validate include path - ' . $func_name . '(', $content, -1, $fixes_applied_to_pattern);
-                    break;
-            }
-            
-            if ($fixes_applied_to_pattern > 0) {
-                $file_fixes += $fixes_applied_to_pattern;
-                $fixes_applied += $fixes_applied_to_pattern;
-            }
-        }
-        
-        // Special fixes for known vulnerabilities
-        if (strpos($file_path, 'admin/templates/seo-co-ban/them_tpl.php') !== false) {
-            // Fix the syntax error = vs ==
-            $content = preg_replace('/if\s*\(\s*\$_FILES\[[^\]]+\]\[\'type\'\]\s*=\s*[\'"]/', 
-                'if ($_FILES[\'file\'][\'type\'] == \'', $content, -1, $syntax_fixes);
-            if ($syntax_fixes > 0) {
-                $file_fixes += $syntax_fixes;
-                $fixes_applied += $syntax_fixes;
-                $details[] = "Fixed syntax error (= to ==) in {$file_path}";
-            }
-        }
-        
-        // Write fixed content if changes were made
-        if ($content !== $original_content) {
-            if (file_put_contents($file_path, $content)) {
-                $fixed_files++;
-                $details[] = "Applied {$file_fixes} fixes to {$file_path}";
-            }
-        }
-    }
-    
     // Log the fix operation
-    $log_data = date('Y-m-d H:i:s') . " - Auto-fix completed. Fixed files: $fixed_files, Fixes applied: $fixes_applied, Backup: " . ($backup_created ? 'Yes' : 'No') . ". IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown') . "\n";
+    $log_data = date('Y-m-d H:i:s') . " - Auto-fix completed. Fixed files: $fixed_files, Fixes applied: $fixes_applied, Deleted: $deleted_files, Backup: " . ($backup_created ? 'Yes' : 'No') . ". IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown') . "\n";
     if (!file_exists('./logs')) {
         @mkdir('./logs', 0755, true);
     }
@@ -635,22 +502,54 @@ function performAutoFix($scan_data) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Enterprise Security Scanner - Hiệp Nguyễn</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #00ff88, #00ccff);
-            --danger-gradient: linear-gradient(135deg, #ff4757, #ff3838);
-            --warning-gradient: linear-gradient(135deg, #ffa502, #ff6b35);
-            --success-gradient: linear-gradient(135deg, #2ed573, #7bed9f);
-            --bg-primary: #0a0a0a;
-            --bg-secondary: #1a1a1a;
-            --bg-card: rgba(255, 255, 255, 0.05);
-            --border-primary: rgba(255, 255, 255, 0.1);
-            --text-primary: #ffffff;
-            --text-secondary: #b0b0b0;
-            --text-muted: #666666;
-            --shadow-glow: 0 0 40px rgba(0, 255, 136, 0.15);
+            /* Blue Pastel Theme */
+            --primary-blue: #4A90E2;
+            --light-blue: #E8F4FD;
+            --soft-blue: #B8DCF2;
+            --dark-blue: #2C5282;
+            --accent-blue: #63B3ED;
+            
+            /* Neutral Pastel Colors */
+            --bg-primary: #FAFBFC;
+            --bg-secondary: #F7F9FB;
+            --bg-card: #FFFFFF;
+            --border-light: #E2E8F0;
+            --border-medium: #CBD5E0;
+            
+            /* Text Colors */
+            --text-primary: #2D3748;
+            --text-secondary: #4A5568;
+            --text-muted: #718096;
+            --text-light: #A0AEC0;
+            
+            /* Status Colors - Soft Pastels */
+            --danger-bg: #FED7D7;
+            --danger-border: #FC8181;
+            --danger-text: #C53030;
+            
+            --warning-bg: #FEFCBF;
+            --warning-border: #F6E05E;
+            --warning-text: #D69E2E;
+            
+            --success-bg: #C6F6D5;
+            --success-border: #68D391;
+            --success-text: #38A169;
+            
+            --info-bg: #BEE3F8;
+            --info-border: #63B3ED;
+            --info-text: #3182CE;
+            
+            /* Shadows */
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+            --shadow-blue: 0 4px 14px rgba(74, 144, 226, 0.15);
         }
 
         * {
@@ -662,186 +561,145 @@ function performAutoFix($scan_data) {
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
-            background-image: 
-                radial-gradient(circle at 20% 80%, rgba(0, 255, 136, 0.05) 0%, transparent 50%),
-                radial-gradient(circle at 80% 20%, rgba(0, 204, 255, 0.05) 0%, transparent 50%),
-                radial-gradient(circle at 40% 40%, rgba(255, 71, 87, 0.03) 0%, transparent 50%);
             color: var(--text-primary);
-            min-height: 100vh;
-            overflow-x: hidden;
+            line-height: 1.6;
+            font-size: 14px;
         }
 
-        .container {
+        .container-fluid {
             max-width: 1600px;
             margin: 0 auto;
-            padding: 24px;
+            padding: 16px;
         }
 
+        /* Header - Compact */
         .header {
+            background: linear-gradient(135deg, var(--primary-blue), var(--accent-blue));
+            color: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow-blue);
             text-align: center;
-            margin-bottom: 48px;
-            background: var(--bg-card);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-primary);
-            border-radius: 24px;
-            padding: 40px;
-            box-shadow: var(--shadow-glow);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: var(--primary-gradient);
         }
 
         .header h1 {
-            font-size: 3rem;
+            font-size: 1.8rem;
             font-weight: 700;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 12px;
-            text-shadow: 0 0 40px rgba(0, 255, 136, 0.3);
+            margin-bottom: 4px;
         }
 
         .header .subtitle {
-            color: var(--text-secondary);
-            font-size: 1.2rem;
-            margin-bottom: 20px;
-            font-weight: 500;
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-bottom: 8px;
         }
 
         .author-badge {
             display: inline-flex;
             align-items: center;
-            gap: 12px;
-            background: rgba(0, 255, 136, 0.1);
-            padding: 12px 24px;
-            border-radius: 50px;
-            border: 1px solid rgba(0, 255, 136, 0.2);
-            color: #00ff88;
-            font-weight: 600;
-            backdrop-filter: blur(10px);
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 0.8rem;
+            font-weight: 500;
         }
 
-        .dashboard-grid {
+        /* Bento Grid Layout */
+        .bento-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
-            margin-bottom: 32px;
+            grid-template-columns: 2fr 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 12px;
+            margin-bottom: 16px;
         }
 
-        .control-panel {
-            grid-column: 1 / -1;
-        }
-
-        .card {
+        .bento-item {
             background: var(--bg-card);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-primary);
-            border-radius: 20px;
-            padding: 32px;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
         }
 
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: var(--primary-gradient);
-            opacity: 0;
-            transition: opacity 0.3s ease;
+        .bento-item:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-medium);
         }
 
-        .card:hover {
-            transform: translateY(-8px);
-            border-color: rgba(0, 255, 136, 0.3);
-            box-shadow: var(--shadow-glow);
+        .bento-item.span-2 {
+            grid-column: span 2;
         }
 
-        .card:hover::before {
-            opacity: 1;
+        .bento-item.span-3 {
+            grid-column: span 3;
         }
 
+        /* Card Headers - Compact */
         .card-header {
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 24px;
+            gap: 8px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-light);
         }
 
         .card-title {
-            font-size: 1.4rem;
+            font-size: 1rem;
             font-weight: 600;
             color: var(--text-primary);
         }
 
+        /* Control Panel */
         .scan-controls {
             text-align: center;
-            padding: 20px 0;
+            margin-bottom: 12px;
         }
 
-        .scan-btn {
-            background: var(--primary-gradient);
+        .scan-btn, .autofix-btn {
             border: none;
-            padding: 18px 48px;
-            border-radius: 50px;
-            color: #000;
-            font-size: 1.2rem;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 0.9rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 12px 40px rgba(0, 255, 136, 0.3);
-            position: relative;
-            overflow: hidden;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0 4px;
         }
 
-        .scan-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s ease;
+        .scan-btn {
+            background: linear-gradient(135deg, var(--primary-blue), var(--accent-blue));
+            color: white;
+            box-shadow: var(--shadow-blue);
         }
 
-        .scan-btn:hover::before {
-            left: 100%;
+        .autofix-btn {
+            background: linear-gradient(135deg, #FF8C42, #FF6B35);
+            color: white;
+            box-shadow: 0 4px 14px rgba(255, 140, 66, 0.15);
         }
 
-        .scan-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 16px 50px rgba(0, 255, 136, 0.4);
+        .scan-btn:hover, .autofix-btn:hover {
+            transform: translateY(-1px);
         }
 
-        .scan-btn:disabled {
-            background: #333;
-            color: #666;
+        .scan-btn:disabled, .autofix-btn:disabled {
+            background: var(--text-light);
             cursor: not-allowed;
             transform: none;
-            box-shadow: none;
         }
 
+        /* Progress - Compact */
         .progress-section {
-            margin: 32px 0;
             opacity: 0;
             transition: all 0.4s ease;
-            transform: translateY(20px);
+            transform: translateY(10px);
         }
 
         .progress-section.active {
@@ -849,115 +707,108 @@ function performAutoFix($scan_data) {
             transform: translateY(0);
         }
 
-        .progress-bar-container {
-            position: relative;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            height: 16px;
-            overflow: hidden;
-            margin-bottom: 20px;
-            border: 1px solid var(--border-primary);
-        }
-
-        .progress-bar {
-            height: 100%;
-            width: 0%;
-            background: var(--primary-gradient);
-            transition: width 0.3s ease;
-            position: relative;
-            border-radius: 12px;
-        }
-
-        .progress-bar::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-            animation: shimmer 2s infinite;
-        }
-
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-
         .progress-info {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
         }
 
         .progress-text {
             font-weight: 600;
-            color: #00ff88;
-            font-size: 1.1rem;
+            color: var(--primary-blue);
         }
 
         .progress-percentage {
             font-family: 'JetBrains Mono', monospace;
             font-weight: 600;
-            color: #00ccff;
+            color: var(--dark-blue);
         }
 
+        .progress-bar-container {
+            background: var(--light-blue);
+            border-radius: 6px;
+            height: 8px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--primary-blue), var(--accent-blue));
+            transition: width 0.3s ease;
+            border-radius: 6px;
+        }
+
+        .current-action {
+            text-align: center;
+            color: var(--text-secondary);
+            font-style: italic;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        /* Statistics - Compact Grid */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
         }
 
         .stat-card {
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid var(--border-primary);
-            border-radius: 16px;
-            padding: 24px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-light);
+            border-radius: 6px;
+            padding: 12px;
             text-align: center;
             transition: all 0.3s ease;
         }
 
         .stat-card:hover {
-            transform: translateY(-4px);
-            border-color: rgba(0, 255, 136, 0.3);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
         }
 
         .stat-number {
-            font-size: 2.5rem;
+            font-size: 1.4rem;
             font-weight: 700;
-            color: #00ff88;
+            color: var(--primary-blue);
             font-family: 'JetBrains Mono', monospace;
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 2px;
         }
 
         .stat-label {
             color: var(--text-secondary);
-            font-size: 0.95rem;
+            font-size: 0.75rem;
             font-weight: 500;
         }
 
+        /* File Scanner - Compact */
         .file-scanner {
             background: var(--bg-card);
-            border: 1px solid var(--border-primary);
-            border-radius: 16px;
-            height: 400px;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            height: 240px;
             overflow: hidden;
-            position: relative;
         }
 
         .scanner-header {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 16px 24px;
-            border-bottom: 1px solid var(--border-primary);
+            background: var(--bg-secondary);
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-light);
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 6px;
         }
 
         .scanner-content {
-            height: calc(100% - 60px);
+            height: calc(100% - 36px);
             overflow-y: auto;
             padding: 0;
         }
@@ -965,168 +816,47 @@ function performAutoFix($scan_data) {
         .file-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 12px 24px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            gap: 8px;
+            padding: 6px 12px;
+            border-bottom: 1px solid var(--border-light);
             transition: all 0.2s ease;
-            opacity: 0;
-            transform: translateX(-20px);
-            animation: slideIn 0.3s ease forwards;
-        }
-
-        @keyframes slideIn {
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
+            font-size: 0.8rem;
         }
 
         .file-item:hover {
-            background: rgba(255, 255, 255, 0.03);
+            background: var(--bg-secondary);
         }
 
         .file-icon {
-            width: 20px;
+            width: 12px;
             text-align: center;
         }
 
         .file-path {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
+            font-size: 0.7rem;
             color: var(--text-secondary);
             flex: 1;
         }
 
         .file-status {
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 0.65rem;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
 
         .status-clean {
-            background: rgba(46, 213, 115, 0.2);
-            color: #2ed573;
-            border: 1px solid rgba(46, 213, 115, 0.3);
+            background: var(--success-bg);
+            color: var(--success-text);
+            border: 1px solid var(--success-border);
         }
 
         .status-suspicious {
-            background: rgba(255, 71, 87, 0.2);
-            color: #ff4757;
-            border: 1px solid rgba(255, 71, 87, 0.3);
-        }
-
-        .results-panel {
-            margin-top: 32px;
-            opacity: 0;
-            transition: all 0.4s ease;
-            transform: translateY(20px);
-        }
-
-        .results-panel.active {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .alert {
-            padding: 24px;
-            border-radius: 16px;
-            margin-bottom: 24px;
-            border: 1px solid;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .alert-success {
-            background: rgba(46, 213, 115, 0.1);
-            border-color: #2ed573;
-            color: #2ed573;
-        }
-
-        .alert-danger {
-            background: rgba(255, 71, 87, 0.1);
-            border-color: #ff4757;
-            color: #ff4757;
-        }
-
-        .threat-card {
-            background: rgba(255, 71, 87, 0.05);
-            border: 1px solid rgba(255, 71, 87, 0.2);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 16px;
-            position: relative;
-        }
-
-        .threat-card::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: var(--danger-gradient);
-        }
-
-        .threat-path {
-            font-family: 'JetBrains Mono', monospace;
-            font-weight: 600;
-            color: #ff4757;
-            margin-bottom: 12px;
-            font-size: 0.9rem;
-        }
-
-        .threat-patterns {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .pattern-tag {
-            background: rgba(255, 165, 2, 0.2);
-            color: #ffa502;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 500;
-            border: 1px solid rgba(255, 165, 2, 0.3);
-        }
-
-        .recommendations {
-            background: rgba(255, 165, 2, 0.1);
-            border: 1px solid rgba(255, 165, 2, 0.3);
-            border-radius: 12px;
-            padding: 24px;
-            margin-top: 24px;
-        }
-
-        .recommendations h4 {
-            color: #ffa502;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .recommendations ul {
-            list-style: none;
-            padding: 0;
-        }
-
-        .recommendations li {
-            padding: 8px 0;
-            padding-left: 24px;
-            position: relative;
-            color: var(--text-secondary);
-        }
-
-        .recommendations li::before {
-            content: '▶';
-            position: absolute;
-            left: 0;
-            color: #ffa502;
+            background: var(--danger-bg);
+            color: var(--danger-text);
+            border: 1px solid var(--danger-border);
         }
 
         .scanner-empty {
@@ -1140,202 +870,280 @@ function performAutoFix($scan_data) {
         }
 
         .scanner-empty i {
-            font-size: 3rem;
-            margin-bottom: 16px;
-            opacity: 0.5;
+            font-size: 2rem;
+            margin-bottom: 8px;
+            opacity: 0.6;
+            color: var(--primary-blue);
         }
 
-        @media (max-width: 1200px) {
-            .dashboard-grid {
-                grid-template-columns: 1fr;
-            }
+        /* Threat Detection Patterns - Compact */
+        .patterns-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 6px;
+            font-size: 0.75rem;
         }
 
-        @media (max-width: 768px) {
-            .container {
-                padding: 16px;
-            }
-            
-            .header h1 {
-                font-size: 2.2rem;
-            }
-            
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .file-scanner {
-                height: 300px;
-            }
+        .pattern-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            border: 1px solid var(--border-light);
         }
 
-        .pulse {
-            animation: pulse 2s infinite;
+        .pattern-item i {
+            width: 12px;
+            text-align: center;
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        /* Results Panel - Compact Groups */
+        .results-panel {
+            opacity: 0;
+            transition: all 0.4s ease;
+            transform: translateY(10px);
         }
 
-        .threat-card {
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 16px;
+        .results-panel.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .threat-group {
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .threat-group.critical {
+            border-color: var(--danger-border);
+            background: var(--danger-bg);
+        }
+
+        .threat-group.warning {
+            border-color: var(--warning-border);
+            background: var(--warning-bg);
+        }
+
+        .threat-group.filemanager {
+            border-color: var(--info-border);
+            background: var(--info-bg);
+        }
+
+        .group-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .group-header.critical {
+            color: var(--danger-text);
+        }
+
+        .group-header.warning {
+            color: var(--warning-text);
+        }
+
+        .group-header.filemanager {
+            color: var(--info-text);
+        }
+
+        .threat-item {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            padding: 8px;
+            margin-bottom: 6px;
             transition: all 0.3s ease;
+            cursor: pointer;
         }
 
-        .threat-card.critical {
-            background: rgba(255, 71, 87, 0.1);
-            border: 1px solid rgba(255, 71, 87, 0.3);
+        .threat-item:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
         }
 
-        .threat-card.critical:hover {
-            background: rgba(255, 71, 87, 0.15);
-            border-color: rgba(255, 71, 87, 0.5);
-            transform: translateY(-2px);
-        }
-
-        .threat-card.warning {
-            background: rgba(255, 165, 0, 0.1);
-            border: 1px solid rgba(255, 165, 0, 0.3);
-        }
-
-        .threat-card.warning:hover {
-            background: rgba(255, 165, 0, 0.15);
-            border-color: rgba(255, 165, 0, 0.5);
-            transform: translateY(-2px);
+        .threat-item:last-child {
+            margin-bottom: 0;
         }
 
         .threat-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 12px;
+            margin-bottom: 6px;
         }
 
         .threat-path {
             font-family: 'JetBrains Mono', monospace;
-            color: #fff;
             font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex: 1;
-        }
-
-        .delete-file-btn {
-            background: linear-gradient(135deg, #ff4757, #e84393);
-            color: #fff;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 600;
+            font-size: 0.75rem;
             display: flex;
             align-items: center;
             gap: 6px;
+            flex: 1;
+            color: var(--text-primary);
+        }
+
+        .delete-btn {
+            background: linear-gradient(135deg, #E53E3E, #C53030);
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
             transition: all 0.3s ease;
-            min-width: 120px;
-            justify-content: center;
         }
 
-        .delete-file-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(255, 71, 87, 0.4);
+        .delete-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(229, 62, 62, 0.3);
         }
 
-        .delete-file-btn:disabled {
-            background: #666;
+        .delete-btn:disabled {
+            background: var(--text-light);
             cursor: not-allowed;
             transform: none;
             box-shadow: none;
         }
 
-        .threat-patterns {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 8px;
+        .threat-issues {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
         }
 
-        .pattern-tag {
-            background: rgba(255, 165, 2, 0.2);
-            color: #ffa502;
-            padding: 4px 8px;
+        /* Tooltips */
+        .tooltip {
+            font-size: 0.75rem;
+        }
+
+        .tooltip-inner {
+            max-width: 300px;
+            text-align: left;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .bento-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .bento-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .bento-item.span-2,
+            .bento-item.span-3 {
+                grid-column: span 1;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        /* Animations */
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .slideIn {
+            animation: slideIn 0.3s ease forwards;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Alert - Compact */
+        .alert {
+            padding: 12px 16px;
             border-radius: 6px;
-            font-size: 0.85rem;
-            font-family: 'JetBrains Mono', monospace;
-            border: 1px solid rgba(255, 165, 2, 0.3);
-        }
-
-        .malware-section {
-            background: rgba(255, 0, 0, 0.1);
-            border: 2px solid rgba(255, 0, 0, 0.3);
-            border-radius: 12px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-
-        .malware-section h4 {
-            color: #ff4757;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-
-        .malware-card {
-            background: rgba(255, 0, 0, 0.15);
-            border: 1px solid rgba(255, 0, 0, 0.4);
-            border-radius: 8px;
-            padding: 16px;
             margin-bottom: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .malware-path {
-            font-family: 'JetBrains Mono', monospace;
-            color: #ff4757;
-            font-weight: 600;
+            border: 1px solid;
             display: flex;
             align-items: center;
             gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .alert-success {
+            background: var(--success-bg);
+            border-color: var(--success-border);
+            color: var(--success-text);
+        }
+
+        .alert-danger {
+            background: var(--danger-bg);
+            border-color: var(--danger-border);
+            color: var(--danger-text);
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container-fluid">
         <!-- Header -->
         <div class="header">
-            <h1><i class="fas fa-shield-virus"></i> Enterprise Security Scanner</h1>
+            <h1><i class="fas fa-shield-halved"></i> Enterprise Security Scanner</h1>
             <p class="subtitle">Công cụ quét malware và backdoor chuyên nghiệp cho doanh nghiệp</p>
             <div class="author-badge">
                 <i class="fab fa-facebook"></i>
                 <span>Tác giả: Hiệp Nguyễn</span>
-                <span style="opacity: 0.7;">• Enterprise Grade</span>
+                <span style="opacity: 0.8;">• Enterprise Grade</span>
             </div>
         </div>
 
-        <!-- Dashboard -->
-        <div class="dashboard-grid">
+        <!-- Bento Grid Dashboard -->
+        <div class="bento-grid">
             <!-- Control Panel -->
-            <div class="card control-panel">
+            <div class="bento-item span-2">
                 <div class="card-header">
-                    <i class="fas fa-control" style="color: #00ff88;"></i>
+                    <i class="fas fa-sliders-h" style="color: var(--primary-blue);"></i>
                     <h3 class="card-title">Bảng Điều Khiển Quét</h3>
                 </div>
                 
                 <div class="scan-controls">
                     <button id="scanBtn" class="scan-btn">
-                        <i class="fas fa-rocket"></i> Bắt Đầu Quét Bảo Mật
+                        <i class="fas fa-search"></i> Bắt Đầu Quét
                     </button>
-                    <br><br>
-                    <button id="autoFixBtn" style="background: linear-gradient(135deg, #ff6b35, #f7931e); color: #fff; padding: 12px 24px; border: none; border-radius: 20px; cursor: pointer; font-size: 1rem; font-weight: 600;" disabled>
-                        <i class="fas fa-tools"></i> Khắc Phục Lỗi Tự Động
+                    <button id="autoFixBtn" class="autofix-btn" disabled>
+                        <i class="fas fa-magic"></i> Khắc Phục Tự Động
                     </button>
                 </div>
 
@@ -1347,90 +1155,89 @@ function performAutoFix($scan_data) {
                     <div class="progress-bar-container">
                         <div id="progressBar" class="progress-bar"></div>
                     </div>
-                    <div style="text-align: center; color: #00ff88; font-style: italic;">
-                        <i class="fas fa-radar-scan pulse"></i> <span id="currentAction">Đang quét hệ thống...</span>
+                    <div class="current-action">
+                        <i class="fas fa-spinner pulse" style="color: var(--primary-blue);"></i> 
+                        <span id="currentAction">Đang quét hệ thống...</span>
                     </div>
                 </div>
             </div>
 
             <!-- Statistics -->
-            <div class="card">
+            <div class="bento-item">
                 <div class="card-header">
-                    <i class="fas fa-chart-area" style="color: #00ccff;"></i>
-                    <h3 class="card-title">Thống Kê Real-time</h3>
+                    <i class="fas fa-chart-bar" style="color: var(--accent-blue);"></i>
+                    <h3 class="card-title">Thống Kê</h3>
                 </div>
                 <div class="stats-grid">
                     <div class="stat-card">
                         <span id="scannedFiles" class="stat-number">0</span>
-                        <div class="stat-label">Files Đã Quét</div>
+                        <div class="stat-label">Files Quét</div>
                     </div>
                     <div class="stat-card">
                         <span id="suspiciousFiles" class="stat-number">0</span>
-                        <div class="stat-label">Threats Phát Hiện</div>
+                        <div class="stat-label">Threats</div>
                     </div>
                     <div class="stat-card">
-                        <span id="scanSpeed" class="stat-number">0</span>
-                        <div class="stat-label">Files/giây</div>
+                        <span id="criticalFiles" class="stat-number">0</span>
+                        <div class="stat-label">Critical</div>
                     </div>
                     <div class="stat-card">
                         <span id="scanTime" class="stat-number">0s</span>
-                        <div class="stat-label">Thời Gian Quét</div>
+                        <div class="stat-label">Thời Gian</div>
                     </div>
                 </div>
             </div>
 
             <!-- File Scanner -->
-            <div class="card">
+            <div class="bento-item">
                 <div class="card-header">
-                    <i class="fas fa-file-search" style="color: #ffa502;"></i>
+                    <i class="fas fa-file-search" style="color: var(--warning-text);"></i>
                     <h3 class="card-title">Files Đang Quét</h3>
                 </div>
                 <div class="file-scanner">
                     <div class="scanner-header">
-                        <i class="fas fa-terminal" style="color: #00ff88;"></i>
-                        <span style="font-family: 'JetBrains Mono', monospace; color: var(--text-secondary);">real-time scanner</span>
+                        <i class="fas fa-terminal" style="color: var(--primary-blue);"></i>
+                        <span style="font-family: 'JetBrains Mono', monospace; color: var(--text-secondary); font-size: 0.75rem;">real-time scanner</span>
                     </div>
                     <div id="scannerContent" class="scanner-content">
                         <div class="scanner-empty">
                             <i class="fas fa-search"></i>
-                            <p>Nhấn "Bắt Đầu Quét" để bắt đầu monitoring</p>
+                            <p style="font-size: 0.8rem;">Nhấn "Bắt Đầu Quét" để bắt đầu</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Threat Detection -->
-            <div class="card">
+            <!-- Threat Detection Patterns -->
+            <div class="bento-item">
                 <div class="card-header">
-                    <i class="fas fa-exclamation-triangle" style="color: #ff4757;"></i>
-                    <h3 class="card-title">Patterns Threat Detection</h3>
+                    <i class="fas fa-bug" style="color: var(--danger-text);"></i>
+                    <h3 class="card-title">Threat Patterns</h3>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; font-size: 0.9rem;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <i class="fas fa-bug" style="color: #ff4757;"></i>
-                        <span style="color: var(--text-secondary);">eval(), base64_decode()</span>
+                <div class="patterns-grid">
+                    <div class="pattern-item">
+                        <i class="fas fa-skull-crossbones" style="color: var(--danger-text);"></i>
+                        <span>eval(), base64_decode()</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <i class="fas fa-terminal" style="color: #ffa502;"></i>
-                        <span style="color: var(--text-secondary);">exec(), system(), shell_exec()</span>
+                    <div class="pattern-item">
+                        <i class="fas fa-terminal" style="color: var(--warning-text);"></i>
+                        <span>exec(), system()</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <i class="fas fa-file-upload" style="color: #ff69b4;"></i>
-                        <span style="color: var(--text-secondary);">move_uploaded_file()</span>
+                    <div class="pattern-item">
+                        <i class="fas fa-upload" style="color: var(--info-text);"></i>
+                        <span>move_uploaded_file()</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <i class="fas fa-code" style="color: #00ff88;"></i>
-                        <span style="color: var(--text-secondary);">$_REQUEST, $_GET, $_POST</span>
+                    <div class="pattern-item">
+                        <i class="fas fa-code" style="color: var(--primary-blue);"></i>
+                        <span>$_GET, $_POST</span>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Results Panel -->
-        <div id="resultsPanel" class="results-panel">
-            <div class="card">
+            <!-- Results Panel -->
+            <div id="resultsPanel" class="bento-item span-3 results-panel">
                 <div class="card-header">
-                    <i class="fas fa-clipboard-check" style="color: #2ed573;"></i>
+                    <i class="fas fa-clipboard-list" style="color: var(--success-text);"></i>
                     <h3 class="card-title">Báo Cáo Kết Quả Bảo Mật</h3>
                 </div>
                 <div id="scanResults"></div>
@@ -1444,6 +1251,7 @@ function performAutoFix($scan_data) {
                 this.isScanning = false;
                 this.scannedFiles = 0;
                 this.suspiciousFiles = 0;
+                this.criticalFiles = 0;
                 this.scanStartTime = null;
                 this.progressInterval = null;
                 this.speedInterval = null;
@@ -1455,6 +1263,19 @@ function performAutoFix($scan_data) {
             init() {
                 document.getElementById('scanBtn').addEventListener('click', () => this.startScan());
                 document.getElementById('autoFixBtn').addEventListener('click', () => this.startAutoFix());
+                
+                // Initialize Bootstrap tooltips
+                this.initTooltips();
+            }
+
+            initTooltips() {
+                // Initialize tooltips for dynamically created elements
+                document.addEventListener('DOMContentLoaded', function() {
+                    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                        return new bootstrap.Tooltip(tooltipTriggerEl);
+                    });
+                });
             }
 
             startScan() {
@@ -1463,6 +1284,7 @@ function performAutoFix($scan_data) {
                 this.isScanning = true;
                 this.scannedFiles = 0;
                 this.suspiciousFiles = 0;
+                this.criticalFiles = 0;
                 this.scanStartTime = Date.now();
                 
                 const scanBtn = document.getElementById('scanBtn');
@@ -1471,7 +1293,7 @@ function performAutoFix($scan_data) {
                 
                 // Update UI
                 scanBtn.disabled = true;
-                scanBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang Quét Bảo Mật...';
+                scanBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang Quét...';
                 progressSection.classList.add('active');
                 resultsPanel.classList.remove('active');
                 
@@ -1498,30 +1320,33 @@ function performAutoFix($scan_data) {
                     './index.php',
                     './admin/index.php',
                     './admin/lib/function.php',
-                    './admin/templates/seo-co-ban/them_tpl.php',
-                    './uploads/.htaccess',
+                    './admin/filemanager/execute.php',
+                    './admin/filemanager/ajax_calls.php',
+                    './admin/filemanager/include/utils.php',
+                    './virus-files/23.php',
+                    './virus-files/666.php',
+                    './virus-files/cache.php',
                     './sources/config.php',
                     './sources/database.php',
-                    './admin/templates/header.php',
-                    './admin/templates/footer.php',
-                    './admin/lib/security.php',
                     './uploads/test.jpg',
-                    './sources/functions.php',
-                    './admin/login.php',
-                    './admin/logout.php'
+                    './admin/login.php'
                 ];
 
                 let fileIndex = 0;
                 this.fileSimulationInterval = setInterval(() => {
                     if (fileIndex < testFiles.length && this.isScanning) {
                         const file = testFiles[fileIndex];
-                        const isSuspicious = Math.random() < 0.15; // 15% chance suspicious
+                        const isVirusFile = file.includes('virus-files');
+                        const isSuspicious = isVirusFile || Math.random() < 0.15;
                         
                         this.addFileToScanner(file, !isSuspicious);
                         this.scannedFiles++;
                         
                         if (isSuspicious) {
                             this.suspiciousFiles++;
+                            if (isVirusFile) {
+                                this.criticalFiles++;
+                            }
                         }
                         
                         this.updateStats();
@@ -1529,7 +1354,7 @@ function performAutoFix($scan_data) {
                     } else {
                         clearInterval(this.fileSimulationInterval);
                     }
-                }, 300);
+                }, 200);
             }
 
             simulateProgress() {
@@ -1540,43 +1365,39 @@ function performAutoFix($scan_data) {
                 const currentAction = document.getElementById('currentAction');
                 
                 const actions = [
-                    'Khởi tạo scanner engine...',
-                    'Đang quét thư mục sources...',
-                    'Phân tích admin directory...',
-                    'Kiểm tra uploads folder...',
-                    'Quét malware patterns...',
-                    'Phân tích deep threats...',
-                    'Hoàn thiện báo cáo...'
+                    'Khởi tạo scanner...',
+                    'Quét sources...',
+                    'Phân tích admin...',
+                    'Kiểm tra filemanager...',
+                    'Quét virus-files...',
+                    'Hoàn thiện...'
                 ];
                 
                 let actionIndex = 0;
                 
                 this.progressInterval = setInterval(() => {
-                    progress += Math.random() * 8 + 2;
+                    progress += Math.random() * 8 + 4;
                     if (progress > 100) progress = 100;
                     
                     progressBar.style.width = progress + '%';
                     progressPercentage.textContent = Math.round(progress) + '%';
                     
-                    if (Math.floor(progress / 15) > actionIndex && actionIndex < actions.length - 1) {
+                    if (Math.floor(progress / 17) > actionIndex && actionIndex < actions.length - 1) {
                         actionIndex++;
                         currentAction.textContent = actions[actionIndex];
                     }
                     
                     if (progress >= 100) {
                         clearInterval(this.progressInterval);
-                        progressText.textContent = 'Quét hoàn tất!';
-                        currentAction.textContent = 'Đang tạo báo cáo bảo mật...';
+                        progressText.textContent = 'Hoàn tất!';
+                        currentAction.textContent = 'Tạo báo cáo...';
                     }
-                }, 200);
+                }, 150);
             }
 
             startSpeedCounter() {
                 this.speedInterval = setInterval(() => {
                     const elapsed = (Date.now() - this.scanStartTime) / 1000;
-                    const speed = elapsed > 0 ? Math.round(this.scannedFiles / elapsed) : 0;
-                    
-                    document.getElementById('scanSpeed').textContent = speed;
                     document.getElementById('scanTime').textContent = Math.round(elapsed) + 's';
                 }, 500);
             }
@@ -1585,10 +1406,10 @@ function performAutoFix($scan_data) {
                 const scannerContent = document.getElementById('scannerContent');
                 
                 const fileItem = document.createElement('div');
-                fileItem.className = 'file-item';
+                fileItem.className = 'file-item slideIn';
                 fileItem.innerHTML = `
                     <div class="file-icon">
-                        <i class="fas fa-file-code" style="color: ${isClean ? '#2ed573' : '#ff4757'};"></i>
+                        <i class="fas fa-file-code" style="color: ${isClean ? 'var(--success-text)' : 'var(--danger-text)'};"></i>
                     </div>
                     <div class="file-path">${filePath}</div>
                     <div class="file-status ${isClean ? 'status-clean' : 'status-suspicious'}">
@@ -1599,8 +1420,8 @@ function performAutoFix($scan_data) {
                 scannerContent.appendChild(fileItem);
                 scannerContent.scrollTop = scannerContent.scrollHeight;
                 
-                // Keep only last 15 items
-                while (scannerContent.children.length > 15) {
+                // Keep only last 10 items
+                while (scannerContent.children.length > 10) {
                     scannerContent.removeChild(scannerContent.firstChild);
                 }
             }
@@ -1608,15 +1429,15 @@ function performAutoFix($scan_data) {
             updateStats() {
                 document.getElementById('scannedFiles').textContent = this.scannedFiles;
                 document.getElementById('suspiciousFiles').textContent = this.suspiciousFiles;
+                document.getElementById('criticalFiles').textContent = this.criticalFiles;
             }
 
             async performScan() {
                 try {
                     console.log('Starting scan request...');
                     
-                    // Add timeout and retry logic
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+                    const timeoutId = setTimeout(() => controller.abort(), 30000);
                     
                     const response = await fetch('?scan=1', {
                         method: 'GET',
@@ -1666,6 +1487,7 @@ function performAutoFix($scan_data) {
                 // Update final stats with real data
                 this.scannedFiles = data.scanned_files || this.scannedFiles;
                 this.suspiciousFiles = data.suspicious_count || this.suspiciousFiles;
+                this.criticalFiles = data.critical_count || this.criticalFiles;
                 this.updateStats();
                 
                 // Store scan data for auto-fix
@@ -1681,75 +1503,122 @@ function performAutoFix($scan_data) {
                     if (data.suspicious_count === 0) {
                         scanResults.innerHTML = `
                             <div class="alert alert-success">
-                                <i class="fas fa-shield-check" style="margin-right: 12px; font-size: 1.2rem;"></i>
-                                <strong>Hệ thống an toàn!</strong> Không phát hiện threat nào trong ${data.scanned_files} files đã quét.
+                                <i class="fas fa-shield-check"></i>
+                                <div>
+                                    <strong>Hệ thống an toàn!</strong><br>
+                                    <small>Không phát hiện threat nào trong ${data.scanned_files} files đã quét.</small>
+                                </div>
                             </div>
                         `;
                         autoFixBtn.disabled = true;
                     } else {
                         let resultHtml = `
                             <div class="alert alert-danger">
-                                <i class="fas fa-exclamation-triangle" style="margin-right: 12px; font-size: 1.2rem;"></i>
-                                <strong>Phát hiện ${data.suspicious_count} threats!</strong> Cần xử lý ngay để bảo vệ hệ thống.
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <div>
+                                    <strong>Phát hiện ${data.suspicious_count} threats!</strong><br>
+                                    <small>Trong đó có ${data.critical_count || 0} threats nghiêm trọng cần xử lý ngay.</small>
+                                </div>
                             </div>
+                            <div class="results-grid">
                         `;
+                        
+                        // Group files by category and severity
+                        const groups = {
+                            critical: { title: 'Files Virus/Malware Nguy Hiểm', icon: 'fa-skull-crossbones', files: [] },
+                            filemanager: { title: 'Filemanager Functions', icon: 'fa-folder-open', files: [] },
+                            warning: { title: 'Cảnh Báo Bảo Mật', icon: 'fa-exclamation-triangle', files: [] }
+                        };
                         
                         data.suspicious_files.forEach((file, index) => {
                             const isCritical = file.severity === 'critical';
-                            const isWarning = file.severity === 'warning';
-                            const cardClass = isCritical ? 'critical' : 'warning';
-                            const iconClass = isCritical ? 'fa-skull-crossbones' : 'fa-exclamation-triangle';
-                            const iconColor = isCritical ? '#ff4757' : '#ffa502';
+                            const isFilemanager = file.category === 'filemanager';
                             
-                            resultHtml += `
-                                <div class="threat-card ${cardClass}">
-                                    <div class="threat-header">
-                                        <div class="threat-path">
-                                            <i class="fas ${iconClass}" style="color: ${iconColor};"></i> ${file.path}
-                                        </div>
-                                        ${isCritical ? `
-                                            <button class="delete-file-btn" onclick="scanner.deleteSingleFile('${file.path}', ${index})">
-                                                <i class="fas fa-trash-alt"></i> Xóa File
-                                            </button>
-                                        ` : `
-                                            <span style="background: rgba(255,165,0,0.2); color: #ffa502; padding: 6px 12px; border-radius: 12px; font-size: 0.85rem; font-weight: 600;">
-                                                <i class="fas fa-exclamation-triangle"></i> Cảnh báo
-                                            </span>
-                                        `}
-                                    </div>
-                                    <div class="threat-patterns">
-                                        ${file.patterns.map(pattern => 
-                                            `<span class="pattern-tag">${pattern}</span>`
-                                        ).join('')}
-                                    </div>
-                                </div>
-                            `;
+                            if (isCritical && !isFilemanager) {
+                                groups.critical.files.push({ ...file, index });
+                            } else if (isFilemanager) {
+                                groups.filemanager.files.push({ ...file, index });
+                            } else {
+                                groups.warning.files.push({ ...file, index });
+                            }
                         });
                         
-                        resultHtml += `
-                            <div class="recommendations">
-                                <h4><i class="fas fa-lightbulb"></i> Khuyến nghị xử lý</h4>
-                                <ul>
-                                    <li>Backup toàn bộ hệ thống trước khi xử lý</li>
-                                    <li>Sử dụng tính năng "Khắc Phục Lỗi Tự Động" để sửa các lỗi phổ biến</li>
-                                    <li>Kiểm tra từng file threats được đánh dấu</li>
-                                    <li>Cập nhật tất cả mật khẩu admin và database</li>
-                                    <li>Xem xét logs truy cập gần đây</li>
-                                    <li>Thiết lập monitoring liên tục</li>
-                                </ul>
-                            </div>
-                        `;
+                        // Render groups
+                        Object.entries(groups).forEach(([key, group]) => {
+                            if (group.files.length > 0) {
+                                resultHtml += `
+                                    <div class="threat-group ${key}">
+                                        <div class="group-header ${key}">
+                                            <i class="fas ${group.icon}"></i>
+                                            <span>${group.title} (${group.files.length})</span>
+                                        </div>
+                                `;
+                                
+                                group.files.forEach(file => {
+                                    const isCritical = file.severity === 'critical' && file.category !== 'filemanager';
+                                    const tooltipContent = this.generateTooltipContent(file.issues);
+                                    
+                                    resultHtml += `
+                                        <div class="threat-item" 
+                                             data-bs-toggle="tooltip" 
+                                             data-bs-placement="top" 
+                                             data-bs-html="true"
+                                             title="${tooltipContent}">
+                                            <div class="threat-header">
+                                                <div class="threat-path">
+                                                    <i class="fas fa-file-code"></i> ${file.path}
+                                                </div>
+                                                ${isCritical ? `
+                                                    <button class="delete-btn" onclick="scanner.deleteSingleFile('${file.path}', ${file.index})">
+                                                        <i class="fas fa-trash-alt"></i> Xóa
+                                                    </button>
+                                                ` : ''}
+                                            </div>
+                                            <div class="threat-issues">
+                                                ${file.issues.length} vấn đề phát hiện
+                                            </div>
+                                        </div>
+                                    `;
+                                });
+                                
+                                resultHtml += '</div>';
+                            }
+                        });
+                        
+                        resultHtml += '</div>';
                         
                         scanResults.innerHTML = resultHtml;
                         
+                        // Initialize tooltips for new elements
+                        setTimeout(() => {
+                            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                                return new bootstrap.Tooltip(tooltipTriggerEl);
+                            });
+                        }, 100);
+                        
                         // Enable auto-fix button
                         autoFixBtn.disabled = false;
-                        autoFixBtn.style.opacity = '1';
-                        autoFixBtn.style.cursor = 'pointer';
                     }
                     
                     this.completeScan();
                 }, 1000);
+            }
+
+            generateTooltipContent(issues) {
+                if (!issues || issues.length === 0) return 'Không có thông tin chi tiết';
+                
+                let content = '<div style="text-align: left;">';
+                issues.forEach(issue => {
+                    content += `<div style="margin-bottom: 4px;">`;
+                    content += `<strong>Dòng ${issue.line}:</strong> ${issue.pattern}<br>`;
+                    content += `<small>${issue.description}</small><br>`;
+                    content += `<code style="font-size: 0.7rem;">${issue.code_snippet.substring(0, 50)}...</code>`;
+                    content += `</div>`;
+                });
+                content += '</div>';
+                
+                return content.replace(/"/g, '&quot;');
             }
 
             displayError(message) {
@@ -1759,8 +1628,11 @@ function performAutoFix($scan_data) {
                 resultsPanel.classList.add('active');
                 scanResults.innerHTML = `
                     <div class="alert alert-danger">
-                        <i class="fas fa-times-circle" style="margin-right: 12px; font-size: 1.2rem;"></i>
-                        <strong>Lỗi quét!</strong> ${message}
+                        <i class="fas fa-times-circle"></i>
+                        <div>
+                            <strong>Lỗi quét!</strong><br>
+                            <small>${message}</small>
+                        </div>
                     </div>
                 `;
                 
@@ -1786,7 +1658,7 @@ function performAutoFix($scan_data) {
                         icon: 'info',
                         title: 'Không có lỗi để khắc phục',
                         text: 'Không phát hiện lỗi nào cần khắc phục!',
-                        confirmButtonColor: '#00ff88'
+                        confirmButtonColor: 'var(--primary-blue)'
                     });
                     return;
                 }
@@ -1796,8 +1668,8 @@ function performAutoFix($scan_data) {
                     text: `Sẽ khắc phục ${this.lastScanData.suspicious_count} lỗi được phát hiện. Backup sẽ được tạo trước khi sửa.`,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#ff6b35',
-                    cancelButtonColor: '#6c757d',
+                    confirmButtonColor: '#FF8C42',
+                    cancelButtonColor: 'var(--text-light)',
                     confirmButtonText: 'Khắc phục',
                     cancelButtonText: 'Hủy'
                 });
@@ -1810,11 +1682,11 @@ function performAutoFix($scan_data) {
             async deleteSingleFile(filePath, index) {
                 const result = await Swal.fire({
                     title: 'XÓA FILE ĐỘC HẠI?',
-                    html: `<strong style="color: #ff4757;">CẢNH BÁO:</strong> Sẽ xóa vĩnh viễn file:<br><br><code style="color: #ff6b35;">${filePath}</code>`,
+                    html: `<strong style="color: var(--danger-text);">CẢNH BÁO:</strong> Sẽ xóa vĩnh viễn file:<br><br><code style="color: var(--warning-text); background: var(--warning-bg); padding: 8px; border-radius: 4px; display: inline-block; margin: 8px 0;">${filePath}</code>`,
                     icon: 'error',
                     showCancelButton: true,
-                    confirmButtonColor: '#ff4757',
-                    cancelButtonColor: '#6c757d',
+                    confirmButtonColor: 'var(--danger-text)',
+                    cancelButtonColor: 'var(--text-light)',
                     confirmButtonText: 'XÓA NGAY',
                     cancelButtonText: 'Hủy',
                     dangerMode: true
@@ -1829,7 +1701,7 @@ function performAutoFix($scan_data) {
                 const deleteBtn = document.querySelector(`button[onclick*="${index}"]`);
                 if (deleteBtn) {
                     deleteBtn.disabled = true;
-                    deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang Xóa...';
+                    deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Xóa...';
                 }
                 
                 try {
@@ -1862,23 +1734,16 @@ function performAutoFix($scan_data) {
                             icon: 'success',
                             title: 'XÓA THÀNH CÔNG!',
                             text: `File ${filePath} đã được xóa thành công.`,
-                            confirmButtonColor: '#00ff88'
+                            confirmButtonColor: 'var(--success-text)'
                         }).then(() => {
                             // Remove the card from display
-                            const threatCard = deleteBtn.closest('.threat-card');
-                            if (threatCard) {
-                                threatCard.style.transition = 'all 0.3s ease';
-                                threatCard.style.opacity = '0';
-                                threatCard.style.transform = 'translateX(-100%)';
+                            const threatItem = deleteBtn.closest('.threat-item');
+                            if (threatItem) {
+                                threatItem.style.transition = 'all 0.3s ease';
+                                threatItem.style.opacity = '0';
+                                threatItem.style.transform = 'translateX(-100%)';
                                 setTimeout(() => {
-                                    threatCard.remove();
-                                    // Update scan data
-                                    if (this.lastScanData && this.lastScanData.malware_files) {
-                                        const malwareIndex = this.lastScanData.malware_files.indexOf(filePath);
-                                        if (malwareIndex > -1) {
-                                            this.lastScanData.malware_files.splice(malwareIndex, 1);
-                                        }
-                                    }
+                                    threatItem.remove();
                                 }, 300);
                             }
                         });
@@ -1892,12 +1757,12 @@ function performAutoFix($scan_data) {
                         icon: 'error',
                         title: 'LỖI XÓA FILE',
                         text: error.message,
-                        confirmButtonColor: '#ff4757'
+                        confirmButtonColor: 'var(--danger-text)'
                     });
                 } finally {
                     if (deleteBtn) {
                         deleteBtn.disabled = false;
-                        deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Xóa File';
+                        deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Xóa';
                     }
                 }
             }
@@ -1908,7 +1773,7 @@ function performAutoFix($scan_data) {
                         icon: 'info',
                         title: 'Không có lỗi để khắc phục',
                         text: 'Không phát hiện lỗi nào cần khắc phục!',
-                        confirmButtonColor: '#00ff88'
+                        confirmButtonColor: 'var(--primary-blue)'
                     });
                     return;
                 }
@@ -1946,11 +1811,13 @@ function performAutoFix($scan_data) {
                         Swal.fire({
                             icon: 'success',
                             title: 'Khắc Phục Thành Công!',
-                            html: `<strong>Files đã sửa:</strong> ${data.fixed_files}<br>` +
+                            html: `<div style="text-align: left; font-size: 0.9rem;">` +
+                                  `<strong>Files đã sửa:</strong> ${data.fixed_files}<br>` +
                                   `<strong>Files độc hại đã xóa:</strong> ${data.deleted_files || 0}<br>` +
                                   `<strong>Lỗi đã khắc phục:</strong> ${data.fixes_applied}<br>` +
-                                  `<strong>Backup:</strong> ${data.backup_created ? '✅ Đã tạo' : '❌ Không có'}`,
-                            confirmButtonColor: '#00ff88'
+                                  `<strong>Backup:</strong> ${data.backup_created ? '✅ Đã tạo' : '❌ Không có'}` +
+                                  `</div>`,
+                            confirmButtonColor: 'var(--success-text)'
                         }).then(() => {
                             // Auto scan lại sau khi fix
                             this.startScan();
@@ -1960,7 +1827,7 @@ function performAutoFix($scan_data) {
                             icon: 'error',
                             title: 'Lỗi Khắc Phục',
                             text: data.error || 'Unknown error',
-                            confirmButtonColor: '#ff4757'
+                            confirmButtonColor: 'var(--danger-text)'
                         });
                     }
                     
@@ -1970,11 +1837,11 @@ function performAutoFix($scan_data) {
                         icon: 'error',
                         title: 'Lỗi Khắc Phục',
                         text: error.message,
-                        confirmButtonColor: '#ff4757'
+                        confirmButtonColor: 'var(--danger-text)'
                     });
                 } finally {
                     autoFixBtn.disabled = false;
-                    autoFixBtn.innerHTML = '<i class="fas fa-tools"></i> Khắc Phục Lỗi Tự Động';
+                    autoFixBtn.innerHTML = '<i class="fas fa-magic"></i> Khắc Phục Tự Động';
                 }
             }
         }
