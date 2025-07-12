@@ -109,4 +109,101 @@ Dựa trên nền tảng hiện tại của `security_scan.php`, các tính năn
 - **Quét theo lịch trình (Scheduled Scanning):** Tích hợp với cron job để tự động thực hiện quét định kỳ (hàng ngày, hàng tuần) và gửi email thông báo cho quản trị viên nếu phát hiện vấn đề.
 - **So sánh và giám sát tệp tin:** Xây dựng chức năng tạo "ảnh chụp" (snapshot) ban đầu của hệ thống tệp và sau đó so sánh để phát hiện các thay đổi (tệp mới, tệp bị sửa đổi). Đây là một cách hiệu quả để phát hiện các cuộc tấn công.
 - **Danh sách trắng (Whitelisting):** Cho phép quản trị viên đánh dấu các tệp hoặc cảnh báo cụ thể là "an toàn" để chúng không bị báo cáo trong các lần quét sau.
-- **Báo cáo và thống kê chi tiết:** Cung cấp các biểu đồ và thống kê về tình hình bảo mật của trang web theo thời gian. 
+- **Báo cáo và thống kê chi tiết:** Cung cấp các biểu đồ và thống kê về tình hình bảo mật của trang web theo thời gian.
+
+---
+
+## 6. Phân tích Virus và Hướng khắc phục (Virus Analysis & Remediation)
+
+Phần này phân tích các mẫu virus được tìm thấy trong thư mục `virus-files` và đề xuất các giải pháp khắc phục toàn diện cho CMS.
+
+### 6.1. Phân tích các tệp tin độc hại
+
+- **`virus-files/23.php`**:
+    - **Loại:** Webshell thực thi mã đơn giản.
+    - **Cơ chế:** Sử dụng `eval()` để thực thi bất kỳ mã PHP nào được gửi qua tham số `x` của URL (`$_REQUEST['x']`). Nó sử dụng `goto` để làm rối luồng thực thi một cách cơ bản.
+    - **Mức độ nguy hiểm:** Cực kỳ cao. Cho phép kẻ tấn công toàn quyền thực thi mã trên máy chủ.
+
+- **`virus-files/666.php`**:
+    - **Loại:** Trình tải tệp (File Uploader).
+    - **Cơ chế:** Cung cấp một biểu mẫu HTML cho phép tải tệp lên. Tệp được lưu vào thư mục `../sources/` mà không có bất kỳ sự kiểm tra nào về loại tệp, kích thước hay nội dung.
+    - **Mức độ nguy hiểm:** Cực kỳ cao. Cho phép kẻ tấn công dễ dàng tải lên các webshell phức tạp hơn, các công cụ tấn công hoặc các tệp tin để phá hoại trang web.
+
+- **`virus-files/cache.php`**:
+    - **Loại:** Trình tiêm nhiễm và duy trì Backdoor (Injector & Persistence).
+    - **Cơ chế:** Đây là mã độc tinh vi nhất.
+        1.  Nó nhắm mục tiêu vào một tệp lõi của CMS: `admin/lib/function.php`.
+        2.  Nó kiểm tra xem tệp đã bị tiêm nhiễm chưa bằng cách tìm kiếm từ khóa `goto`.
+        3.  Nếu chưa, nó sẽ giải mã một payload (được mã hóa base64) và ghi nó vào cuối tệp `function.php`.
+        4.  Payload được giải mã này tiếp tục tải một mã độc khác từ một máy chủ từ xa và lưu nó vào các tệp khác trên trang web.
+        5.  Nó còn khéo léo tạo một bản sao lưu (`.bak`) và đặt lại ngày sửa đổi của tệp tin để che giấu hành vi.
+    - **Mức độ nguy hiểm:** Rất cao. Nó tạo ra sự tồn tại dai dẳng, khó bị loại bỏ và có thể tái nhiễm hệ thống ngay cả khi các tệp virus ban đầu đã bị xóa.
+
+### 6.2. Đề xuất giải pháp khắc phục
+
+#### Bước 1: Ngăn chặn và loại bỏ ngay lập tức
+
+1.  **Khôi phục tệp `function.php`**:
+    - Xóa tệp `admin/lib/function.php`.
+    - Đổi tên tệp sao lưu `admin/lib/function.php.bak` thành `admin/lib/function.php`.
+    - Nếu không có tệp `.bak`, bạn phải khôi phục tệp này từ một bản sao lưu sạch của mã nguồn trang web.
+
+2.  **Vô hiệu hóa thực thi trong các thư mục không cần thiết**:
+    - Tạo một tệp `.htaccess` trong thư mục `uploads/` và `img_data/` với nội dung sau để ngăn chặn việc thực thi các tệp PHP được tải lên:
+      ```apache
+      <Files *.php>
+      Deny from all
+      </Files>
+      ```
+
+3.  **Xóa các tệp virus đã biết**:
+    - Xóa thư mục `virus-files` cùng toàn bộ nội dung của nó.
+    - Kiểm tra thư mục `sources/` để tìm bất kỳ tệp lạ nào có thể đã được tải lên bởi `666.php` và xóa chúng.
+
+#### Bước 2: Cải thiện khả năng phát hiện của `security_scan.php`
+
+Cần cập nhật các mẫu nhận diện trong `security_scan.php` để phát hiện các loại mối đe dọa này và các biến thể của chúng.
+
+- **Bổ sung vào `$malware_patterns`**:
+    - `'eval($_REQUEST['`: Phát hiện các webshell đơn giản.
+    - `'eval(base64_decode'`: Phát hiện các payload bị mã hóa.
+    - `'move_uploaded_file($tmp,$name)'`: Có thể gây ra dương tính giả, nhưng rất hiệu quả để tìm các trình tải tệp đơn giản. Cần được đưa vào `$warning_patterns` hoặc một danh mục riêng để xem xét thủ công.
+    - `'$ject_data='`: Tìm kiếm các biến chứa payload mã hóa như trong `cache.php`.
+    - `'goto '`: Như chúng ta đã thấy, đây là một kỹ thuật làm rối và là dấu hiệu của việc tiêm nhiễm từ `cache.php`.
+
+- **Ví dụ cập nhật trong `security_scan.php`**:
+  ```php
+  // ...
+  $malware_patterns = [
+      'eval(',
+      'goto ', // Rất quan trọng để phát hiện file bị cache.php tiêm nhiễm
+      'eval($_REQUEST[', // Nhắm vào webshell như 23.php
+      "eval(base64_decode",
+      'gzinflate(',
+      "'\x2f\141\x64\x6d\151\x6e\57\154\151\x62\57\146\x75\156\x63\x74\x69\x6f\x6e\56\x70\150\160'", // Tìm chuỗi obfuscated
+      'str_rot13(',
+      '$_F=__FILE__;',
+      'readdir(',
+      '<?php eval'
+  ];
+
+  $warning_patterns = [
+      // ... các mẫu hiện có
+      "move_uploaded_file(\$_FILES['file']['tmp_name']", // Tìm các file uploader đơn giản
+  ];
+  // ...
+  ```
+
+#### Bước 3: Củng cố và tăng cường bảo mật cho CMS (Hardening)
+
+1.  **Tăng cường chức năng tải tệp**: Mọi chức năng cho phép người dùng tải tệp lên (ví dụ: trình quản lý tệp, tải lên ảnh đại diện) phải được kiểm tra và củng cố.
+    - **Chỉ cho phép các phần mở rộng tệp an toàn**: Tạo một danh sách trắng (whitelist) các phần mở rộng được phép (ví dụ: `jpg`, `png`, `gif`, `pdf`) và từ chối tất cả các phần mở rộng khác.
+    - **Đổi tên tệp khi tải lên**: Không bao giờ giữ lại tên tệp gốc do người dùng cung cấp. Hãy tạo một tên tệp ngẫu nhiên hoặc dựa trên một quy tắc an toàn.
+    - **Kiểm tra nội dung tệp**: Đối với tệp hình ảnh, sử dụng các hàm như `getimagesize()` để xác minh rằng đó thực sự là một tệp hình ảnh, không phải là một tệp PHP được đổi tên.
+
+2.  **Phân quyền tệp tin nghiêm ngặt**:
+    - Đặt quyền cho tất cả các tệp là `644` và tất cả các thư mục là `755`. Điều này ngăn chặn việc chỉnh sửa tệp từ các tiến trình của web server trong nhiều cấu hình.
+    - Các tệp cấu hình nhạy cảm (ví dụ: `admin/lib/config.php`) có thể được đặt quyền `444` (chỉ đọc) để tăng cường bảo vệ.
+
+3.  **Sử dụng Web Application Firewall (WAF)**:
+    - Cân nhắc sử dụng một WAF như ModSecurity. Có thể cấu hình các quy tắc để chặn các yêu cầu chứa các mẫu mã độc trong tham số URL, chẳng hạn như `?x=system(...)` mà `23.php` khai thác. 
