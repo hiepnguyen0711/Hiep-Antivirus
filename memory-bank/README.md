@@ -49,4 +49,64 @@ Tài liệu này là một tài liệu "sống". Nó chỉ hữu ích khi đư�
 - **Quy trình:**
   1.  Khi có một sự thay đổi về kiến trúc, một quyết định mới, hoặc một quy ước mới, hãy cập nhật ngay lập-tức vào tệp Markdown tương ứng.
   2.  Commit các thay đổi đối với tài liệu cùng với các thay đổi về mã nguồn liên quan.
-  3.  Sử dụng các thông điệp commit rõ ràng, ví dụ: `docs(techContext): Bổ sung thông tin về việc sử dụng Redis để cache`. 
+  3.  Sử dụng các thông điệp commit rõ ràng, ví dụ: `docs(techContext): Bổ sung thông tin về việc sử dụng Redis để cache`.
+
+---
+
+## 5. Tổng quan về Module Quét Bảo mật (Security Scan Module)
+
+Phần này cung cấp thông tin chi tiết về `security_scan.php`, công cụ quét bảo mật cốt lõi của dự án.
+
+### 5.1. Hướng dẫn sử dụng
+
+Module quét hoạt động thông qua các endpoint API đơn giản. Bạn có thể tương tác với nó bằng các công cụ như `curl` hoặc giao diện người dùng được xây dựng để gọi các URL này.
+
+- **Quét toàn bộ hệ thống:**
+  - **Endpoint:** `GET /security_scan.php?scan=1`
+  - **Chức năng:** Bắt đầu quá trình quét các thư mục đã định cấu hình (`./sources`, `./admin`, `./uploads`, `./`). Script sẽ trả về một đối tượng JSON chứa danh sách các tệp đáng ngờ (`suspicious_files`), tệp chứa mã độc (`malware_files`), và các tệp chỉ mang tính cảnh báo (`warning_files`).
+  - **Ví dụ:** `curl "http://your-site.com/security_scan.php?scan=1"`
+
+- **Xóa các tệp mã độc:**
+  - **Endpoint:** `POST /security_scan.php?delete_malware=1`
+  - **Chức năng:** Nhận một danh sách các tệp cần xóa dưới dạng JSON. Script sẽ tự động sao lưu các tệp này vào một thư mục backup trước khi xóa để đảm bảo an toàn.
+  - **Dữ liệu POST:**
+    ```json
+    {
+      "malware_files": [
+        "path/to/malicious_file1.php",
+        "path/to/malicious_file2.php"
+      ]
+    }
+    ```
+
+- **Tự động sửa lỗi:**
+  - **Endpoint:** `POST /security_scan.php?autofix=1`
+  - **Chức năng:** Nhận một đối tượng JSON chứa kết quả quét và cố gắng tự động sửa các lỗi đã biết. Chức năng này cần được sử dụng một cách cẩn trọng.
+  - **Dữ liệu POST:**
+    ```json
+    {
+      "suspicious_files": {
+        "path/to/suspicious_file.php": ["eval(", "base64_decode("]
+      },
+      "malware_files": [],
+      "warning_files": {}
+    }
+    ```
+
+### 5.2. Định hướng phát triển
+
+- **Triết lý "Phòng thủ theo chiều sâu":** Module không chỉ tìm kiếm các mẫu mã độc đã biết (signatures) mà còn phân tích các hàm và mẫu mã đáng ngờ (heuristics). Cách tiếp cận này giúp phát hiện cả những mối đe dọa mới, chưa từng được biết đến.
+- **Ưu tiên sự an toàn và khả năng phục hồi:** Mọi hành động xóa hoặc sửa đổi tệp đều phải được sao lưu trước. Điều này đảm bảo rằng nếu có lỗi xảy ra (ví dụ: sửa nhầm tệp hợp lệ), quản trị viên có thể dễ dàng khôi phục lại trạng thái ban đầu.
+- **Tích hợp thay vì độc lập:** Module được thiết kế để tích hợp chặt chẽ với Mộng Truyện CMS, tận dụng các cấu trúc sẵn có như lớp CSDL `$d` và hệ thống quản trị. Nó không phải là một công cụ độc lập.
+- **Hiệu suất là yếu tố quan trọng:** Trình quét phải được tối ưu hóa để giảm thiểu ảnh hưởng đến hoạt động của trang web, đặc biệt là trên các môi trường hosting chia sẻ.
+
+### 5.3. Chức năng hướng tới (Roadmap)
+
+Dựa trên nền tảng hiện tại của `security_scan.php`, các tính năng tiếp theo trong lộ trình phát triển bao gồm:
+
+- **Giao diện người dùng hoàn chỉnh:** Xây dựng một giao diện quản trị thân thiện để người dùng có thể thực hiện mọi thao tác (quét, xem kết quả, xóa, sửa lỗi, xem backup) mà không cần dùng đến dòng lệnh.
+- **Quản lý mẫu nhận diện (Signature Management):** Cho phép quản trị viên tự thêm, sửa, xóa các mẫu nhận diện mã độc và cảnh báo thông qua giao diện quản trị. Các mẫu này sẽ được lưu trong CSDL.
+- **Quét theo lịch trình (Scheduled Scanning):** Tích hợp với cron job để tự động thực hiện quét định kỳ (hàng ngày, hàng tuần) và gửi email thông báo cho quản trị viên nếu phát hiện vấn đề.
+- **So sánh và giám sát tệp tin:** Xây dựng chức năng tạo "ảnh chụp" (snapshot) ban đầu của hệ thống tệp và sau đó so sánh để phát hiện các thay đổi (tệp mới, tệp bị sửa đổi). Đây là một cách hiệu quả để phát hiện các cuộc tấn công.
+- **Danh sách trắng (Whitelisting):** Cho phép quản trị viên đánh dấu các tệp hoặc cảnh báo cụ thể là "an toàn" để chúng không bị báo cáo trong các lần quét sau.
+- **Báo cáo và thống kê chi tiết:** Cung cấp các biểu đồ và thống kê về tình hình bảo mật của trang web theo thời gian. 
