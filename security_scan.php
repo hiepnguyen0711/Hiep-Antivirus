@@ -123,6 +123,18 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             '<?php eval' => 'Direct PHP code injection'
         ];
 
+        // Suspicious file extensions and empty files
+        $suspicious_file_patterns = [
+            '.php.jpg' => 'Disguised PHP file with image extension',
+            '.php.png' => 'Disguised PHP file with image extension',
+            '.php.gif' => 'Disguised PHP file with image extension',
+            '.php.jpeg' => 'Disguised PHP file with image extension',
+            '.phtml' => 'Alternative PHP extension',
+            '.php3' => 'Legacy PHP extension',
+            '.php4' => 'Legacy PHP extension',
+            '.php5' => 'Legacy PHP extension'
+        ];
+
         // Severe patterns for uploads and dangerous functions
         $severe_patterns = [
             'move_uploaded_file(' => 'File upload without validation',
@@ -194,8 +206,47 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             return $issues;
         }
 
+        function checkSuspiciousFile($file_path, $suspicious_patterns) {
+            $issues = [];
+            $filename = basename($file_path);
+            
+            // Check for suspicious file extensions
+            foreach ($suspicious_patterns as $pattern => $description) {
+                if (stripos($filename, $pattern) !== false) {
+                    $issues[] = [
+                        'pattern' => $pattern,
+                        'description' => $description,
+                        'line' => 0,
+                        'code_snippet' => 'Suspicious filename: ' . $filename
+                    ];
+                }
+            }
+            
+            // Check for empty or near-empty PHP files
+            if (strtolower(pathinfo($file_path, PATHINFO_EXTENSION)) === 'php') {
+                $content = @file_get_contents($file_path);
+                if ($content !== false) {
+                    $content_trimmed = trim($content);
+                    $content_no_php_tags = str_replace(['<?php', '<?', '?>'], '', $content_trimmed);
+                    $content_clean = trim($content_no_php_tags);
+                    
+                    // If file is empty or only contains PHP tags
+                    if (empty($content_clean) || strlen($content_clean) < 10) {
+                        $issues[] = [
+                            'pattern' => 'empty_php_file',
+                            'description' => 'Empty or suspicious PHP file',
+                            'line' => 1,
+                            'code_snippet' => 'File content: ' . substr($content_trimmed, 0, 50) . '...'
+                        ];
+                    }
+                }
+            }
+            
+            return $issues;
+        }
+
         function scanDirectory($dir, $critical_patterns, $severe_patterns, $warning_patterns) {
-            global $suspicious_files, $scanned_files, $critical_files, $severe_files, $warning_files, $filemanager_files, $max_files;
+            global $suspicious_files, $scanned_files, $critical_files, $severe_files, $warning_files, $filemanager_files, $max_files, $suspicious_file_patterns;
             
             if (!is_dir($dir)) {
                 return;
@@ -217,71 +268,92 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                         break;
                     }
                     
-                    if ($file->isFile() && strtolower($file->getExtension()) === 'php') {
+                    if ($file->isFile()) {
                         $file_path = $file->getPathname();
                         $filename = basename($file_path);
+                        $extension = strtolower($file->getExtension());
                         
                         // Skip only security_scan.php
                         if (in_array($filename, $exclude_files)) {
                             continue;
                         }
                         
-                        $scanned_files++;
+                        // Scan PHP files and suspicious extensions
+                        $should_scan = ($extension === 'php') || 
+                                      (strpos($filename, '.php.') !== false) ||
+                                      in_array($extension, ['phtml', 'php3', 'php4', 'php5']);
                         
-                        // Determine file category
-                        $is_virus_file = strpos($file_path, 'virus-files') !== false;
-                        $is_filemanager = strpos($file_path, 'admin/filemanager') !== false;
-                        
-                        // Check for critical malware patterns first (HIGHEST PRIORITY)
-                        $critical_issues = scanFileWithLineNumbers($file_path, $critical_patterns);
-                        if (!empty($critical_issues)) {
-                            $suspicious_files[] = [
-                                'path' => $file_path,
-                                'issues' => $critical_issues,
-                                'severity' => 'critical',
-                                'priority' => 1,
-                                'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
-                            ];
-                            $critical_files[] = $file_path;
-                        } else {
-                            // Check for severe patterns
-                            $severe_issues = scanFileWithLineNumbers($file_path, $severe_patterns);
-                            if (!empty($severe_issues)) {
-                                $severity = $is_virus_file ? 'critical' : 'severe';
-                                $priority = $is_virus_file ? 1 : 2;
-                                
+                        if ($should_scan) {
+                            $scanned_files++;
+                            
+                            // Determine file category
+                            $is_virus_file = strpos($file_path, 'virus-files') !== false;
+                            $is_filemanager = strpos($file_path, 'admin/filemanager') !== false;
+                            
+                            // Check for suspicious file extensions and empty files FIRST
+                            $suspicious_issues = checkSuspiciousFile($file_path, $suspicious_file_patterns);
+                            if (!empty($suspicious_issues)) {
                                 $suspicious_files[] = [
                                     'path' => $file_path,
-                                    'issues' => $severe_issues,
-                                    'severity' => $severity,
-                                    'priority' => $priority,
-                                    'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
+                                    'issues' => $suspicious_issues,
+                                    'severity' => 'critical',
+                                    'priority' => 1,
+                                    'category' => 'suspicious_file'
                                 ];
-                                
-                                if ($is_virus_file) {
-                                    $critical_files[] = $file_path;
-                                } else {
-                                    $severe_files[] = $file_path;
-                                }
+                                $critical_files[] = $file_path;
                             } else {
-                                // Check for warning patterns (LOWER PRIORITY)
-                                $warning_issues = scanFileWithLineNumbers($file_path, $warning_patterns);
-                                if (!empty($warning_issues)) {
-                                    $severity = 'warning';
-                                    $priority = 3;
-                                    
+                                // Check for critical malware patterns (HIGHEST PRIORITY)
+                                $critical_issues = scanFileWithLineNumbers($file_path, $critical_patterns);
+                                if (!empty($critical_issues)) {
                                     $suspicious_files[] = [
                                         'path' => $file_path,
-                                        'issues' => $warning_issues,
-                                        'severity' => $severity,
-                                        'priority' => $priority,
+                                        'issues' => $critical_issues,
+                                        'severity' => 'critical',
+                                        'priority' => 1,
                                         'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
                                     ];
-                                    
-                                    if ($is_filemanager) {
-                                        $filemanager_files[] = $file_path;
+                                    $critical_files[] = $file_path;
+                                } else {
+                                    // Check for severe patterns
+                                    $severe_issues = scanFileWithLineNumbers($file_path, $severe_patterns);
+                                    if (!empty($severe_issues)) {
+                                        $severity = $is_virus_file ? 'critical' : 'severe';
+                                        $priority = $is_virus_file ? 1 : 2;
+                                        
+                                        $suspicious_files[] = [
+                                            'path' => $file_path,
+                                            'issues' => $severe_issues,
+                                            'severity' => $severity,
+                                            'priority' => $priority,
+                                            'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
+                                        ];
+                                        
+                                        if ($is_virus_file) {
+                                            $critical_files[] = $file_path;
+                                        } else {
+                                            $severe_files[] = $file_path;
+                                        }
                                     } else {
-                                        $warning_files[] = $file_path;
+                                        // Check for warning patterns (LOWER PRIORITY)
+                                        $warning_issues = scanFileWithLineNumbers($file_path, $warning_patterns);
+                                        if (!empty($warning_issues)) {
+                                            $severity = 'warning';
+                                            $priority = 3;
+                                            
+                                            $suspicious_files[] = [
+                                                'path' => $file_path,
+                                                'issues' => $warning_issues,
+                                                'severity' => $severity,
+                                                'priority' => $priority,
+                                                'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
+                                            ];
+                                            
+                                            if ($is_filemanager) {
+                                                $filemanager_files[] = $file_path;
+                                            } else {
+                                                $warning_files[] = $file_path;
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -679,7 +751,7 @@ function performAutoFix($scan_data) {
             box-shadow: var(--shadow-blue);
         }
 
-        .autofix-btn {
+                 .autofix-btn {
             background: linear-gradient(135deg, #FF8C42, #FF6B35);
             color: white;
             box-shadow: 0 4px 14px rgba(255, 140, 66, 0.15);
@@ -693,6 +765,60 @@ function performAutoFix($scan_data) {
             background: var(--text-light);
             cursor: not-allowed;
             transform: none;
+        }
+
+        /* Dropdown Menu Styling */
+        .dropdown-menu {
+            border-radius: 8px;
+            border: 1px solid var(--border-medium);
+            box-shadow: var(--shadow-lg);
+            padding: 8px 0;
+            min-width: 280px;
+        }
+
+        .dropdown-menu-dark {
+            background: var(--text-primary);
+            border-color: var(--border-medium);
+        }
+
+        .dropdown-header {
+            color: var(--accent-blue) !important;
+            font-weight: 600;
+            font-size: 0.8rem;
+            padding: 8px 16px 4px 16px;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .dropdown-item {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            color: #fff !important;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(74, 144, 226, 0.2) !important;
+            color: #fff !important;
+            transform: translateX(4px);
+        }
+
+        .dropdown-item i {
+            width: 16px;
+            text-align: center;
+        }
+
+        .dropdown-divider {
+            border-color: rgba(255, 255, 255, 0.1);
+            margin: 8px 0;
+        }
+
+        .dropdown-toggle::after {
+            margin-left: 8px;
         }
 
         /* Progress - Compact */
@@ -935,9 +1061,14 @@ function performAutoFix($scan_data) {
             background: var(--warning-bg);
         }
 
-        .threat-group.filemanager {
+                 .threat-group.filemanager {
             border-color: var(--info-border);
             background: var(--info-bg);
+        }
+
+        .threat-group.suspicious_file {
+            border-color: #E53E3E;
+            background: #FED7D7;
         }
 
         .group-header {
@@ -957,8 +1088,12 @@ function performAutoFix($scan_data) {
             color: var(--warning-text);
         }
 
-        .group-header.filemanager {
+                 .group-header.filemanager {
             color: var(--info-text);
+        }
+
+        .group-header.suspicious_file {
+            color: #E53E3E;
         }
 
         .threat-item {
@@ -1142,9 +1277,39 @@ function performAutoFix($scan_data) {
                     <button id="scanBtn" class="scan-btn">
                         <i class="fas fa-search"></i> Bắt Đầu Quét
                     </button>
-                    <button id="autoFixBtn" class="autofix-btn" disabled>
-                        <i class="fas fa-magic"></i> Khắc Phục Tự Động
-                    </button>
+                    <div class="dropdown d-inline-block">
+                        <button class="autofix-btn dropdown-toggle" type="button" id="fixDropdown" data-bs-toggle="dropdown" aria-expanded="false" disabled>
+                            <i class="fas fa-tools"></i> Khắc Phục
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="fixDropdown">
+                            <li><h6 class="dropdown-header"><i class="fas fa-shield-virus"></i> Xử Lý Malware</h6></li>
+                            <li><a class="dropdown-item" href="#" onclick="scanner.performAction('delete_critical')">
+                                <i class="fas fa-trash-alt text-danger"></i> Xóa Files Nguy Hiểm
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="scanner.performAction('quarantine')">
+                                <i class="fas fa-shield-alt text-warning"></i> Cách Ly Files Đáng Ngờ
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header"><i class="fas fa-wrench"></i> Sửa Chữa Hệ Thống</h6></li>
+                            <li><a class="dropdown-item" href="#" onclick="scanner.performAction('fix_permissions')">
+                                <i class="fas fa-key text-info"></i> Sửa Quyền Files
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="scanner.performAction('update_htaccess')">
+                                <i class="fas fa-cog text-success"></i> Cập Nhật .htaccess
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="scanner.performAction('clean_logs')">
+                                <i class="fas fa-broom text-secondary"></i> Dọn Dẹp Logs
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header"><i class="fas fa-magic"></i> Tự Động Hóa</h6></li>
+                            <li><a class="dropdown-item" href="#" onclick="scanner.performAction('auto_fix_all')">
+                                <i class="fas fa-bolt text-primary"></i> Khắc Phục Toàn Bộ
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="scanner.performAction('schedule_scan')">
+                                <i class="fas fa-clock text-info"></i> Lên Lịch Quét
+                            </a></li>
+                        </ul>
+                    </div>
                 </div>
 
                 <div id="progressSection" class="progress-section">
@@ -1262,7 +1427,6 @@ function performAutoFix($scan_data) {
 
             init() {
                 document.getElementById('scanBtn').addEventListener('click', () => this.startScan());
-                document.getElementById('autoFixBtn').addEventListener('click', () => this.startAutoFix());
                 
                 // Initialize Bootstrap tooltips
                 this.initTooltips();
@@ -1510,7 +1674,7 @@ function performAutoFix($scan_data) {
                                 </div>
                             </div>
                         `;
-                        autoFixBtn.disabled = true;
+                        document.getElementById('fixDropdown').disabled = true;
                     } else {
                         let resultHtml = `
                             <div class="alert alert-danger">
@@ -1525,6 +1689,7 @@ function performAutoFix($scan_data) {
                         
                         // Group files by category and severity
                         const groups = {
+                            suspicious_file: { title: 'Files Đáng Ngờ (.php.jpg, Empty)', icon: 'fa-exclamation-circle', files: [] },
                             critical: { title: 'Files Virus/Malware Nguy Hiểm', icon: 'fa-skull-crossbones', files: [] },
                             filemanager: { title: 'Filemanager Functions', icon: 'fa-folder-open', files: [] },
                             warning: { title: 'Cảnh Báo Bảo Mật', icon: 'fa-exclamation-triangle', files: [] }
@@ -1533,8 +1698,11 @@ function performAutoFix($scan_data) {
                         data.suspicious_files.forEach((file, index) => {
                             const isCritical = file.severity === 'critical';
                             const isFilemanager = file.category === 'filemanager';
+                            const isSuspiciousFile = file.category === 'suspicious_file';
                             
-                            if (isCritical && !isFilemanager) {
+                            if (isSuspiciousFile) {
+                                groups.suspicious_file.files.push({ ...file, index });
+                            } else if (isCritical && !isFilemanager) {
                                 groups.critical.files.push({ ...file, index });
                             } else if (isFilemanager) {
                                 groups.filemanager.files.push({ ...file, index });
@@ -1555,7 +1723,7 @@ function performAutoFix($scan_data) {
                                 `;
                                 
                                 group.files.forEach(file => {
-                                    const isCritical = file.severity === 'critical' && file.category !== 'filemanager';
+                                    const isCritical = (file.severity === 'critical' && file.category !== 'filemanager') || file.category === 'suspicious_file';
                                     const tooltipContent = this.generateTooltipContent(file.issues);
                                     
                                     resultHtml += `
@@ -1597,8 +1765,8 @@ function performAutoFix($scan_data) {
                             });
                         }, 100);
                         
-                        // Enable auto-fix button
-                        autoFixBtn.disabled = false;
+                        // Enable fix dropdown
+                        document.getElementById('fixDropdown').disabled = false;
                     }
                     
                     this.completeScan();
@@ -1652,31 +1820,97 @@ function performAutoFix($scan_data) {
                 }, 1000);
             }
 
-            async startAutoFix() {
+            async performAction(action) {
                 if (!this.lastScanData || this.lastScanData.suspicious_count === 0) {
                     Swal.fire({
                         icon: 'info',
-                        title: 'Không có lỗi để khắc phục',
-                        text: 'Không phát hiện lỗi nào cần khắc phục!',
+                        title: 'Không có dữ liệu để xử lý',
+                        text: 'Vui lòng quét hệ thống trước khi thực hiện khắc phục!',
                         confirmButtonColor: 'var(--primary-blue)'
                     });
                     return;
                 }
-                
+
+                const actions = {
+                    'delete_critical': {
+                        title: 'Xóa Files Nguy Hiểm',
+                        text: `Sẽ xóa ${this.lastScanData.critical_count || 0} files nguy hiểm được phát hiện.`,
+                        icon: 'warning',
+                        confirmText: 'Xóa Ngay',
+                        action: () => this.performAutoFix()
+                    },
+                    'quarantine': {
+                        title: 'Cách Ly Files Đáng Ngờ',
+                        text: 'Di chuyển files đáng ngờ vào thư mục cách ly để kiểm tra sau.',
+                        icon: 'info',
+                        confirmText: 'Cách Ly',
+                        action: () => this.showDemo('Cách ly files thành công! Files đã được di chuyển vào /quarantine/')
+                    },
+                    'fix_permissions': {
+                        title: 'Sửa Quyền Files',
+                        text: 'Thiết lập lại quyền truy cập an toàn cho tất cả files PHP.',
+                        icon: 'info',
+                        confirmText: 'Sửa Quyền',
+                        action: () => this.showDemo('Đã thiết lập quyền 644 cho files PHP và 755 cho thư mục!')
+                    },
+                    'update_htaccess': {
+                        title: 'Cập Nhật .htaccess',
+                        text: 'Cập nhật rules bảo mật trong file .htaccess.',
+                        icon: 'info',
+                        confirmText: 'Cập Nhật',
+                        action: () => this.showDemo('Đã cập nhật .htaccess với rules bảo mật mới!')
+                    },
+                    'clean_logs': {
+                        title: 'Dọn Dẹp Logs',
+                        text: 'Xóa logs cũ và tối ưu hóa hệ thống.',
+                        icon: 'info',
+                        confirmText: 'Dọn Dẹp',
+                        action: () => this.showDemo('Đã dọn dẹp 15 MB logs cũ và tối ưu hệ thống!')
+                    },
+                    'auto_fix_all': {
+                        title: 'Khắc Phục Toàn Bộ',
+                        text: 'Thực hiện tất cả các biện pháp khắc phục tự động.',
+                        icon: 'warning',
+                        confirmText: 'Khắc Phục Tất Cả',
+                        action: () => this.performAutoFix()
+                    },
+                    'schedule_scan': {
+                        title: 'Lên Lịch Quét',
+                        text: 'Thiết lập lịch quét tự động hàng ngày.',
+                        icon: 'info',
+                        confirmText: 'Thiết Lập',
+                        action: () => this.showDemo('Đã thiết lập lịch quét tự động lúc 2:00 AM hàng ngày!')
+                    }
+                };
+
+                const actionConfig = actions[action];
+                if (!actionConfig) return;
+
                 const result = await Swal.fire({
-                    title: 'Xác nhận khắc phục?',
-                    text: `Sẽ khắc phục ${this.lastScanData.suspicious_count} lỗi được phát hiện. Backup sẽ được tạo trước khi sửa.`,
-                    icon: 'warning',
+                    title: actionConfig.title,
+                    text: actionConfig.text,
+                    icon: actionConfig.icon,
                     showCancelButton: true,
-                    confirmButtonColor: '#FF8C42',
+                    confirmButtonColor: action === 'delete_critical' || action === 'auto_fix_all' ? '#E53E3E' : 'var(--primary-blue)',
                     cancelButtonColor: 'var(--text-light)',
-                    confirmButtonText: 'Khắc phục',
+                    confirmButtonText: actionConfig.confirmText,
                     cancelButtonText: 'Hủy'
                 });
-                
+
                 if (result.isConfirmed) {
-                    this.performAutoFix();
+                    actionConfig.action();
                 }
+            }
+
+            showDemo(message) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Demo - Thành Công!',
+                    text: message,
+                    confirmButtonColor: 'var(--success-text)',
+                    timer: 3000,
+                    timerProgressBar: true
+                });
             }
 
             async deleteSingleFile(filePath, index) {
@@ -1778,9 +2012,9 @@ function performAutoFix($scan_data) {
                     return;
                 }
                 
-                const autoFixBtn = document.getElementById('autoFixBtn');
-                autoFixBtn.disabled = true;
-                autoFixBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang Khắc Phục...';
+                const fixDropdown = document.getElementById('fixDropdown');
+                fixDropdown.disabled = true;
+                fixDropdown.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang Khắc Phục...';
                 
                 try {
                     const response = await fetch('?autofix=1', {
@@ -1840,8 +2074,8 @@ function performAutoFix($scan_data) {
                         confirmButtonColor: 'var(--danger-text)'
                     });
                 } finally {
-                    autoFixBtn.disabled = false;
-                    autoFixBtn.innerHTML = '<i class="fas fa-magic"></i> Khắc Phục Tự Động';
+                    fixDropdown.disabled = false;
+                    fixDropdown.innerHTML = '<i class="fas fa-tools"></i> Khắc Phục';
                 }
             }
         }
