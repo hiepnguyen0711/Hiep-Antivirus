@@ -1,0 +1,26 @@
+<!-- hc-offcanvas-nav css-->
+<link href="module/HC-MobileNav/css/HC-Mobilenav.css" rel="stylesheet">
+<!-- hc-offcanvas-nav css-->
+
+<!-- hc-offcanvas-nav -->
+<script src="module/HC-MobileNav/js/hc-offcanvas-nav.js"></script>
+<script>
+	(function($) {
+	  var $main_nav = $('#main-nav');
+	  var $toggle = $('.navbar-toggle');
+
+	  var defaultData = {
+		maxWidth: false,
+		customToggle: $toggle,
+		navTitle: 'Danh mục',
+		levelTitles: true,
+		pushContent: '#container',
+		insertClose: false,
+	  };
+
+	  // call our plugin
+	  var Nav = $main_nav.hcOffcanvasNav(defaultData);
+
+	})(jQuery);
+</script>
+<!-- hc-offcanvas-nav -->

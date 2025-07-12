@@ -1,0 +1,20 @@
+[23-Aug-2022 14:01:16 UTC] PHP Deprecated:  Function get_magic_quotes_gpc() is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 372
+[23-Aug-2022 14:01:16 UTC] PHP Deprecated:  Function get_magic_quotes_gpc() is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 372
+[23-Aug-2022 14:28:34 UTC] PHP Deprecated:  Function get_magic_quotes_gpc() is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 372
+[23-Aug-2022 14:28:34 UTC] PHP Deprecated:  Function get_magic_quotes_gpc() is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 372
+[23-Aug-2022 14:34:44 UTC] PHP Deprecated:  Function get_magic_quotes_gpc() is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 372
+[23-Aug-2022 14:34:44 UTC] PHP Deprecated:  Function get_magic_quotes_gpc() is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 372
+[23-Aug-2022 14:35:10 UTC] PHP Deprecated:  Function get_magic_quotes_gpc() is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 372
+[23-Aug-2022 14:35:10 UTC] PHP Deprecated:  Function get_magic_quotes_gpc() is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 372
+[23-Aug-2022 21:56:13 Asia/Ho_Chi_Minh] PHP Fatal error:  Uncaught Error: Call to a member function replace() on null in /home/rybk2nfongmm/public_html/admin/templates/upload-file/them_tpl.php:51
+Stack trace:
+#0 /home/rybk2nfongmm/public_html/admin/index.php(61): include()
+#1 {main}
+  thrown in /home/rybk2nfongmm/public_html/admin/templates/upload-file/them_tpl.php on line 51
+[24-Aug-2022 07:39:34 UTC] PHP Deprecated:  Array and string offset access syntax with curly braces is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 196
+[24-Aug-2022 07:39:34 UTC] PHP Deprecated:  Array and string offset access syntax with curly braces is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 196
+[24-Aug-2022 07:39:34 UTC] PHP Deprecated:  Array and string offset access syntax with curly braces is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 198
+[24-Aug-2022 07:39:34 UTC] PHP Deprecated:  Array and string offset access syntax with curly braces is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 198
+[24-Aug-2022 07:39:34 UTC] PHP Deprecated:  Array and string offset access syntax with curly braces is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 214
+[24-Aug-2022 07:39:34 UTC] PHP Deprecated:  Array and string offset access syntax with curly braces is deprecated in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 214
+[24-Aug-2022 07:39:34 UTC] PHP Deprecated:  Methods with the same name as their class will not be constructors in a future version of PHP; func_index has a deprecated constructor in /home/rybk2nfongmm/public_html/admin/lib/class.php on line 2

@@ -1,0 +1,144 @@
+.col-xs-5ths, .col-sm-5ths, .col-md-5ths, .col-lg-5ths {position: relative;min-height: 1px;padding-right: 10px;padding-left: 10px;overflow: hidden;}
+.col-xs-5ths {width: 20%;float: left;}
+@media (min-width: 768px) {.col-sm-5ths {width: 20%;float: left;}}
+@media (min-width: 992px) {.col-md-5ths { width: 20%;float: left;}}
+@media (min-width: 1200px) {.col-lg-5ths {width: 20%;float: left;}}
+@media screen and (min-width: 1025px){
+    .dropdown:hover >ul{display:block;opacity: 1;height: auto;top: 100%;}
+}
+/*Ipad ngang(1024 x 768)*/
+@media screen and (max-width: 1024px){
+    .navbar-default .navbar-nav>li>a{
+        padding-left: 15px;
+        padding-right: 15px;
+    }
+}
+/*Ipad dọc(768 x 1024)*/
+@media screen and (max-width: 768px){
+    .sm-none{display: none !important;}
+    .sm-block{display: block !important;}
+    .navbar-default .navbar-nav>li>a{
+        font-size: 13px;
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+    .hotro{
+        background-size: contain;
+        background-position: left bottom;
+    }
+    .hotline-tuvan{
+        padding-left: 11px;
+    }
+    .hotline-tuvan strong{
+        font-size: 14px;
+    }
+    .hotline-tuvan span{
+        height: 47px;
+        width: 47px;
+    }
+}
+/*Tablet nhỏ(480 x 640)*/
+@media screen and (max-width: 767px){
+    .xs-block{display: block !important;}
+    .xs-none{display: none !important;}
+    .logo{
+        text-align: center;
+        float: left;
+        margin-right: 20px;
+    }
+    .logo img{
+        height: 55px;
+    }
+    .tool-top .navbar-form .form-search{
+    width: 100%;
+    border-radius: 5px;
+    }
+    .tool-top .navbar-form{
+    width: 73%;
+    padding: 0px;
+    border-radius: 5px;
+    }
+    .tool-mobile{
+    background-color: #0073ae;
+    padding: 5px;
+    }
+    .btn-search{
+    right: 0px;
+    line-height: 32px;
+    }
+    .hc-nav-trigger.hc-nav-1{
+    display: block !important;
+    margin-right: 20px;
+    }
+    .navbar-default{
+    background-color: #ec2008;
+    margin-left: -15px;
+    margin-right: -15px;
+    margin-bottom: 0px;
+    min-height: 40px;
+    margin-top: 10px;
+    }
+    .navbar-brand{
+    height: 40px;
+    color: #fff !important;
+    text-transform: uppercase;
+    font-size: 13px;
+    margin-left: 15px;
+    }
+    .ten-ct{
+    font-weight: 600;
+    text-transform: uppercase;
+    margin: 0px;
+    padding-top: 6px;
+    text-align: center;
+    color: #0073ae;
+    }
+    .item-spc{
+    height: 160px;
+    }
+    .pic-big .item-spc{
+    height: 160px;
+    }
+    .hotro{
+    background-position: center bottom;
+    }
+    .banner{
+    background-position: center bottom;
+    height: 230px;
+    }
+    .chitiettin img{
+    max-width: 100% !IMPORTANT;
+    height: auto !important;
+    }
+    .banner-sp{
+    min-height: 100px;
+    height: 100px;
+    }
+    .btn-cart{
+    display: block;
+    margin: 0px auto;
+    width: 100%;
+    margin-top: 10px;
+    }
+    .check-cart{
+    text-align: center;
+    }
+    .iput-sl{
+    top: 0;
+    width: 50%;
+    }
+    .btn-send-contact{
+    margin-top: 10px;
+    }
+    .hinh-album{
+    height: 150px;
+    }
+}
+/*Iphone(480 x 640)*/
+@media screen and (max-width: 320px){
+}
+/*Smart phone nhỏ*/
+@media screen and (max-width: 240px){
+    
+}
+

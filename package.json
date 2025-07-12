@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "sass-dev": "sass --watch --update --style=expanded templates/css/main.scss:templates/css/style.css",
+    "sass-prod": "sass --no-source-map --style=compressed assets/scss:assets/css"
+  },
+  "devDependencies": {
+    "sass": "^1.63.4"
+  }
+}

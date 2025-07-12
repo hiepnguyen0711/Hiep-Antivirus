@@ -1,0 +1,61 @@
+RewriteEngine on
+RewriteCond %{REQUEST_FILENAME} -d [OR]
+RewriteCond %{REQUEST_FILENAME} -s
+RewriteRule ^.*$ - [L]
+
+Options -Indexes
+DirectoryIndex index.php
+AddDefaultCharset UTF-8
+
+ErrorDocument 401 /index.php
+ErrorDocument 403 /index.php
+ErrorDocument 404 /index.php
+ErrorDocument 500 /index.php
+
+<files .htaccess> 
+order allow,deny 
+deny from all 
+</files> 
+
+<files config.php> 
+order allow,deny 
+deny from all 
+</files> 
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/x-javascript application/json
+</IfModule>
+
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresDefault "access plus 1 month"
+  ExpiresByType image/jpg "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/gif "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType text/css "access plus 1 month"
+  ExpiresByType text/html "access plus 1 hour"
+  ExpiresByType application/pdf "access plus 1 month"
+  ExpiresByType text/x-javascript "access plus 1 month"
+  ExpiresByType application/x-shockwave-flash "access plus 1 month"
+  ExpiresByType image/x-icon "access plus 1 year"
+</IfModule>
+
+
+RewriteRule ^404/$ index.php?p=404 [L]
+#url đa ngôn ngữ
+
+#RewriteRule ^([a-z]+)/$ index.php?com=&lang=$1 [L]
+#RewriteRule ^([a-z]+)/([a-zA-Z0-9_-]+).html$	index.php?lang=$1&com=$2 [L]
+#RewriteRule ^([a-z]+)/([a-zA-Z0-9_-]+).html&page=([0-9]+)$ index.php?lang=$1&com=$2&page=$3 [L]
+
+#url một ngôn ngữ
+RewriteRule ^([^/]*).html$	index.php?com=$1 [L]
+RewriteRule ^([a-zA-Z0-9_-]+).html&page=([0-9]+)$ index.php?com=$1&page=$2 [L]
+
+RewriteRule ^([^/]*)/([^/]*).html$ index.php?alias=$1&com=$2 [L]
+RewriteRule ^([^/]*)/([^/]*).html(.*)$ index.php?alias=$1&com=$2&page=$3 [L]
+
+RewriteRule ^([^/]*)/([^/]*)/([^/]*).html$ index.php?alias=$1&alias1=$2&com=$3 [L]
+RewriteRule ^([^/]*)/([^/]*)/([^/]*).html(.*)$ index.php?alias=$1&alias1=$2&com=$3&page=$4 [L]

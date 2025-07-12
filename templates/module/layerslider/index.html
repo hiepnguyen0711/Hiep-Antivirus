@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+
+
+<head>
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1">
+    <meta charset="UTF-8">
+    <title>LayerSlider</title>
+
+
+    <link rel='stylesheet' id='layerslider-css' href='layerslider.css' type='text/css' media='all' />
+    
+    <link rel='stylesheet' id='style-layerslider.css-css' href='style-layerslider.css' type='text/css' media='all' />
+
+
+    <script type='text/javascript' src='jquery.js'></script>
+    <script type='text/javascript' src='jquery-migrate.min.js'></script>
+    <script type='text/javascript' src='greensock.js'></script>
+    <script type='text/javascript' src='layerslider.kreaturamedia.js'></script>
+    <script type='text/javascript' src='layerslider.transitions.js'></script>
+
+
+</head>
+
+<body>
+
+
+
+
+    <div id="content">
+
+
+        <div class="sizer">
+            <div class="slider-container">
+                <script data-cfasync="false" type="text/javascript">
+                    var lsjQuery = jQuery;
+                    var curSkin = 'v5';
+                </script>
+                <script data-cfasync="false" type="text/javascript">
+                    lsjQuery(document).ready(function() {
+                        if (typeof lsjQuery.fn.layerSlider == "undefined") {
+                            lsShowNotice('layerslider_19', 'jquery');
+                        } else {
+                            lsjQuery("#layerslider_19").layerSlider({
+                                startInViewport: false,
+                                pauseOnHover: false,
+                                forceLoopNum: false,
+                                autoPlayVideos: false,
+                                skinsPath: 'http://kreaturamedia.com/wp-content/plugins/LayerSlider/static/skins/',
+                                skin: 'v5',
+                                thumbnailNavigation: 'hover'
+                            })
+                        }
+                    });
+                </script>
+                
+				<div id="layerslider_19" class="ls-wp-container" style="width:1280px;height:720px;max-width:1280px;margin:0 auto;margin-bottom: 0px;">
+                    
+					<div class="ls-slide" data-ls="slidedelay:5000;transition2d:76,77,78,79;">
+					
+					<img src="bg1.jpg" class="ls-bg" alt="Slide background" />
+					
+					
+                    </div>
+					<div class="ls-slide" data-ls="slidedelay:4000;transition2d:11;">
+					
+					<img src="bg3.jpg" class="ls-bg" alt="Slide background" />
+					
+					
+                    </div>
+					<div class="ls-slide" data-ls="slidedelay:5000;transition2d:92,93;">
+					
+					<img src="bg1.jpg" class="ls-bg" alt="Slide background" />
+					
+					
+                    </div>
+                    
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+    </div>
+
+
+
+</body>
+
+</html>

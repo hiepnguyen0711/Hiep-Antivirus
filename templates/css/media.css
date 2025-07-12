@@ -1,0 +1,51 @@
+@media only screen and (min-width: 1500px) {
+}
+
+@media only screen and (min-width: 1025px) and (max-width: 1199px) {
+}
+
+@media (max-width: 1024px) {
+  header {
+    display: none;
+  }
+
+  .pnvn-menu-mobile {
+    display: block;
+  }
+section {
+  overflow: hidden;
+}
+  section .container, footer .container {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .lenis-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .vh-btn-dang-hang-form .vh-btn-dat-hang {
+    width: 100%;
+  }
+
+  .vh-quay-lai {
+    width: 100%;
+  }
+
+  .vh-quay-lai a {
+    width: 100%;
+    justify-content: center;
+  }
+  .lenis-scrollbar {
+    width: 3px;
+  }
+  .lenis-scrollbar.visible {
+    width: 5px;
+  }
+}
+
+@media (max-width: 576px) {
+}
+@media (max-width: 330px) {
+}
