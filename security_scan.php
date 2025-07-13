@@ -236,9 +236,10 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
     error_reporting(0);
     ini_set('display_errors', 0);
     
-    // Set timeout and memory limits
-    set_time_limit(60); // 60 seconds max
-    ini_set('memory_limit', '256M');
+    // Set timeout and memory limits for slow hosting
+    set_time_limit(300); // 5 minutes max for slow hosting
+    ini_set('memory_limit', '512M');
+    ini_set('max_execution_time', 300);
     
     try {
         // Critical malware patterns that require immediate deletion (HIGH SEVERITY - RED)
@@ -297,7 +298,7 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             'mkdir(' => 'Directory creation'
         );
 
-        // Directories to scan (including filemanager now)
+        // Directories to scan (optimized for hosting)
         $directories = array('./sources', './admin', './uploads', './virus-files', './');
         $suspicious_files = array();
         $critical_files = array();
@@ -305,7 +306,8 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
         $warning_files = array();
         $filemanager_files = array();
         $scanned_files = 0;
-        $max_files = 2000; // Increased limit
+        $max_files = 1000; // Reduced limit for hosting performance
+        $start_time = time();
 
         function scanFileWithLineNumbers($file_path, $patterns) {
             if (!file_exists($file_path) || !is_readable($file_path)) {
@@ -412,9 +414,14 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
         }
 
         function scanDirectory($dir, $critical_patterns, $severe_patterns, $warning_patterns) {
-            global $suspicious_files, $scanned_files, $critical_files, $severe_files, $warning_files, $filemanager_files, $max_files, $suspicious_file_patterns, $current_scanning_file;
+            global $suspicious_files, $scanned_files, $critical_files, $severe_files, $warning_files, $filemanager_files, $max_files, $suspicious_file_patterns, $current_scanning_file, $start_time;
             
             if (!is_dir($dir)) {
+                return;
+            }
+            
+            // Check timeout to prevent hosting timeouts
+            if ((time() - $start_time) > 240) { // 4 minutes safety timeout
                 return;
             }
             
@@ -435,9 +442,14 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                 }
                 
                 foreach ($iterator as $file) {
-                    // Stop if we've scanned enough files
-                    if ($scanned_files >= $max_files) {
+                    // Stop if we've scanned enough files or timeout approaching
+                    if ($scanned_files >= $max_files || (time() - $start_time) > 240) {
                         break;
+                    }
+                    
+                    // Performance optimization - yield control every 10 files
+                    if ($scanned_files % 10 === 0) {
+                        usleep(1000); // 1ms pause to prevent blocking
                     }
                     
                     if ($file->isFile()) {
@@ -620,9 +632,34 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             }
         }
 
-        // Perform scan
+        // Perform scan with hosting optimization
         foreach ($directories as $dir) {
+            // Check time limit before scanning each directory
+            if ((time() - $start_time) > 240) {
+                break; // Stop scanning if approaching timeout
+            }
+            
             scanDirectory($dir, $critical_malware_patterns, $severe_patterns, $warning_patterns);
+            
+            // Update progress after each directory
+            $progress_file = './logs/scan_progress.json';
+            $progress_data = array(
+                'current_file' => 'Đã quét xong: ' . basename($dir),
+                'scanned_count' => $scanned_files,
+                'total_estimate' => $max_files,
+                'is_scanning' => true,
+                'percentage' => min(100, ($scanned_files / $max_files) * 100),
+                'directory' => basename($dir),
+                'last_update' => time()
+            );
+            
+            // Check if JSON_UNESCAPED_UNICODE is available
+            $json_flags = 0;
+            if (defined('JSON_UNESCAPED_UNICODE')) {
+                $json_flags = JSON_UNESCAPED_UNICODE;
+            }
+            
+            @file_put_contents($progress_file, json_encode($progress_data, $json_flags));
         }
 
         // Sort suspicious files by priority (critical first)
@@ -2837,6 +2874,13 @@ function performAutoFix($scan_data) {
         SecurityScanner.prototype.performScan = function() {
             var self = this;
             
+            // Show loading message for slow hosting
+            var currentAction = document.getElementById('currentAction');
+            if (currentAction) {
+                currentAction.innerHTML = '<i class="fas fa-spinner fa-spin pulse" style="color: var(--primary-blue);"></i> ' + 
+                                        'Hosting chậm - Đang quét... Vui lòng chờ đợi!';
+            }
+            
             // Create XMLHttpRequest for PHP 5.6+ compatibility
             var xhr = new XMLHttpRequest();
             xhr.open('GET', '?scan=1', true);
@@ -2860,23 +2904,38 @@ function performAutoFix($scan_data) {
                             
                         } catch (e) {
                             console.error('JSON Parse Error:', e);
-                            self.displayError('Response không phải JSON hợp lệ. Check console for details.');
+                            self.displayError('Response không phải JSON hợp lệ. Hosting có thể quá chậm, thử lại với ít file hơn.');
                         }
                     } else {
-                        self.displayError('Lỗi HTTP: ' + xhr.status + ' ' + xhr.statusText);
+                        self.displayError('Lỗi HTTP: ' + xhr.status + ' ' + xhr.statusText + '. Hosting có thể quá chậm.');
                     }
                 }
             };
             
             xhr.onerror = function() {
-                self.displayError('Lỗi kết nối mạng');
+                self.displayError('Lỗi kết nối mạng hoặc hosting quá chậm. Thử lại sau vài phút.');
             };
             
             xhr.ontimeout = function() {
-                self.displayError('Quét bị timeout. Vui lòng thử lại.');
+                self.displayError('Hosting quá chậm - Quét bị timeout sau 2 phút. Hãy thử:<br>' +
+                                 '• Quét lại sau vài phút<br>' +
+                                 '• Hoặc liên hệ nhà cung cấp hosting để tăng performance');
             };
             
-            xhr.timeout = 30000; // 30 second timeout
+            xhr.timeout = 120000; // 2 minutes timeout for slow hosting
+            
+            // Show warning for slow hosting
+            Swal.fire({
+                title: '⏳ Hosting Chậm Detected',
+                html: 'Đang quét trên hosting chậm...<br>' +
+                      'Quá trình có thể mất <strong>1-2 phút</strong><br>' +
+                      '<small>Vui lòng không đóng trang!</small>',
+                timer: 3000,
+                timerProgressBar: true,
+                showConfirmButton: false,
+                icon: 'warning'
+            });
+            
             xhr.send();
         };
 
