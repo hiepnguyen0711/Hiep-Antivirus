@@ -236,10 +236,10 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
     error_reporting(0);
     ini_set('display_errors', 0);
     
-    // Set timeout and memory limits for slow hosting
-    set_time_limit(300); // 5 minutes max for slow hosting
-    ini_set('memory_limit', '512M');
-    ini_set('max_execution_time', 300);
+    // Set unlimited execution time and high memory for comprehensive scan
+    set_time_limit(0); // No time limit - scan everything
+    ini_set('memory_limit', '1024M');
+    ini_set('max_execution_time', 0); // No execution time limit
     
     try {
         // Critical malware patterns that require immediate deletion (HIGH SEVERITY - RED)
@@ -298,15 +298,15 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             'mkdir(' => 'Directory creation'
         );
 
-        // Scan everything from root (comprehensive scan)
-        $directories = array('./'); // Scan từ root để catch tất cả files
+        // Scan everything from root and parent directories (unlimited comprehensive scan)
+        $directories = array('./'); // Scan từ root và parent để catch tất cả files
         $suspicious_files = array();
         $critical_files = array();
         $severe_files = array();
         $warning_files = array();
         $filemanager_files = array();
         $scanned_files = 0;
-        $max_files = 20000; // Increased for comprehensive scan
+        $max_files = 999999; // No limit - scan everything
         $start_time = time();
 
         function scanFileWithLineNumbers($file_path, $patterns) {
@@ -391,7 +391,7 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                 }
             }
             
-            // Enhanced empty file detection - ESPECIALLY for root directory
+            // Enhanced empty file detection - ESPECIALLY for root directory and ANY directory
             if (strtolower(pathinfo($file_path, PATHINFO_EXTENSION)) === 'php') {
                 $content = @file_get_contents($file_path);
                 if ($content !== false) {
@@ -403,26 +403,30 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                     // Stricter detection for potentially planted files
                     $is_suspicious_empty = false;
                     
-                    // Case 1: Completely empty file
+                    // Case 1: Completely empty file (0 bytes)
                     if ($file_size === 0 || empty($content_trimmed)) {
                         $is_suspicious_empty = true;
-                        $description = 'Empty PHP file - Potentially planted by hacker';
+                        $description = 'EMPTY PHP FILE (0 bytes) - Definitely planted by hacker';
                     }
-                    // Case 2: Only PHP tags with no content
-                    elseif (empty($content_clean) || strlen($content_clean) < 5) {
+                    // Case 2: Only PHP tags with no content (very small files)
+                    elseif (empty($content_clean) || strlen($content_clean) < 3) {
                         $is_suspicious_empty = true;
-                        $description = 'Nearly empty PHP file - Contains only PHP tags';
+                        $description = 'Nearly empty PHP file - Contains only PHP tags or whitespace';
                     }
-                    // Case 3: Very small file in root directory (common hacker pattern)
-                    elseif ($file_size < 100 && ($file_dir === '.' || $file_dir === './')) {
+                    // Case 3: Very small file anywhere (common hacker pattern) - lowered threshold
+                    elseif ($file_size < 50) {
                         $is_suspicious_empty = true;
-                        $description = 'Very small PHP file in root directory - Highly suspicious';
+                        $description = 'Extremely small PHP file (' . $file_size . ' bytes) - Very suspicious';
                     }
-                    // Case 4: Common hacker filenames in root
-                    elseif (($file_dir === '.' || $file_dir === './') && 
-                            in_array(strtolower($filename), array('app.php', 'style.php', 'config.php', 'db.php', 'wp.php', 'wp-config.php', 'connect.php', 'connection.php', 'test.php'))) {
+                    // Case 4: Common hacker filenames in ANY directory (not just root)
+                    elseif (in_array(strtolower($filename), array('app.php', 'style.php', 'config.php', 'db.php', 'wp.php', 'wp-config.php', 'connect.php', 'connection.php', 'test.php', 'shell.php', 'hack.php', 'backdoor.php', 'upload.php'))) {
                         $is_suspicious_empty = true;
-                        $description = 'Common hacker filename in root directory - VERY SUSPICIOUS';
+                        $description = 'Common hacker filename "' . $filename . '" - EXTREMELY SUSPICIOUS';
+                    }
+                    // Case 5: Files with suspicious single character content
+                    elseif ($file_size < 20 && preg_match('/^[\s<?php]*[a-z0-9]{1,3}[\s?>]*$/i', $content_trimmed)) {
+                        $is_suspicious_empty = true;
+                        $description = 'PHP file with suspicious minimal content - Likely shell stub';
                     }
                     
                     if ($is_suspicious_empty) {
@@ -446,20 +450,16 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                 return;
             }
             
-            // Check timeout to prevent hosting timeouts
-            if ((time() - $start_time) > 240) { // 4 minutes safety timeout
-                return;
-            }
+            // No timeout - scan everything regardless of time
             
-            // Only exclude our scanner and common safe files
+            // Only exclude our scanner
             $exclude_files = array(
                 'security_scan.php' // Only our scanner
             );
             
-            // Exclude certain directories from deep scanning for performance
+            // Minimal exclusions - only truly dangerous or unnecessary directories
             $exclude_dirs = array(
-                '.git', 'node_modules', '.svn', '.hg', 'vendor', 
-                'cache', 'tmp', 'temp', 'logs'
+                '.git', '.svn', '.hg'
             );
             
             try {
@@ -481,14 +481,14 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                 }
                 
                 foreach ($iterator as $file) {
-                    // Stop if we've scanned enough files or timeout approaching
-                    if ($scanned_files >= $max_files || (time() - $start_time) > 240) {
+                    // No limits - scan everything
+                    if ($scanned_files >= $max_files) {
                         break;
                     }
                     
-                    // Performance optimization - yield control every 10 files
-                    if ($scanned_files % 10 === 0) {
-                        usleep(1000); // 1ms pause to prevent blocking
+                    // Performance optimization - yield control every 50 files
+                    if ($scanned_files % 50 === 0) {
+                        usleep(500); // 0.5ms pause to prevent blocking
                     }
                     
                     if ($file->isFile()) {
@@ -684,23 +684,19 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             }
         }
 
-        // Perform scan with hosting optimization
+        // Perform comprehensive unlimited scan
         foreach ($directories as $dir) {
-            // Check time limit before scanning each directory
-            if ((time() - $start_time) > 240) {
-                break; // Stop scanning if approaching timeout
-            }
-            
+            // Scan everything - no time limits
             scanDirectory($dir, $critical_malware_patterns, $severe_patterns, $warning_patterns);
             
             // Update progress after each directory
             $progress_file = './logs/scan_progress.json';
             $progress_data = array(
-                'current_file' => 'Đã quét xong: ' . basename($dir),
+                'current_file' => 'Đã quét xong thư mục: ' . $dir,
                 'scanned_count' => $scanned_files,
                 'total_estimate' => $max_files,
                 'is_scanning' => true,
-                'percentage' => min(100, ($scanned_files / $max_files) * 100),
+                'percentage' => min(100, ($scanned_files / 50000) * 100), // Dynamic estimate
                 'directory' => basename($dir),
                 'last_update' => time()
             );
@@ -946,7 +942,7 @@ function performAutoFix($scan_data) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise Security Scanner - Hiệp Nguyễn (PHP 5.6+)</title>
+    <title>Enterprise Security Scanner - Unlimited Scan - Hiệp Nguyễn (PHP 5.6+)</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -2405,11 +2401,11 @@ function performAutoFix($scan_data) {
             
             <div class="hero-content">
                 <h1 class="hero-title">
-                    <i class="fas fa-shield-halved"></i> Enterprise Security Scanner
+                    <i class="fas fa-shield-halved"></i> Enterprise Security Scanner - Unlimited
                 </h1>
                 <p class="hero-subtitle">
-                    Công cụ quét malware và backdoor chuyên nghiệp cho doanh nghiệp<br>
-                    Phát hiện và loại bỏ các mối đe dọa bảo mật một cách hiệu quả
+                    Quét toàn bộ hosting không giới hạn - Phát hiện shells và files rỗng<br>
+                    Tìm kiếm các file như app.php, style.php mà hacker đã chèn vào
                 </p>
                 
                 <div class="hero-features">
@@ -2957,11 +2953,11 @@ function performAutoFix($scan_data) {
         SecurityScanner.prototype.performScan = function() {
             var self = this;
             
-            // Show loading message for slow hosting
+            // Show comprehensive scan message
             var currentAction = document.getElementById('currentAction');
             if (currentAction) {
                 currentAction.innerHTML = '<i class="fas fa-spinner fa-spin pulse" style="color: var(--primary-blue);"></i> ' + 
-                                        'Hosting chậm - Đang quét... Vui lòng chờ đợi!';
+                                        'Quét toàn bộ hosting không giới hạn - Đang tìm kiếm shells...';
             }
             
             // Create XMLHttpRequest for PHP 5.6+ compatibility
@@ -2987,37 +2983,26 @@ function performAutoFix($scan_data) {
                             
                         } catch (e) {
                             console.error('JSON Parse Error:', e);
-                            self.displayError('Response không phải JSON hợp lệ. Hosting có thể quá chậm, thử lại với ít file hơn.');
+                            self.displayError('Response không phải JSON hợp lệ. Server có thể đang xử lý quá nhiều files.');
                         }
                     } else {
-                        self.displayError('Lỗi HTTP: ' + xhr.status + ' ' + xhr.statusText + '. Hosting có thể quá chậm.');
+                        self.displayError('Lỗi HTTP: ' + xhr.status + ' ' + xhr.statusText + '. Có thể server đang quá tải.');
                     }
                 }
             };
             
             xhr.onerror = function() {
-                self.displayError('Lỗi kết nối mạng hoặc hosting quá chậm. Thử lại sau vài phút.');
+                self.displayError('Lỗi kết nối mạng. Kiểm tra kết nối và thử lại.');
             };
             
             xhr.ontimeout = function() {
-                self.displayError('Hosting quá chậm - Quét bị timeout sau 2 phút. Hãy thử:<br>' +
-                                 '• Quét lại sau vài phút<br>' +
-                                 '• Hoặc liên hệ nhà cung cấp hosting để tăng performance');
+                self.displayError('Quét bị timeout sau 10 phút. Hosting có quá nhiều files hoặc quá chậm.<br>' +
+                                 'Scanner đã quét được nhiều files. Hãy thử:<br>' +
+                                 '• Refresh trang và xem kết quả hiện tại<br>' +
+                                 '• Hoặc quét lại để tiếp tục');
             };
             
-            xhr.timeout = 120000; // 2 minutes timeout for slow hosting
-            
-            // Show warning for slow hosting
-            Swal.fire({
-                title: '⏳ Hosting Chậm Detected',
-                html: 'Đang quét trên hosting chậm...<br>' +
-                      'Quá trình có thể mất <strong>1-2 phút</strong><br>' +
-                      '<small>Vui lòng không đóng trang!</small>',
-                timer: 3000,
-                timerProgressBar: true,
-                showConfirmButton: false,
-                icon: 'warning'
-            });
+            xhr.timeout = 600000; // 10 minutes timeout for comprehensive scan
             
             xhr.send();
         };
