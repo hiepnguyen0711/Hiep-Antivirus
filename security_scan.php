@@ -357,6 +357,7 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                 $hours_24 = 24 * 3600;
                 $days_7 = 7 * 24 * 3600;
                 $days_30 = 30 * 24 * 3600;
+                $months_5  = 5  * 30 * 24 * 3600;  // xấp xỉ 5 tháng
                 
                 if (($now - $modified_time) < $hours_24) {
                     $metadata['age_category'] = 'very_recent'; // < 24h
@@ -364,7 +365,7 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                 } elseif (($now - $modified_time) < $days_7) {
                     $metadata['age_category'] = 'recent'; // < 7 days
                     $metadata['is_recent'] = true;
-                } elseif (($now - $modified_time) < $days_30) {
+                } elseif (($now - $modified_time) < $months_5) {
                     $metadata['age_category'] = 'medium'; // < 30 days
                 } else {
                     $metadata['age_category'] = 'old'; // > 30 days
