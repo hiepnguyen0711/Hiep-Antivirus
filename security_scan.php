@@ -278,7 +278,7 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
         }
 
         function scanDirectory($dir, $critical_patterns, $severe_patterns, $warning_patterns) {
-            global $suspicious_files, $scanned_files, $critical_files, $severe_files, $warning_files, $filemanager_files, $max_files, $suspicious_file_patterns;
+            global $suspicious_files, $scanned_files, $critical_files, $severe_files, $warning_files, $filemanager_files, $max_files, $suspicious_file_patterns, $current_scanning_file;
             
             if (!is_dir($dir)) {
                 return;
@@ -323,6 +323,9 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                         
                         if ($should_scan) {
                             $scanned_files++;
+                            
+                            // Set current scanning file for real-time display
+                            $current_scanning_file = $file_path;
                             
                             // Determine file category
                             $is_virus_file = strpos($file_path, 'virus-files') !== false;
@@ -1240,6 +1243,7 @@ function performAutoFix($scan_data) {
             
             .results-grid {
                 grid-template-columns: 1fr;
+                gap: 8px;
             }
         }
 
@@ -1254,7 +1258,59 @@ function performAutoFix($scan_data) {
             }
             
             .stats-grid {
-                grid-template-columns: repeat(4, 1fr);
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .results-grid {
+                grid-template-columns: 1fr;
+                gap: 6px;
+            }
+            
+            .threat-item {
+                padding: 6px;
+                margin-bottom: 4px;
+            }
+            
+            .threat-path {
+                font-size: 0.7rem;
+            }
+            
+            .delete-btn {
+                font-size: 0.65rem;
+                padding: 3px 6px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container-fluid {
+                padding: 8px;
+            }
+            
+            .bento-grid {
+                gap: 8px;
+            }
+            
+            .bento-item {
+                padding: 12px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 6px;
+            }
+            
+            .threat-group {
+                padding: 8px;
+            }
+            
+            .threat-path {
+                font-size: 0.65rem;
+                flex-wrap: wrap;
+            }
+            
+            .delete-btn {
+                font-size: 0.6rem;
+                padding: 2px 4px;
             }
         }
 
@@ -1542,46 +1598,12 @@ function performAutoFix($scan_data) {
         };
 
         SecurityScanner.prototype.startFileSimulation = function() {
-            var testFiles = [
-                './index.php',
-                './admin/index.php',
-                './admin/lib/function.php',
-                './admin/filemanager/execute.php',
-                './admin/filemanager/ajax_calls.php',
-                './admin/filemanager/include/utils.php',
-                './virus-files/23.php',
-                './virus-files/666.php',
-                './virus-files/cache.php',
-                './sources/config.php',
-                './sources/database.php',
-                './uploads/test.jpg',
-                './admin/login.php'
-            ];
-
-            var fileIndex = 0;
+            // No more fake demo files - will show real scanned files from server response
             var self = this;
             this.fileSimulationInterval = setInterval(function() {
-                if (fileIndex < testFiles.length && self.isScanning) {
-                    var file = testFiles[fileIndex];
-                    var isVirusFile = file.indexOf('virus-files') !== -1;
-                    var isSuspicious = isVirusFile || Math.random() < 0.15;
-                    
-                    self.addFileToScanner(file, !isSuspicious);
-                    self.scannedFiles++;
-                    
-                    if (isSuspicious) {
-                        self.suspiciousFiles++;
-                        if (isVirusFile) {
-                            self.criticalFiles++;
-                        }
-                    }
-                    
-                    self.updateStats();
-                    fileIndex++;
-                } else {
-                    clearInterval(self.fileSimulationInterval);
-                }
-            }, 200);
+                // Update stats periodically during scan
+                self.updateStats();
+            }, 500);
         };
 
         SecurityScanner.prototype.simulateProgress = function() {
@@ -1714,6 +1736,17 @@ function performAutoFix($scan_data) {
             this.suspiciousFiles = data.suspicious_count || this.suspiciousFiles;
             this.criticalFiles = data.critical_count || this.criticalFiles;
             this.updateStats();
+            
+            // Show real scanned files
+            if (data.suspicious_files && data.suspicious_files.length > 0) {
+                // Show last few files scanned
+                var lastFiles = data.suspicious_files.slice(-5);
+                for (var i = 0; i < lastFiles.length; i++) {
+                    var file = lastFiles[i];
+                    var isClean = file.severity === 'warning' || file.category === 'filemanager';
+                    self.addFileToScanner(file.path, isClean);
+                }
+            }
             
             // Store scan data for auto-fix
             this.lastScanData = data;
