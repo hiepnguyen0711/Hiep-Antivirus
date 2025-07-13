@@ -336,6 +336,42 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             return $issues;
         }
 
+        function getFileMetadata($file_path) {
+            $metadata = array(
+                'modified_time' => 0,
+                'created_time' => 0,
+                'size' => 0,
+                'is_recent' => false,
+                'age_category' => 'old'
+            );
+            
+            if (file_exists($file_path)) {
+                $modified_time = filemtime($file_path);
+                $metadata['modified_time'] = $modified_time;
+                $metadata['size'] = filesize($file_path);
+                
+                // Determine if file is recently modified (potential shell)
+                $now = time();
+                $hours_24 = 24 * 3600;
+                $days_7 = 7 * 24 * 3600;
+                $days_30 = 30 * 24 * 3600;
+                
+                if (($now - $modified_time) < $hours_24) {
+                    $metadata['age_category'] = 'very_recent'; // < 24h
+                    $metadata['is_recent'] = true;
+                } elseif (($now - $modified_time) < $days_7) {
+                    $metadata['age_category'] = 'recent'; // < 7 days
+                    $metadata['is_recent'] = true;
+                } elseif (($now - $modified_time) < $days_30) {
+                    $metadata['age_category'] = 'medium'; // < 30 days
+                } else {
+                    $metadata['age_category'] = 'old'; // > 30 days
+                }
+            }
+            
+            return $metadata;
+        }
+
         function checkSuspiciousFile($file_path, $suspicious_patterns) {
             $issues = array();
             $filename = basename($file_path);
@@ -501,6 +537,9 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                             $is_virus_file = strpos($file_path, 'virus-files') !== false;
                             $is_filemanager = strpos($file_path, 'admin/filemanager') !== false;
                             
+                            // Get file metadata for hacker detection
+                            $file_metadata = getFileMetadata($file_path);
+                            
                             // Check for suspicious file extensions and empty files FIRST
                             $suspicious_issues = checkSuspiciousFile($file_path, $suspicious_file_patterns);
                             if (!empty($suspicious_issues)) {
@@ -509,7 +548,8 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                                     'issues' => $suspicious_issues,
                                     'severity' => 'critical',
                                     'priority' => 1,
-                                    'category' => 'suspicious_file'
+                                    'category' => 'suspicious_file',
+                                    'metadata' => $file_metadata
                                 );
                                 $critical_files[] = $file_path;
                             } else {
@@ -521,7 +561,8 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                                         'issues' => $critical_issues,
                                         'severity' => 'critical',
                                         'priority' => 1,
-                                        'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
+                                        'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system'),
+                                        'metadata' => $file_metadata
                                     );
                                     $critical_files[] = $file_path;
                                 } else {
@@ -536,7 +577,8 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                                             'issues' => $severe_issues,
                                             'severity' => $severity,
                                             'priority' => $priority,
-                                            'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
+                                            'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system'),
+                                            'metadata' => $file_metadata
                                         );
                                         
                                         if ($is_virus_file) {
@@ -556,7 +598,8 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                                                 'issues' => $warning_issues,
                                                 'severity' => $severity,
                                                 'priority' => $priority,
-                                                'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system')
+                                                'category' => $is_virus_file ? 'virus' : ($is_filemanager ? 'filemanager' : 'system'),
+                                                'metadata' => $file_metadata
                                             );
                                             
                                             if ($is_filemanager) {
@@ -1325,6 +1368,66 @@ function performAutoFix($scan_data) {
             color: var(--text-primary);
         }
 
+        /* Filter Controls */
+        .filter-controls {
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-light);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        .filter-select {
+            padding: 4px 8px;
+            border: 1px solid var(--border-medium);
+            border-radius: 4px;
+            background: white;
+            font-size: 0.75rem;
+            min-width: 120px;
+        }
+
+        .quick-filter-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: linear-gradient(45deg, #ff4757, #ff3838);
+            color: white;
+        }
+
+        .quick-filter-btn.secondary {
+            background: linear-gradient(45deg, #a4b0be, #747d8c);
+        }
+
+        .quick-filter-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .quick-filter-btn:active {
+            transform: translateY(0);
+        }
+
         /* Control Panel */
         .scan-controls {
             text-align: center;
@@ -1728,6 +1831,70 @@ function performAutoFix($scan_data) {
             border-color: var(--border-medium);
         }
 
+        /* File Age Visual Indicators */
+        .threat-item.very-recent {
+            border-left: 4px solid #ff4757;
+            background: linear-gradient(90deg, rgba(255, 71, 87, 0.1), rgba(255, 255, 255, 0.7));
+            animation: pulseRecentFile 2s ease-in-out infinite;
+        }
+
+        .threat-item.recent {
+            border-left: 4px solid #ffa502;
+            background: linear-gradient(90deg, rgba(255, 165, 2, 0.1), rgba(255, 255, 255, 0.7));
+        }
+
+        .threat-item.medium {
+            border-left: 4px solid #3742fa;
+            background: linear-gradient(90deg, rgba(55, 66, 250, 0.05), rgba(255, 255, 255, 0.7));
+        }
+
+        @keyframes pulseRecentFile {
+            0%, 100% { 
+                box-shadow: 0 0 5px rgba(255, 71, 87, 0.3);
+            }
+            50% { 
+                box-shadow: 0 0 15px rgba(255, 71, 87, 0.6);
+            }
+        }
+
+        .file-date {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .age-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 8px;
+            font-size: 0.6rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .age-badge.very-recent {
+            background: #ff4757;
+            color: white;
+        }
+
+        .age-badge.recent {
+            background: #ffa502;
+            color: white;
+        }
+
+        .age-badge.medium {
+            background: #3742fa;
+            color: white;
+        }
+
+        .age-badge.old {
+            background: #a4b0be;
+            color: white;
+        }
+
         .file-item:hover .file-path {
             color: var(--primary-blue);
             font-weight: 600;
@@ -1985,6 +2152,26 @@ function performAutoFix($scan_data) {
             
             .file-path {
                 max-width: 150px;
+            }
+            
+            .filter-controls {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .filter-group {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+            
+            .filter-select {
+                min-width: 100px;
+            }
+            
+            .quick-filter-btn {
+                font-size: 0.7rem;
+                padding: 5px 10px;
             }
         }
 
@@ -2248,6 +2435,39 @@ function performAutoFix($scan_data) {
                 <div class="card-header">
                     <i class="fas fa-clipboard-list" style="color: var(--success-text);"></i>
                     <h3 class="card-title">Báo Cáo Kết Quả Bảo Mật</h3>
+                    
+                    <!-- Filter Controls -->
+                    <div id="filterControls" class="filter-controls" style="display: none;">
+                        <div class="filter-group">
+                            <label><i class="fas fa-sort"></i> Sắp xếp:</label>
+                            <select id="sortBy" class="filter-select">
+                                <option value="date">📅 Ngày mới nhất</option>
+                                <option value="threat">⚠️ Mức độ nguy hiểm</option>
+                                <option value="name">📁 Tên file</option>
+                                <option value="size">📊 Kích thước</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label><i class="fas fa-filter"></i> Lọc theo thời gian:</label>
+                            <select id="filterByAge" class="filter-select">
+                                <option value="all">🔍 Tất cả files</option>
+                                <option value="very_recent">🚨 24 giờ qua (Shell mới)</option>
+                                <option value="recent">⚡ 7 ngày qua</option>
+                                <option value="medium">📅 30 ngày qua</option>
+                                <option value="old">📂 Cũ hơn 30 ngày</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <button id="showRecentOnly" class="quick-filter-btn">
+                                🚨 Chỉ Files Nghi Ngờ Shell
+                            </button>
+                            <button id="resetFilters" class="quick-filter-btn secondary">
+                                🔄 Reset
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div id="scanResults"></div>
             </div>
@@ -2702,13 +2922,20 @@ function performAutoFix($scan_data) {
                                 var isCritical = (file.severity === 'critical' && file.category !== 'filemanager') || file.category === 'suspicious_file';
                                 var tooltipContent = self.generateTooltipContent(file.issues);
                                 var firstIssue = file.issues && file.issues.length > 0 ? file.issues[0] : null;
+                                var metadata = file.metadata || {};
+                                var ageClass = metadata.age_category || 'old';
+                                var modifiedDate = metadata.modified_time ? new Date(metadata.modified_time * 1000) : new Date();
+                                var fileSize = metadata.size ? self.formatFileSize(metadata.size) : '0 B';
                                 
                                 resultHtml += 
-                                    '<div class="threat-item" ' +
+                                    '<div class="threat-item ' + ageClass + '" ' +
                                          'data-bs-toggle="tooltip" ' +
                                          'data-bs-placement="top" ' +
                                          'data-bs-html="true" ' +
-                                         'title="' + tooltipContent + '">' +
+                                         'title="' + tooltipContent + '" ' +
+                                         'data-modified="' + metadata.modified_time + '" ' +
+                                         'data-age="' + ageClass + '" ' +
+                                         'data-size="' + metadata.size + '">' +
                                         '<div class="threat-header">' +
                                             '<div class="threat-path">' +
                                                 '<i class="fas fa-file-code"></i> ' + file.path +
@@ -2723,6 +2950,12 @@ function performAutoFix($scan_data) {
                                         '<div class="threat-issues">' +
                                             file.issues.length + ' vấn đề phát hiện' +
                                             (firstIssue ? ' - <span style="color: var(--danger-text); font-weight: 600;">' + firstIssue.pattern + '</span>' : '') +
+                                        '</div>' +
+                                        '<div class="file-date">' +
+                                            '<i class="fas fa-clock"></i>' +
+                                            '<span>' + self.formatDate(modifiedDate) + '</span>' +
+                                            '<span class="age-badge ' + ageClass + '">' + self.getAgeLabel(ageClass) + '</span>' +
+                                            '<span style="margin-left: 8px;"><i class="fas fa-hdd"></i> ' + fileSize + '</span>' +
                                         '</div>' +
                                     '</div>';
                             }
@@ -2743,12 +2976,125 @@ function performAutoFix($scan_data) {
                         });
                     }, 100);
                     
-                    // Enable fix dropdown
+                    // Enable fix dropdown and show filter controls
                     document.getElementById('fixDropdown').disabled = false;
+                    document.getElementById('filterControls').style.display = 'flex';
+                    
+                    // Initialize filter event listeners
+                    self.initializeFilters();
                 }
                 
                 self.completeScan();
             }, 1000);
+        };
+
+        SecurityScanner.prototype.formatDate = function(date) {
+            var now = new Date();
+            var diff = now - date;
+            var minutes = Math.floor(diff / (1000 * 60));
+            var hours = Math.floor(diff / (1000 * 60 * 60));
+            var days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            
+            if (minutes < 60) {
+                return minutes + ' phút trước';
+            } else if (hours < 24) {
+                return hours + ' giờ trước';
+            } else if (days < 7) {
+                return days + ' ngày trước';
+            } else {
+                return date.toLocaleDateString('vi-VN');
+            }
+        };
+
+        SecurityScanner.prototype.formatFileSize = function(bytes) {
+            if (bytes === 0) return '0 B';
+            var k = 1024;
+            var sizes = ['B', 'KB', 'MB', 'GB'];
+            var i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        };
+
+        SecurityScanner.prototype.getAgeLabel = function(ageCategory) {
+            var labels = {
+                'very_recent': 'HOT',
+                'recent': 'Mới',
+                'medium': 'Gần đây',
+                'old': 'Cũ'
+            };
+            return labels[ageCategory] || 'Cũ';
+        };
+
+        SecurityScanner.prototype.initializeFilters = function() {
+            var self = this;
+            
+            // Sort dropdown
+            document.getElementById('sortBy').addEventListener('change', function() {
+                self.applySortAndFilter();
+            });
+            
+            // Age filter dropdown
+            document.getElementById('filterByAge').addEventListener('change', function() {
+                self.applySortAndFilter();
+            });
+            
+            // Quick filter buttons
+            document.getElementById('showRecentOnly').addEventListener('click', function() {
+                document.getElementById('filterByAge').value = 'very_recent';
+                document.getElementById('sortBy').value = 'date';
+                self.applySortAndFilter();
+            });
+            
+            document.getElementById('resetFilters').addEventListener('click', function() {
+                document.getElementById('filterByAge').value = 'all';
+                document.getElementById('sortBy').value = 'threat';
+                self.applySortAndFilter();
+            });
+        };
+
+        SecurityScanner.prototype.applySortAndFilter = function() {
+            var sortBy = document.getElementById('sortBy').value;
+            var filterByAge = document.getElementById('filterByAge').value;
+            var threatItems = document.querySelectorAll('.threat-item');
+            var itemsArray = Array.from(threatItems);
+            
+            // Filter items
+            itemsArray.forEach(function(item) {
+                var itemAge = item.dataset.age;
+                var shouldShow = filterByAge === 'all' || itemAge === filterByAge;
+                item.style.display = shouldShow ? 'block' : 'none';
+            });
+            
+            // Get visible items for sorting
+            var visibleItems = itemsArray.filter(function(item) {
+                return item.style.display !== 'none';
+            });
+            
+            // Sort visible items
+            visibleItems.sort(function(a, b) {
+                switch(sortBy) {
+                    case 'date':
+                        return parseInt(b.dataset.modified) - parseInt(a.dataset.modified);
+                    case 'size':
+                        return parseInt(b.dataset.size) - parseInt(a.dataset.size);
+                    case 'name':
+                        var nameA = a.querySelector('.threat-path').textContent.toLowerCase();
+                        var nameB = b.querySelector('.threat-path').textContent.toLowerCase();
+                        return nameA.localeCompare(nameB);
+                    case 'threat':
+                    default:
+                        // Threat level: very_recent > recent > medium > old
+                        var priorities = {'very_recent': 4, 'recent': 3, 'medium': 2, 'old': 1};
+                        return (priorities[b.dataset.age] || 1) - (priorities[a.dataset.age] || 1);
+                }
+            });
+            
+            // Reorder DOM elements
+            var container = visibleItems[0] ? visibleItems[0].parentElement : null;
+            if (container) {
+                visibleItems.forEach(function(item) {
+                    container.appendChild(item);
+                });
+            }
         };
 
         SecurityScanner.prototype.generateTooltipContent = function(issues) {
