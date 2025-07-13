@@ -1164,11 +1164,28 @@ function performAutoFix($scan_data) {
             margin-bottom: 6px;
             transition: all 0.3s ease;
             cursor: pointer;
+            position: relative;
         }
 
         .threat-item:hover {
             transform: translateY(-1px);
             box-shadow: var(--shadow-md);
+            border-color: var(--primary-blue);
+        }
+
+        .threat-item:hover::after {
+            content: "Click để mở file trong VS Code";
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--text-primary);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            white-space: nowrap;
+            z-index: 1000;
         }
 
         .threat-item:last-child {
@@ -1820,25 +1837,30 @@ function performAutoFix($scan_data) {
                                 var file = group.files[j];
                                 var isCritical = (file.severity === 'critical' && file.category !== 'filemanager') || file.category === 'suspicious_file';
                                 var tooltipContent = self.generateTooltipContent(file.issues);
+                                var firstIssue = file.issues && file.issues.length > 0 ? file.issues[0] : null;
+                                var lineNumber = firstIssue ? firstIssue.line : 1;
                                 
                                 resultHtml += 
                                     '<div class="threat-item" ' +
                                          'data-bs-toggle="tooltip" ' +
                                          'data-bs-placement="top" ' +
                                          'data-bs-html="true" ' +
-                                         'title="' + tooltipContent + '">' +
+                                         'title="' + tooltipContent + '" ' +
+                                         'onclick="scanner.openFileInEditor(\'' + file.path + '\', ' + lineNumber + ')">' +
                                         '<div class="threat-header">' +
                                             '<div class="threat-path">' +
                                                 '<i class="fas fa-file-code"></i> ' + file.path +
+                                                (firstIssue ? ' <span style="color: var(--warning-text); font-size: 0.7rem;">(dòng ' + firstIssue.line + ')</span>' : '') +
                                             '</div>' +
                                             (isCritical ? 
-                                                '<button class="delete-btn" onclick="scanner.deleteSingleFile(\'' + file.path + '\', ' + file.index + ')">' +
+                                                '<button class="delete-btn" onclick="event.stopPropagation(); scanner.deleteSingleFile(\'' + file.path + '\', ' + file.index + ')">' +
                                                     '<i class="fas fa-trash-alt"></i> Xóa' +
                                                 '</button>' 
                                                 : '') +
                                         '</div>' +
                                         '<div class="threat-issues">' +
                                             file.issues.length + ' vấn đề phát hiện' +
+                                            (firstIssue ? ' - <span style="color: var(--danger-text); font-weight: 600;">' + firstIssue.pattern + '</span>' : '') +
                                         '</div>' +
                                     '</div>';
                             }
@@ -1882,6 +1904,62 @@ function performAutoFix($scan_data) {
             content += '</div>';
             
             return content.replace(/"/g, '&quot;');
+        };
+
+        SecurityScanner.prototype.openFileInEditor = function(filePath, lineNumber) {
+            var self = this;
+            
+            // Convert to absolute path
+            var absolutePath = window.location.protocol + '//' + window.location.host + window.location.pathname.replace(/\/[^\/]*$/, '/') + filePath.replace('./', '');
+            
+            // Try different methods to open file
+            var methods = [
+                // Method 1: VS Code protocol
+                function() {
+                    var vscodeUrl = 'vscode://file/' + absolutePath.replace('http://', '').replace('https://', '') + ':' + lineNumber;
+                    window.open(vscodeUrl, '_blank');
+                },
+                
+                // Method 2: File protocol  
+                function() {
+                    window.open('file:///' + absolutePath.replace('http://', '').replace('https://', ''), '_blank');
+                },
+                
+                // Method 3: Copy path to clipboard
+                function() {
+                    var textArea = document.createElement('textarea');
+                    textArea.value = filePath + ' (line ' + lineNumber + ')';
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Đã copy đường dẫn!',
+                        html: '<div style="text-align: left;">' +
+                              '<strong>File:</strong> ' + filePath + '<br>' +
+                              '<strong>Dòng:</strong> ' + lineNumber + '<br><br>' +
+                              '<small>Để mở trong VS Code, dán đường dẫn vào terminal:<br>' +
+                              '<code style="background: #f0f0f0; padding: 2px;">code "' + filePath + '"</code></small>' +
+                              '</div>',
+                        confirmButtonColor: 'var(--primary-blue)',
+                        timer: 5000,
+                        timerProgressBar: true
+                    });
+                }
+            ];
+            
+            // Try first method, fallback to others
+            try {
+                methods[0]();
+                setTimeout(function() {
+                    // If VS Code didn't open, try other methods
+                    methods[2](); // Copy to clipboard as backup
+                }, 1000);
+            } catch (e) {
+                methods[2](); // Copy to clipboard
+            }
         };
 
         SecurityScanner.prototype.displayError = function(message) {
@@ -2175,6 +2253,79 @@ function performAutoFix($scan_data) {
             };
             
             xhr.send(JSON.stringify(this.lastScanData));
+        };
+
+        SecurityScanner.prototype.showInlineEditor = function(filePath, lineNumber, issuePattern) {
+            var self = this;
+            
+            Swal.fire({
+                title: 'Quick Fix Editor',
+                html: '<div style="text-align: left;">' +
+                      '<p><strong>File:</strong> ' + filePath + '</p>' +
+                      '<p><strong>Dòng:</strong> ' + lineNumber + '</p>' +
+                      '<p><strong>Pattern:</strong> <code style="background: #f0f0f0; padding: 2px;">' + issuePattern + '</code></p>' +
+                      '<div style="margin: 10px 0;">' +
+                      '<label style="display: block; margin-bottom: 5px;"><strong>Quick Actions:</strong></label>' +
+                      '<button onclick="scanner.quickFixSuggestion(\'' + issuePattern + '\')" style="margin: 2px; padding: 5px 10px; background: var(--primary-blue); color: white; border: none; border-radius: 4px; cursor: pointer;">Gợi ý sửa</button>' +
+                      '<button onclick="scanner.openFileInEditor(\'' + filePath + '\', ' + lineNumber + ')" style="margin: 2px; padding: 5px 10px; background: var(--success-text); color: white; border: none; border-radius: 4px; cursor: pointer;">Mở VS Code</button>' +
+                      '</div>' +
+                      '</div>',
+                showCancelButton: true,
+                confirmButtonText: 'Đóng',
+                cancelButtonText: 'Copy Path',
+                confirmButtonColor: 'var(--primary-blue)',
+                cancelButtonColor: 'var(--text-light)'
+            }).then(function(result) {
+                if (result.dismiss === Swal.DismissReason.cancel) {
+                    // Copy path to clipboard
+                    var textArea = document.createElement('textarea');
+                    textArea.value = filePath + ' (line ' + lineNumber + ')';
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Đã copy!',
+                        text: 'Đường dẫn file đã được copy vào clipboard',
+                        timer: 2000,
+                        timerProgressBar: true
+                    });
+                }
+            });
+        };
+
+        SecurityScanner.prototype.quickFixSuggestion = function(pattern) {
+            var suggestions = {
+                'eval(': 'NGUY HIỂM! Thay thế bằng các function an toàn khác. Eval() có thể execute code độc hại.',
+                'base64_decode(': 'Kiểm tra input trước khi decode. Sử dụng validation và sanitization.',
+                'exec(': 'Thay thế bằng escapeshellarg() và escapeshellcmd() để tránh command injection.',
+                'system(': 'Sử dụng proc_open() hoặc exec() với proper validation.',
+                'shell_exec(': 'Validate input nghiêm ngặt. Sử dụng whitelist các command cho phép.',
+                'move_uploaded_file(': 'Thêm validation file type, size, và rename file upload.',
+                'file_get_contents(': 'Validate URL/path. Sử dụng curl cho remote URLs.',
+                'file_put_contents(': 'Validate path và content. Đặt proper file permissions.',
+                '$_GET': 'Sanitize input với filter_var() hoặc htmlspecialchars().',
+                '$_POST': 'Validate và sanitize POST data. Sử dụng prepared statements cho DB.',
+                '$_REQUEST': 'Tránh sử dụng $_REQUEST. Dùng $_GET hoặc $_POST cụ thể.'
+            };
+            
+            var suggestion = suggestions[pattern] || 'Không có gợi ý cụ thể cho pattern này. Hãy kiểm tra manual.';
+            
+            Swal.fire({
+                icon: 'info',
+                title: 'Gợi ý sửa lỗi',
+                html: '<div style="text-align: left;">' +
+                      '<p><strong>Pattern:</strong> <code style="background: #f0f0f0; padding: 2px;">' + pattern + '</code></p>' +
+                      '<p><strong>Gợi ý:</strong></p>' +
+                      '<div style="background: #f9f9f9; padding: 10px; border-radius: 4px; margin: 10px 0;">' +
+                      suggestion +
+                      '</div>' +
+                      '</div>',
+                confirmButtonColor: 'var(--primary-blue)',
+                confirmButtonText: 'Đã hiểu'
+            });
         };
 
         // Initialize scanner when page loads
