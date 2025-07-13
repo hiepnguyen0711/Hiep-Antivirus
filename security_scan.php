@@ -123,6 +123,38 @@ if (isset($_GET['autofix']) && $_GET['autofix'] === '1') {
     exit;
 }
 
+// Real-time file list endpoint
+if (isset($_GET['scan_files']) && $_GET['scan_files'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-cache, must-revalidate');
+    
+    // Read scanned files list
+    $files_file = './logs/scanned_files.json';
+    $files_data = array(
+        'files' => array(),
+        'last_update' => 0
+    );
+    
+    if (file_exists($files_file)) {
+        $file_content = @file_get_contents($files_file);
+        if ($file_content) {
+            $decoded = json_decode($file_content, true);
+            if ($decoded) {
+                $files_data = $decoded;
+            }
+        }
+    }
+    
+    // Check if JSON_UNESCAPED_UNICODE is available
+    $json_flags = 0;
+    if (defined('JSON_UNESCAPED_UNICODE')) {
+        $json_flags = JSON_UNESCAPED_UNICODE;
+    }
+    
+    echo json_encode($files_data, $json_flags);
+    exit;
+}
+
 // Real-time scan progress endpoint
 if (isset($_GET['scan_progress']) && $_GET['scan_progress'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
@@ -159,11 +191,18 @@ if (isset($_GET['scan_progress']) && $_GET['scan_progress'] === '1') {
 }
 
 if (isset($_GET['scan']) && $_GET['scan'] === '1') {
-    // Initialize progress file
+    // Initialize progress and files tracking
     if (!file_exists('./logs')) {
         @mkdir('./logs', 0755, true);
     }
     
+    // Check if JSON_UNESCAPED_UNICODE is available
+    $json_flags = 0;
+    if (defined('JSON_UNESCAPED_UNICODE')) {
+        $json_flags = JSON_UNESCAPED_UNICODE;
+    }
+    
+    // Initialize progress file
     $progress_file = './logs/scan_progress.json';
     $initial_progress = array(
         'current_file' => 'Khởi tạo scanner...',
@@ -173,14 +212,15 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
         'percentage' => 0,
         'start_time' => time()
     );
-    
-    // Check if JSON_UNESCAPED_UNICODE is available
-    $json_flags = 0;
-    if (defined('JSON_UNESCAPED_UNICODE')) {
-        $json_flags = JSON_UNESCAPED_UNICODE;
-    }
-    
     @file_put_contents($progress_file, json_encode($initial_progress, $json_flags));
+    
+    // Initialize scanned files list
+    $files_file = './logs/scanned_files.json';
+    $initial_files = array(
+        'files' => array(),
+        'last_update' => time()
+    );
+    @file_put_contents($files_file, json_encode($initial_files, $json_flags));
     
     // Start output buffering and clean any previous output
     ob_start();
@@ -386,6 +426,63 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                             $current_scanning_file = $file_path;
                             $percentage = min(100, ($scanned_files / $max_files) * 100);
                             
+                            // Check if JSON_UNESCAPED_UNICODE is available
+                            $json_flags = 0;
+                            if (defined('JSON_UNESCAPED_UNICODE')) {
+                                $json_flags = JSON_UNESCAPED_UNICODE;
+                            }
+                            
+                            // Add file to scanned files list
+                            $files_file = './logs/scanned_files.json';
+                            $files_data = array('files' => array(), 'last_update' => 0);
+                            
+                            if (file_exists($files_file)) {
+                                $file_content = @file_get_contents($files_file);
+                                if ($file_content) {
+                                    $decoded = json_decode($file_content, true);
+                                    if ($decoded) {
+                                        $files_data = $decoded;
+                                    }
+                                }
+                            }
+                            
+                            // Determine file status based on scanning results
+                            $is_suspicious = false;
+                            $threat_type = 'Clean';
+                            
+                            // Quick check for obvious threats
+                            if (strpos($file_path, 'virus-files') !== false) {
+                                $is_suspicious = true;
+                                $threat_type = 'Virus';
+                            } else {
+                                // Check for suspicious patterns in filename
+                                $suspicious_patterns = array('.php.jpg', '.php.png', '.php.gif', 'cache.php', 'eval', 'base64');
+                                foreach ($suspicious_patterns as $pattern) {
+                                    if (strpos($file_path, $pattern) !== false) {
+                                        $is_suspicious = true;
+                                        $threat_type = 'Suspicious';
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // Add file to list
+                            $files_data['files'][] = array(
+                                'path' => $file_path,
+                                'status' => $threat_type,
+                                'is_suspicious' => $is_suspicious,
+                                'scan_number' => $scanned_files,
+                                'timestamp' => time()
+                            );
+                            
+                            // Keep only last 50 files for performance
+                            if (count($files_data['files']) > 50) {
+                                $files_data['files'] = array_slice($files_data['files'], -50);
+                            }
+                            
+                            $files_data['last_update'] = time();
+                            @file_put_contents($files_file, json_encode($files_data, $json_flags));
+                            
                             // Update progress file for real-time display
                             $progress_file = './logs/scan_progress.json';
                             $progress_data = array(
@@ -397,12 +494,6 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                                 'directory' => basename($dir),
                                 'last_update' => time()
                             );
-                            
-                            // Check if JSON_UNESCAPED_UNICODE is available
-                            $json_flags = 0;
-                            if (defined('JSON_UNESCAPED_UNICODE')) {
-                                $json_flags = JSON_UNESCAPED_UNICODE;
-                            }
                             
                             @file_put_contents($progress_file, json_encode($progress_data, $json_flags));
                             
@@ -2237,12 +2328,97 @@ function performAutoFix($scan_data) {
         };
 
         SecurityScanner.prototype.startFileSimulation = function() {
-            // Start real-time progress polling
+            // Start real-time progress and file list polling
             var self = this;
             console.log('Starting real-time scanner polling...'); // Debug log
+            
             this.progressPollingInterval = setInterval(function() {
                 self.checkScanProgress();
             }, 500); // Poll every 500ms for better performance
+            
+            this.filesPollingInterval = setInterval(function() {
+                self.checkScannedFiles();
+            }, 300); // Poll files more frequently
+        };
+
+        SecurityScanner.prototype.checkScannedFiles = function() {
+            var self = this;
+            
+            if (!this.isScanning) {
+                clearInterval(this.filesPollingInterval);
+                return;
+            }
+            
+            // Create XMLHttpRequest for files check
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '?scan_files=1&t=' + Date.now(), true);
+            xhr.setRequestHeader('Cache-Control', 'no-cache');
+            
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var filesData = JSON.parse(xhr.responseText);
+                            self.updateScannedFilesList(filesData);
+                        } catch (e) {
+                            console.log('Files parse error:', e);
+                        }
+                    }
+                }
+            };
+            
+            xhr.send();
+        };
+
+        SecurityScanner.prototype.updateScannedFilesList = function(filesData) {
+            if (!filesData.files || filesData.files.length === 0) {
+                return;
+            }
+            
+            var scannerContent = document.getElementById('scannerContent');
+            
+            // Clear "empty" state if exists
+            if (scannerContent.querySelector('.scanner-empty')) {
+                scannerContent.innerHTML = '';
+            }
+            
+            // Show last 10 files
+            var recentFiles = filesData.files.slice(-10);
+            
+            // Clear current content
+            scannerContent.innerHTML = '';
+            
+            // Add each file
+            for (var i = 0; i < recentFiles.length; i++) {
+                var fileData = recentFiles[i];
+                this.addRealTimeFileFromData(fileData);
+            }
+        };
+
+        SecurityScanner.prototype.addRealTimeFileFromData = function(fileData) {
+            var scannerContent = document.getElementById('scannerContent');
+            
+            // Create file item
+            var fileItem = document.createElement('div');
+            fileItem.className = 'file-item slideIn';
+            
+            var statusClass = fileData.is_suspicious ? 'status-suspicious' : 'status-clean';
+            var iconColor = fileData.is_suspicious ? 'var(--danger-text)' : 'var(--success-text)';
+            
+            fileItem.innerHTML = 
+                '<div class="file-icon">' +
+                    '<i class="fas fa-file-code" style="color: ' + iconColor + ';"></i>' +
+                '</div>' +
+                '<div class="file-path" title="' + fileData.path + '">' + fileData.path + '</div>' +
+                '<div class="file-status ' + statusClass + '">' +
+                    fileData.status +
+                '</div>' +
+                '<div class="scan-number">' +
+                    '#' + fileData.scan_number +
+                '</div>';
+            
+            scannerContent.appendChild(fileItem);
+            scannerContent.scrollTop = scannerContent.scrollHeight;
         };
 
         SecurityScanner.prototype.checkScanProgress = function() {
@@ -2282,11 +2458,6 @@ function performAutoFix($scan_data) {
         };
 
         SecurityScanner.prototype.updateRealTimeProgress = function(progress) {
-            // Update scanner content with current file
-            if (progress.current_file && progress.is_scanning) {
-                this.addRealTimeFile(progress.current_file, progress.scanned_count);
-            }
-            
             // Update stats
             this.scannedFiles = progress.scanned_count || this.scannedFiles;
             this.updateStats();
@@ -2310,70 +2481,11 @@ function performAutoFix($scan_data) {
             // Check if scan completed
             if (progress.completed || !progress.is_scanning) {
                 clearInterval(this.progressPollingInterval);
+                clearInterval(this.filesPollingInterval);
             }
         };
 
-        SecurityScanner.prototype.addRealTimeFile = function(filePath, scanCount) {
-            var scannerContent = document.getElementById('scannerContent');
-            
-            // Clear "empty" state if exists
-            if (scannerContent.querySelector('.scanner-empty')) {
-                scannerContent.innerHTML = '';
-            }
-            
-            // Create file item
-            var fileItem = document.createElement('div');
-            fileItem.className = 'file-item slideIn';
-            
-            // Determine if file is suspicious based on path patterns
-            var isSuspicious = this.isFileSuspicious(filePath);
-            var statusClass = isSuspicious ? 'status-suspicious' : 'status-clean';
-            var statusText = isSuspicious ? 'Checking...' : 'Clean';
-            var iconColor = isSuspicious ? 'var(--warning-text)' : 'var(--success-text)';
-            
-            fileItem.innerHTML = 
-                '<div class="file-icon">' +
-                    '<i class="fas fa-file-code" style="color: ' + iconColor + ';"></i>' +
-                '</div>' +
-                '<div class="file-path">' + filePath + '</div>' +
-                '<div class="file-status ' + statusClass + '">' +
-                    statusText +
-                '</div>' +
-                '<div class="scan-number" style="font-size: 0.6rem; color: var(--text-muted);">' +
-                    '#' + scanCount +
-                '</div>';
-            
-            scannerContent.appendChild(fileItem);
-            scannerContent.scrollTop = scannerContent.scrollHeight;
-            
-            // Keep only last 15 items for performance
-            while (scannerContent.children.length > 15) {
-                scannerContent.removeChild(scannerContent.firstChild);
-            }
-        };
-
-        SecurityScanner.prototype.isFileSuspicious = function(filePath) {
-            // Check for suspicious patterns
-            var suspiciousPatterns = [
-                'virus-files',
-                '.php.jpg',
-                '.php.png', 
-                '.php.gif',
-                'cache.php',
-                'eval',
-                'base64',
-                'shell_exec',
-                'admin/filemanager'
-            ];
-            
-            for (var i = 0; i < suspiciousPatterns.length; i++) {
-                if (filePath.indexOf(suspiciousPatterns[i]) !== -1) {
-                    return true;
-                }
-            }
-            
-            return false;
-        };
+        // Old addRealTimeFile function removed - using addRealTimeFileFromData instead
 
         SecurityScanner.prototype.simulateProgress = function() {
             var progress = 0;
@@ -2681,6 +2793,7 @@ function performAutoFix($scan_data) {
             clearInterval(this.speedInterval);
             clearInterval(this.fileSimulationInterval);
             clearInterval(this.progressPollingInterval); // Stop real-time polling
+            clearInterval(this.filesPollingInterval); // Stop files polling
             
             setTimeout(function() {
                 var scanBtn = document.getElementById('scanBtn');
