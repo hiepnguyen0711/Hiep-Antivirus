@@ -298,8 +298,8 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             'mkdir(' => 'Directory creation'
         );
 
-        // Scan everything from root and parent directories (unlimited comprehensive scan)
-        $directories = array('./'); // Scan từ root và parent để catch tất cả files
+        // Scan everything in current project only (unlimited comprehensive scan)
+        $directories = array('./'); // Scan chỉ trong thư mục dự án hiện tại
         $suspicious_files = array();
         $critical_files = array();
         $severe_files = array();
@@ -466,7 +466,16 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                 // PHP 5.6+ compatible directory iteration with filtering
                 if (class_exists('RecursiveIteratorIterator') && class_exists('RecursiveDirectoryIterator')) {
                     $directoryIterator = new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS);
-                    $filterIterator = new RecursiveCallbackFilterIterator($directoryIterator, function ($current, $key, $iterator) use ($exclude_dirs) {
+                    $filterIterator = new RecursiveCallbackFilterIterator($directoryIterator, function ($current, $key, $iterator) use ($exclude_dirs, $dir) {
+                        // Get absolute path and check if it's within project directory
+                        $currentPath = $current->getRealPath();
+                        $projectPath = realpath($dir);
+                        
+                        // Only scan within current project directory
+                        if ($currentPath && $projectPath && strpos($currentPath, $projectPath) !== 0) {
+                            return false;
+                        }
+                        
                         // Skip excluded directories
                         if ($current->isDir()) {
                             $dirName = $current->getBasename();
@@ -507,6 +516,14 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                                       in_array($extension, array('phtml', 'php3', 'php4', 'php5'));
                         
                         if ($should_scan) {
+                            // Additional check: Only scan files within current project directory
+                            $realPath = realpath($file_path);
+                            $projectRoot = realpath('./');
+                            
+                            if (!$realPath || !$projectRoot || strpos($realPath, $projectRoot) !== 0) {
+                                continue; // Skip files outside project directory
+                            }
+                            
                             $scanned_files++;
                             
                             // Update real-time progress
@@ -2404,7 +2421,7 @@ function performAutoFix($scan_data) {
                     <i class="fas fa-shield-halved"></i> Enterprise Security Scanner - Unlimited
                 </h1>
                 <p class="hero-subtitle">
-                    Quét toàn bộ hosting không giới hạn - Phát hiện shells và files rỗng<br>
+                    Quét toàn bộ dự án không giới hạn - Phát hiện shells và files rỗng<br>
                     Tìm kiếm các file như app.php, style.php mà hacker đã chèn vào
                 </p>
                 
@@ -2845,8 +2862,10 @@ function performAutoFix($scan_data) {
         };
 
         SecurityScanner.prototype.updateRealTimeProgress = function(progress) {
-            // Update stats
-            this.scannedFiles = progress.scanned_count || this.scannedFiles;
+            // Update stats - use the latest count from server (it's cumulative)
+            if (progress.scanned_count !== undefined) {
+                this.scannedFiles = progress.scanned_count;
+            }
             this.updateStats();
             
             // Update progress bar
@@ -2957,7 +2976,7 @@ function performAutoFix($scan_data) {
             var currentAction = document.getElementById('currentAction');
             if (currentAction) {
                 currentAction.innerHTML = '<i class="fas fa-spinner fa-spin pulse" style="color: var(--primary-blue);"></i> ' + 
-                                        'Quét toàn bộ hosting không giới hạn - Đang tìm kiếm shells...';
+                                        'Quét toàn bộ dự án không giới hạn - Đang tìm shells như app.php, style.php...';
             }
             
             // Create XMLHttpRequest for PHP 5.6+ compatibility
