@@ -861,8 +861,11 @@ function performAutoFix($scan_data) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <style>
         :root {
             /* Blue Pastel Theme */
@@ -1426,6 +1429,49 @@ function performAutoFix($scan_data) {
 
         .quick-filter-btn:active {
             transform: translateY(0);
+        }
+
+        /* Date Picker Styling */
+        .date-picker {
+            padding: 6px 12px;
+            border: 1px solid var(--border-medium);
+            border-radius: 6px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-size: 0.75rem;
+            min-width: 200px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .date-picker:hover {
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .date-picker::placeholder {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Flatpickr theme customization */
+        .flatpickr-calendar {
+            background: #2c3e50;
+            border: 1px solid var(--primary-blue);
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        }
+
+        .flatpickr-months {
+            background: linear-gradient(135deg, var(--primary-blue), var(--accent-blue));
+        }
+
+        .flatpickr-day.selected {
+            background: var(--primary-blue);
+            border-color: var(--accent-blue);
+        }
+
+        .flatpickr-day:hover {
+            background: var(--accent-blue);
         }
 
         /* Control Panel */
@@ -2449,7 +2495,12 @@ function performAutoFix($scan_data) {
                         </div>
                         
                         <div class="filter-group">
-                            <label><i class="fas fa-filter"></i> Lọc theo thời gian:</label>
+                            <label><i class="fas fa-calendar-alt"></i> Lọc theo khoảng thời gian:</label>
+                            <input type="text" id="dateRangePicker" class="date-picker" placeholder="Chọn khoảng thời gian..." readonly>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label><i class="fas fa-filter"></i> Quick Filters:</label>
                             <select id="filterByAge" class="filter-select">
                                 <option value="all">🔍 Tất cả files</option>
                                 <option value="very_recent">🚨 24 giờ qua (Shell mới)</option>
@@ -3027,6 +3078,20 @@ function performAutoFix($scan_data) {
         SecurityScanner.prototype.initializeFilters = function() {
             var self = this;
             
+            // Initialize Flatpickr date range picker
+            self.dateRangePicker = flatpickr("#dateRangePicker", {
+                mode: "range",
+                dateFormat: "d/m/Y",
+                theme: "dark",
+                locale: {
+                    rangeSeparator: " đến "
+                },
+                onChange: function(selectedDates, dateStr, instance) {
+                    self.selectedDateRange = selectedDates;
+                    self.applySortAndFilter();
+                }
+            });
+            
             // Sort dropdown
             document.getElementById('sortBy').addEventListener('change', function() {
                 self.applySortAndFilter();
@@ -3034,6 +3099,11 @@ function performAutoFix($scan_data) {
             
             // Age filter dropdown
             document.getElementById('filterByAge').addEventListener('change', function() {
+                // Clear date picker when using quick filters
+                if (this.value !== 'all') {
+                    self.dateRangePicker.clear();
+                    self.selectedDateRange = null;
+                }
                 self.applySortAndFilter();
             });
             
@@ -3041,12 +3111,16 @@ function performAutoFix($scan_data) {
             document.getElementById('showRecentOnly').addEventListener('click', function() {
                 document.getElementById('filterByAge').value = 'very_recent';
                 document.getElementById('sortBy').value = 'date';
+                self.dateRangePicker.clear();
+                self.selectedDateRange = null;
                 self.applySortAndFilter();
             });
             
             document.getElementById('resetFilters').addEventListener('click', function() {
                 document.getElementById('filterByAge').value = 'all';
                 document.getElementById('sortBy').value = 'threat';
+                self.dateRangePicker.clear();
+                self.selectedDateRange = null;
                 self.applySortAndFilter();
             });
         };
@@ -3056,11 +3130,28 @@ function performAutoFix($scan_data) {
             var filterByAge = document.getElementById('filterByAge').value;
             var threatItems = document.querySelectorAll('.threat-item');
             var itemsArray = Array.from(threatItems);
+            var self = this;
             
             // Filter items
             itemsArray.forEach(function(item) {
-                var itemAge = item.dataset.age;
-                var shouldShow = filterByAge === 'all' || itemAge === filterByAge;
+                var shouldShow = true;
+                
+                // Age filter (Quick filters)
+                if (filterByAge !== 'all') {
+                    var itemAge = item.dataset.age;
+                    shouldShow = shouldShow && (itemAge === filterByAge);
+                }
+                
+                // Date range filter (Date picker)
+                if (self.selectedDateRange && self.selectedDateRange.length === 2) {
+                    var itemModified = parseInt(item.dataset.modified) * 1000; // Convert to milliseconds
+                    var startDate = self.selectedDateRange[0].getTime();
+                    var endDate = self.selectedDateRange[1].getTime() + (24 * 60 * 60 * 1000); // Add 1 day to include end date
+                    
+                    shouldShow = shouldShow && (itemModified >= startDate && itemModified <= endDate);
+                }
+                
+                // Always show the item first, then apply display
                 item.style.display = shouldShow ? 'block' : 'none';
             });
             
@@ -3073,9 +3164,13 @@ function performAutoFix($scan_data) {
             visibleItems.sort(function(a, b) {
                 switch(sortBy) {
                     case 'date':
-                        return parseInt(b.dataset.modified) - parseInt(a.dataset.modified);
+                        var aModified = parseInt(a.dataset.modified) || 0;
+                        var bModified = parseInt(b.dataset.modified) || 0;
+                        return bModified - aModified;
                     case 'size':
-                        return parseInt(b.dataset.size) - parseInt(a.dataset.size);
+                        var aSize = parseInt(a.dataset.size) || 0;
+                        var bSize = parseInt(b.dataset.size) || 0;
+                        return bSize - aSize;
                     case 'name':
                         var nameA = a.querySelector('.threat-path').textContent.toLowerCase();
                         var nameB = b.querySelector('.threat-path').textContent.toLowerCase();
@@ -3084,16 +3179,49 @@ function performAutoFix($scan_data) {
                     default:
                         // Threat level: very_recent > recent > medium > old
                         var priorities = {'very_recent': 4, 'recent': 3, 'medium': 2, 'old': 1};
-                        return (priorities[b.dataset.age] || 1) - (priorities[a.dataset.age] || 1);
+                        var aPriority = priorities[a.dataset.age] || 1;
+                        var bPriority = priorities[b.dataset.age] || 1;
+                        return bPriority - aPriority;
                 }
             });
             
             // Reorder DOM elements
             var container = visibleItems[0] ? visibleItems[0].parentElement : null;
             if (container) {
+                // Clear container first
+                var allItems = Array.from(container.querySelectorAll('.threat-item'));
+                
+                // Append visible items in sorted order
                 visibleItems.forEach(function(item) {
                     container.appendChild(item);
                 });
+                
+                // Append hidden items at the end (maintain DOM structure)
+                allItems.forEach(function(item) {
+                    if (item.style.display === 'none') {
+                        container.appendChild(item);
+                    }
+                });
+            }
+            
+            // Update filter info
+            this.updateFilterInfo(visibleItems.length, itemsArray.length);
+        };
+
+        SecurityScanner.prototype.updateFilterInfo = function(visibleCount, totalCount) {
+            var filterControls = document.getElementById('filterControls');
+            var existingInfo = filterControls.querySelector('.filter-info');
+            
+            if (existingInfo) {
+                existingInfo.remove();
+            }
+            
+            if (visibleCount !== totalCount) {
+                var filterInfo = document.createElement('div');
+                filterInfo.className = 'filter-info';
+                filterInfo.innerHTML = '<i class="fas fa-info-circle"></i> Hiển thị ' + visibleCount + '/' + totalCount + ' threats';
+                filterInfo.style.cssText = 'color: var(--primary-blue); font-size: 0.75rem; font-weight: 600;';
+                filterControls.appendChild(filterInfo);
             }
         };
 
