@@ -57,6 +57,6 @@ $config = array(
     )
 );
 
-define("URLPATH", "http://" . $_SERVER["SERVER_NAME"] . "/2025/thang_7/Hiep-Antivirus/");
-define("urladmin", "http://" . $_SERVER["SERVER_NAME"] . "/2025/thang_7/Hiep-Antivirus/admin/");
+define("URLPATH", "http://" . $_SERVER["SERVER_NAME"] . "/2025/Hiep-Antivirus/");
+define("urladmin", "http://" . $_SERVER["SERVER_NAME"] . "/2025/Hiep-Antivirus/admin/");
 define('_hiep_code', '071196');
