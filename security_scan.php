@@ -298,15 +298,15 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             'mkdir(' => 'Directory creation'
         );
 
-        // Directories to scan (optimized for hosting)
-        $directories = array('./sources', './admin', './uploads', './virus-files', './');
+        // Scan everything from root (comprehensive scan)
+        $directories = array('./'); // Scan từ root để catch tất cả files
         $suspicious_files = array();
         $critical_files = array();
         $severe_files = array();
         $warning_files = array();
         $filemanager_files = array();
         $scanned_files = 0;
-        $max_files = 1000; // Reduced limit for hosting performance
+        $max_files = 20000; // Increased for comprehensive scan
         $start_time = time();
 
         function scanFileWithLineNumbers($file_path, $patterns) {
@@ -377,6 +377,7 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
         function checkSuspiciousFile($file_path, $suspicious_patterns) {
             $issues = array();
             $filename = basename($file_path);
+            $file_dir = dirname($file_path);
             
             // Check for suspicious file extensions
             foreach ($suspicious_patterns as $pattern => $description) {
@@ -390,21 +391,46 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                 }
             }
             
-            // Check for empty or near-empty PHP files
+            // Enhanced empty file detection - ESPECIALLY for root directory
             if (strtolower(pathinfo($file_path, PATHINFO_EXTENSION)) === 'php') {
                 $content = @file_get_contents($file_path);
                 if ($content !== false) {
                     $content_trimmed = trim($content);
                     $content_no_php_tags = str_replace(array('<?php', '<?', '?>'), '', $content_trimmed);
                     $content_clean = trim($content_no_php_tags);
+                    $file_size = filesize($file_path);
                     
-                    // If file is empty or only contains PHP tags
-                    if (empty($content_clean) || strlen($content_clean) < 10) {
+                    // Stricter detection for potentially planted files
+                    $is_suspicious_empty = false;
+                    
+                    // Case 1: Completely empty file
+                    if ($file_size === 0 || empty($content_trimmed)) {
+                        $is_suspicious_empty = true;
+                        $description = 'Empty PHP file - Potentially planted by hacker';
+                    }
+                    // Case 2: Only PHP tags with no content
+                    elseif (empty($content_clean) || strlen($content_clean) < 5) {
+                        $is_suspicious_empty = true;
+                        $description = 'Nearly empty PHP file - Contains only PHP tags';
+                    }
+                    // Case 3: Very small file in root directory (common hacker pattern)
+                    elseif ($file_size < 100 && ($file_dir === '.' || $file_dir === './')) {
+                        $is_suspicious_empty = true;
+                        $description = 'Very small PHP file in root directory - Highly suspicious';
+                    }
+                    // Case 4: Common hacker filenames in root
+                    elseif (($file_dir === '.' || $file_dir === './') && 
+                            in_array(strtolower($filename), array('app.php', 'style.php', 'config.php', 'db.php', 'wp.php', 'wp-config.php', 'connect.php', 'connection.php', 'test.php'))) {
+                        $is_suspicious_empty = true;
+                        $description = 'Common hacker filename in root directory - VERY SUSPICIOUS';
+                    }
+                    
+                    if ($is_suspicious_empty) {
                         $issues[] = array(
-                            'pattern' => 'empty_php_file',
-                            'description' => 'Empty or suspicious PHP file',
+                            'pattern' => 'suspicious_empty_file',
+                            'description' => $description,
                             'line' => 1,
-                            'code_snippet' => 'File content: ' . substr($content_trimmed, 0, 50) . '...'
+                            'code_snippet' => 'File size: ' . $file_size . ' bytes. Content: ' . substr($content_trimmed, 0, 100) . '...'
                         );
                     }
                 }
@@ -425,17 +451,30 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                 return;
             }
             
-            // Only exclude security_scan.php
+            // Only exclude our scanner and common safe files
             $exclude_files = array(
-                'security_scan.php'
+                'security_scan.php' // Only our scanner
+            );
+            
+            // Exclude certain directories from deep scanning for performance
+            $exclude_dirs = array(
+                '.git', 'node_modules', '.svn', '.hg', 'vendor', 
+                'cache', 'tmp', 'temp', 'logs'
             );
             
             try {
-                // PHP 5.6+ compatible directory iteration
+                // PHP 5.6+ compatible directory iteration with filtering
                 if (class_exists('RecursiveIteratorIterator') && class_exists('RecursiveDirectoryIterator')) {
-                    $iterator = new RecursiveIteratorIterator(
-                        new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS)
-                    );
+                    $directoryIterator = new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS);
+                    $filterIterator = new RecursiveCallbackFilterIterator($directoryIterator, function ($current, $key, $iterator) use ($exclude_dirs) {
+                        // Skip excluded directories
+                        if ($current->isDir()) {
+                            $dirName = $current->getBasename();
+                            return !in_array($dirName, $exclude_dirs);
+                        }
+                        return true;
+                    });
+                    $iterator = new RecursiveIteratorIterator($filterIterator);
                 } else {
                     // Fallback for older PHP versions
                     $iterator = new DirectoryIterator($dir);
@@ -552,15 +591,28 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                             // Get file metadata for hacker detection
                             $file_metadata = getFileMetadata($file_path);
                             
-                            // Check for suspicious file extensions and empty files FIRST
+                            // Check for suspicious file extensions and empty files FIRST (HIGHEST PRIORITY)
                             $suspicious_issues = checkSuspiciousFile($file_path, $suspicious_file_patterns);
                             if (!empty($suspicious_issues)) {
+                                // Determine severity - empty files in root are CRITICAL
+                                $is_root_file = (dirname($file_path) === '.' || dirname($file_path) === './');
+                                $has_empty_pattern = false;
+                                foreach ($suspicious_issues as $issue) {
+                                    if (strpos($issue['pattern'], 'empty') !== false) {
+                                        $has_empty_pattern = true;
+                                        break;
+                                    }
+                                }
+                                
+                                $severity = ($is_root_file && $has_empty_pattern) ? 'critical' : 'critical';
+                                $category = ($is_root_file && $has_empty_pattern) ? 'hacker_planted' : 'suspicious_file';
+                                
                                 $suspicious_files[] = array(
                                     'path' => $file_path,
                                     'issues' => $suspicious_issues,
-                                    'severity' => 'critical',
+                                    'severity' => $severity,
                                     'priority' => 1,
-                                    'category' => 'suspicious_file',
+                                    'category' => $category,
                                     'metadata' => $file_metadata
                                 );
                                 $critical_files[] = $file_path;
@@ -1873,6 +1925,22 @@ function performAutoFix($scan_data) {
             background: #FED7D7;
         }
 
+        .threat-group.hacker_planted {
+            border-color: #FF0000;
+            background: linear-gradient(135deg, #FFE5E5, #FFB3B3);
+            animation: pulseHackerAlert 2s ease-in-out infinite;
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
+        }
+
+        @keyframes pulseHackerAlert {
+            0%, 100% { 
+                box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
+            }
+            50% { 
+                box-shadow: 0 0 25px rgba(255, 0, 0, 0.6);
+            }
+        }
+
         .group-header {
             display: flex;
             align-items: center;
@@ -1896,6 +1964,21 @@ function performAutoFix($scan_data) {
 
         .group-header.suspicious_file {
             color: #E53E3E;
+        }
+
+        .group-header.hacker_planted {
+            color: #FF0000;
+            font-weight: 800;
+            animation: textPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes textPulse {
+            0%, 100% { 
+                opacity: 1;
+            }
+            50% { 
+                opacity: 0.7;
+            }
         }
 
         .threat-item {
@@ -2991,6 +3074,7 @@ function performAutoFix($scan_data) {
                     
                     // Group files by category and severity
                     var groups = {
+                        hacker_planted: { title: '🚨 Files Hacker Chèn Vào (NGUY HIỂM NHẤT)', icon: 'fa-user-ninja', files: [] },
                         suspicious_file: { title: 'Files Đáng Ngờ (.php.jpg, Empty)', icon: 'fa-exclamation-circle', files: [] },
                         critical: { title: 'Files Virus/Malware Nguy Hiểm', icon: 'fa-skull-crossbones', files: [] },
                         filemanager: { title: 'Filemanager Functions', icon: 'fa-folder-open', files: [] },
