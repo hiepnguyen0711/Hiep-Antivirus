@@ -795,46 +795,396 @@ function performAutoFix($scan_data) {
             padding: 16px;
         }
 
-        /* Header - Compact */
-        .header {
-            background: linear-gradient(135deg, var(--primary-blue), var(--accent-blue));
-            color: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 16px;
-            box-shadow: var(--shadow-blue);
+        /* Hero Section - Futuristic */
+        .hero-section {
+            background: linear-gradient(135deg, 
+                #667eea 0%, 
+                #4fc3f7 25%, 
+                #29b6f6 50%, 
+                #1976d2 75%, 
+                #0d47a1 100%);
+            position: relative;
+            border-radius: 20px;
+            padding: 50px 20px;
+            margin-bottom: 25px;
+            overflow: hidden;
+           
+            backdrop-filter: blur(20px);
+            transition: all 0.3s ease;
+        }
+
+        .hero-section:hover {
+            transform: translateY(-2px);
+            
+        }
+
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+                url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><defs><pattern id="hexagon" width="30" height="26" patternUnits="userSpaceOnUse"><polygon points="15,2 25,8 25,18 15,24 5,18 5,8" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(%23hexagon)"/></svg>');
+            opacity: 0.6;
+            animation: backgroundShift 20s ease-in-out infinite;
+        }
+
+        @keyframes backgroundShift {
+            0%, 100% { 
+                background-position: 0% 0%, 100% 100%, 0% 0%;
+            }
+            50% { 
+                background-position: 100% 100%, 0% 0%, 50% 50%;
+            }
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
             text-align: center;
+            color: white;
         }
 
-        .header h1 {
-            font-size: 1.8rem;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
-
-        .header .subtitle {
-            font-size: 0.9rem;
-            opacity: 0.9;
+        .hero-title {
+            font-size: 2.5rem;
+            font-weight: 800;
             margin-bottom: 8px;
+            background: linear-gradient(45deg, #ffffff, #e0e7ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
 
-        .author-badge {
-            display: inline-flex;
+        .hero-subtitle {
+            font-size: 1.1rem;
+            opacity: 0.95;
+            margin-bottom: 20px;
+            font-weight: 400;
+            line-height: 1.6;
+        }
+
+        .hero-features {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+
+        .feature-item {
+            display: flex;
             align-items: center;
-            gap: 6px;
-            background: rgba(255, 255, 255, 0.15);
-            padding: 6px 12px;
-            border-radius: 16px;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px 20px;
+            border-radius: 30px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .feature-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .feature-item:hover::before {
+            left: 100%;
+        }
+
+        .feature-item:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-3px) scale(1.05);
+            border-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 
+                0 10px 25px rgba(0, 0, 0, 0.2),
+                0 0 20px rgba(255, 255, 255, 0.1);
+        }
+
+        .feature-item:active {
+            transform: translateY(-1px) scale(1.02);
+        }
+
+        .feature-icon {
+            font-size: 1.2rem;
+        }
+
+        .author-section {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .author-profile {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: rgba(255, 255, 255, 0.12);
+            padding: 15px 25px;
+            border-radius: 60px;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .author-profile::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, 
+                rgba(255, 255, 255, 0.1), 
+                rgba(255, 255, 255, 0.05), 
+                rgba(255, 255, 255, 0.1));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .author-profile:hover::before {
+            opacity: 1;
+        }
+
+        .author-profile:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-3px) scale(1.02);
+            color: white;
+            text-decoration: none;
+            border-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 
+                0 15px 35px rgba(0, 0, 0, 0.3),
+                0 0 25px rgba(255, 255, 255, 0.1);
+        }
+
+        .author-profile:active {
+            transform: translateY(-1px) scale(1.01);
+        }
+
+        .author-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            object-fit: cover;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            z-index: 2;
+        }
+
+        .author-avatar::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: -3px;
+            right: -3px;
+            bottom: -3px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #00bcd4, #2196f3, #3f51b5, #9c27b0);
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            animation: borderRotate 3s linear infinite;
+        }
+
+        .author-profile:hover .author-avatar::before {
+            opacity: 1;
+        }
+
+        .author-profile:hover .author-avatar {
+            transform: scale(1.1) rotate(5deg);
+            border-color: rgba(255, 255, 255, 0.6);
+        }
+
+        @keyframes borderRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .author-info h4 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .author-info p {
+            margin: 0;
             font-size: 0.8rem;
-            font-weight: 500;
+            opacity: 0.8;
+        }
+
+        .tech-badges {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .tech-badge {
+            background: rgba(255, 255, 255, 0.12);
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tech-badge::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .tech-badge:hover::before {
+            left: 100%;
+        }
+
+        .tech-badge:hover {
+            transform: translateY(-2px) scale(1.05);
+            border-color: rgba(255, 255, 255, 0.4);
         }
 
         .php-version {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            margin-left: 8px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            box-shadow: 0 0 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .php-version:hover {
+            box-shadow: 0 0 25px rgba(102, 126, 234, 0.5);
+        }
+
+        .enterprise-badge {
+            background: linear-gradient(45deg, #fd79a8, #e84393);
+            animation: pulseGlowAdvanced 3s ease-in-out infinite;
+            box-shadow: 0 0 15px rgba(253, 121, 168, 0.4);
+        }
+
+        .enterprise-badge:hover {
+            animation-duration: 1s;
+            box-shadow: 0 0 30px rgba(253, 121, 168, 0.7);
+        }
+
+        @keyframes pulseGlowAdvanced {
+            0%, 100% { 
+                box-shadow: 
+                    0 0 15px rgba(253, 121, 168, 0.4),
+                    0 0 30px rgba(253, 121, 168, 0.2);
+                transform: scale(1);
+            }
+            50% { 
+                box-shadow: 
+                    0 0 25px rgba(253, 121, 168, 0.7),
+                    0 0 50px rgba(253, 121, 168, 0.4),
+                    0 0 80px rgba(253, 121, 168, 0.2);
+                transform: scale(1.02);
+            }
+        }
+
+        /* Floating animations */
+        .floating-icons {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .floating-icon {
+            position: absolute;
+            font-size: 1.8rem;
+            color: rgba(255, 255, 255, 0.15);
+            animation: floatNeon 8s ease-in-out infinite;
+            transition: all 0.3s ease;
+        }
+
+        .floating-icon:nth-child(1) { 
+            top: 15%; left: 8%; 
+            animation-delay: -1s; 
+            color: rgba(0, 188, 212, 0.3);
+        }
+        .floating-icon:nth-child(2) { 
+            top: 65%; left: 88%; 
+            animation-delay: -3s; 
+            color: rgba(33, 150, 243, 0.3);
+        }
+        .floating-icon:nth-child(3) { 
+            top: 35%; left: 15%; 
+            animation-delay: -2s; 
+            color: rgba(63, 81, 181, 0.3);
+        }
+        .floating-icon:nth-child(4) { 
+            top: 85%; left: 75%; 
+            animation-delay: -4s; 
+            color: rgba(156, 39, 176, 0.3);
+        }
+        .floating-icon:nth-child(5) { 
+            top: 8%; left: 75%; 
+            animation-delay: -0.5s; 
+            color: rgba(76, 175, 80, 0.3);
+        }
+
+        @keyframes floatNeon {
+            0%, 100% { 
+                transform: translateY(0px) rotate(0deg) scale(1);
+                opacity: 0.15;
+                filter: blur(0px);
+            }
+            25% {
+                opacity: 0.4;
+                filter: blur(1px);
+                text-shadow: 0 0 10px currentColor;
+            }
+            50% { 
+                transform: translateY(-25px) rotate(180deg) scale(1.1);
+                opacity: 0.6;
+                filter: blur(0px);
+                text-shadow: 0 0 20px currentColor, 0 0 30px currentColor;
+            }
+            75% {
+                opacity: 0.3;
+                filter: blur(1px);
+                text-shadow: 0 0 15px currentColor;
+            }
+        }
+
+        .hero-section:hover .floating-icon {
+            animation-duration: 4s;
         }
 
         /* Bento Grid Layout */
@@ -1384,6 +1734,45 @@ function performAutoFix($scan_data) {
         }
 
         @media (max-width: 768px) {
+            .hero-section {
+                padding: 30px 15px;
+            }
+            
+            .hero-title {
+                font-size: 2rem;
+            }
+            
+            .hero-subtitle {
+                font-size: 1rem;
+            }
+            
+            .hero-features {
+                gap: 15px;
+            }
+            
+            .feature-item {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+            
+            .author-section {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .author-profile {
+                padding: 10px 16px;
+            }
+            
+            .author-avatar {
+                width: 40px;
+                height: 40px;
+            }
+            
+            .tech-badges {
+                gap: 8px;
+            }
+            
             .bento-grid {
                 grid-template-columns: 1fr;
             }
@@ -1418,6 +1807,56 @@ function performAutoFix($scan_data) {
         }
 
         @media (max-width: 480px) {
+            .hero-section {
+                padding: 25px 10px;
+            }
+            
+            .hero-title {
+                font-size: 1.7rem;
+                margin-bottom: 10px;
+            }
+            
+            .hero-subtitle {
+                font-size: 0.9rem;
+                margin-bottom: 15px;
+            }
+            
+            .hero-features {
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+            
+            .feature-item {
+                padding: 5px 10px;
+                font-size: 0.75rem;
+            }
+            
+            .feature-icon {
+                font-size: 1rem;
+            }
+            
+            .author-profile {
+                padding: 8px 12px;
+            }
+            
+            .author-avatar {
+                width: 35px;
+                height: 35px;
+            }
+            
+            .author-info h4 {
+                font-size: 0.9rem;
+            }
+            
+            .author-info p {
+                font-size: 0.75rem;
+            }
+            
+            .tech-badge {
+                padding: 4px 8px;
+                font-size: 0.7rem;
+            }
+            
             .container-fluid {
                 padding: 8px;
             }
@@ -1510,15 +1949,71 @@ function performAutoFix($scan_data) {
 </head>
 <body>
     <div class="container-fluid">
-        <!-- Header -->
-        <div class="header">
-            <h1><i class="fas fa-shield-halved"></i> Enterprise Security Scanner</h1>
-            <p class="subtitle">Công cụ quét malware và backdoor chuyên nghiệp cho doanh nghiệp</p>
-            <div class="author-badge">
-                <i class="fab fa-facebook"></i>
-                <span>Tác giả: Hiệp Nguyễn</span>
-                <span style="opacity: 0.8;">• Enterprise Grade</span>
-                <span class="php-version">PHP <?php echo PHP_VERSION; ?></span>
+        <!-- Hero Section -->
+        <div class="hero-section">
+            <div class="floating-icons">
+                <div class="floating-icon"><i class="fas fa-shield-alt"></i></div>
+                <div class="floating-icon"><i class="fas fa-lock"></i></div>
+                <div class="floating-icon"><i class="fas fa-bug"></i></div>
+                <div class="floating-icon"><i class="fas fa-virus-slash"></i></div>
+                <div class="floating-icon"><i class="fas fa-server"></i></div>
+            </div>
+            
+            <div class="hero-content">
+                <h1 class="hero-title">
+                    <i class="fas fa-shield-halved"></i> Enterprise Security Scanner
+                </h1>
+                <p class="hero-subtitle">
+                    Công cụ quét malware và backdoor chuyên nghiệp cho doanh nghiệp<br>
+                    Phát hiện và loại bỏ các mối đe dọa bảo mật một cách hiệu quả
+                </p>
+                
+                <div class="hero-features">
+                    <div class="feature-item">
+                        <i class="feature-icon fas fa-search-plus"></i>
+                        <span>Deep Scan</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="feature-icon fas fa-bolt"></i>
+                        <span>Real-time</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="feature-icon fas fa-brain"></i>
+                        <span>AI Detection</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="feature-icon fas fa-tools"></i>
+                        <span>Auto-Fix</span>
+                    </div>
+                </div>
+                
+                <div class="author-section">
+                    <a href="https://www.facebook.com/G.N.S.L.7/" target="_blank" class="author-profile">
+                        <img src="https://scontent.fsgn5-5.fna.fbcdn.net/v/t39.30808-6/467745352_8564281790291501_4763340932413705788_n.jpg?_nc_cat=100&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=YVJLGzP9HhEQ7kNvwHF5z1y&_nc_oc=AdmgFUyetOC2rMzv2OXAs1lWuzlomsOxNuE2EqvVsc6UcbSMdGDuegCYG89180aIibs&_nc_zt=23&_nc_ht=scontent.fsgn5-5.fna&_nc_gid=QtnVEWmkr6Ws8U65q_KqFA&oh=00_AfQ2LJYK7P2O1iPsn_Gf84p_x3SKl5rp4C_C52N8_NrcWw&oe=6879BA95" 
+                             alt="Hiệp Nguyễn Avatar" 
+                             class="author-avatar"
+                             onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22%234A90E2%22/><text x=%2250%22 y=%2258%22 text-anchor=%22middle%22 fill=%22white%22 font-size=%2232%22 font-weight=%22bold%22>H</text></svg>'">
+                        <div class="author-info">
+                            <h4>🚀 Hiệp Nguyễn</h4>
+                            <p><i class="fab fa-facebook-f"></i> Security Expert & Futuristic Developer</p>
+                        </div>
+                    </a>
+                    
+                    <div class="tech-badges">
+                        <div class="tech-badge php-version">
+                            <i class="fab fa-php"></i>
+                            <span>PHP <?php echo PHP_VERSION; ?></span>
+                        </div>
+                        <div class="tech-badge enterprise-badge">
+                            <i class="fas fa-crown"></i>
+                            <span>Enterprise</span>
+                        </div>
+                        <div class="tech-badge">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span>2025</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
