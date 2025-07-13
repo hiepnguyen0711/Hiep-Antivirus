@@ -123,7 +123,65 @@ if (isset($_GET['autofix']) && $_GET['autofix'] === '1') {
     exit;
 }
 
+// Real-time scan progress endpoint
+if (isset($_GET['scan_progress']) && $_GET['scan_progress'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-cache, must-revalidate');
+    
+    // Read progress from temp file (more reliable than session for real-time)
+    $progress_file = './logs/scan_progress.json';
+    $progress = array(
+        'current_file' => '',
+        'scanned_count' => 0,
+        'total_estimate' => 100,
+        'is_scanning' => false,
+        'percentage' => 0
+    );
+    
+    if (file_exists($progress_file)) {
+        $progress_data = @file_get_contents($progress_file);
+        if ($progress_data) {
+            $decoded = json_decode($progress_data, true);
+            if ($decoded) {
+                $progress = $decoded;
+            }
+        }
+    }
+    
+    // Check if JSON_UNESCAPED_UNICODE is available
+    $json_flags = 0;
+    if (defined('JSON_UNESCAPED_UNICODE')) {
+        $json_flags = JSON_UNESCAPED_UNICODE;
+    }
+    
+    echo json_encode($progress, $json_flags);
+    exit;
+}
+
 if (isset($_GET['scan']) && $_GET['scan'] === '1') {
+    // Initialize progress file
+    if (!file_exists('./logs')) {
+        @mkdir('./logs', 0755, true);
+    }
+    
+    $progress_file = './logs/scan_progress.json';
+    $initial_progress = array(
+        'current_file' => 'Khởi tạo scanner...',
+        'scanned_count' => 0,
+        'total_estimate' => 100,
+        'is_scanning' => true,
+        'percentage' => 0,
+        'start_time' => time()
+    );
+    
+    // Check if JSON_UNESCAPED_UNICODE is available
+    $json_flags = 0;
+    if (defined('JSON_UNESCAPED_UNICODE')) {
+        $json_flags = JSON_UNESCAPED_UNICODE;
+    }
+    
+    @file_put_contents($progress_file, json_encode($initial_progress, $json_flags));
+    
     // Start output buffering and clean any previous output
     ob_start();
     if (ob_get_level() > 1) {
@@ -324,8 +382,29 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
                         if ($should_scan) {
                             $scanned_files++;
                             
-                            // Set current scanning file for real-time display
+                            // Update real-time progress
                             $current_scanning_file = $file_path;
+                            $percentage = min(100, ($scanned_files / $max_files) * 100);
+                            
+                            // Update progress file for real-time display
+                            $progress_file = './logs/scan_progress.json';
+                            $progress_data = array(
+                                'current_file' => $file_path,
+                                'scanned_count' => $scanned_files,
+                                'total_estimate' => $max_files,
+                                'is_scanning' => true,
+                                'percentage' => round($percentage, 1),
+                                'directory' => basename($dir),
+                                'last_update' => time()
+                            );
+                            
+                            // Check if JSON_UNESCAPED_UNICODE is available
+                            $json_flags = 0;
+                            if (defined('JSON_UNESCAPED_UNICODE')) {
+                                $json_flags = JSON_UNESCAPED_UNICODE;
+                            }
+                            
+                            @file_put_contents($progress_file, json_encode($progress_data, $json_flags));
                             
                             // Determine file category
                             $is_virus_file = strpos($file_path, 'virus-files') !== false;
@@ -419,6 +498,26 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             }
             return $a['priority'] - $b['priority'];
         });
+
+        // Mark scan as completed
+        $progress_file = './logs/scan_progress.json';
+        $final_progress = array(
+            'current_file' => 'Hoàn tất scan!',
+            'scanned_count' => $scanned_files,
+            'total_estimate' => $scanned_files,
+            'is_scanning' => false,
+            'percentage' => 100,
+            'completed' => true,
+            'end_time' => time()
+        );
+        
+        // Check if JSON_UNESCAPED_UNICODE is available
+        $json_flags = 0;
+        if (defined('JSON_UNESCAPED_UNICODE')) {
+            $json_flags = JSON_UNESCAPED_UNICODE;
+        }
+        
+        @file_put_contents($progress_file, json_encode($final_progress, $json_flags));
 
         // Log scan results
         $client_ip = getClientIP();
@@ -1007,6 +1106,7 @@ function performAutoFix($scan_data) {
             border-bottom: 1px solid var(--border-light);
             transition: all 0.2s ease;
             font-size: 0.8rem;
+            position: relative;
         }
 
         .file-item:hover {
@@ -1023,6 +1123,10 @@ function performAutoFix($scan_data) {
             font-size: 0.7rem;
             color: var(--text-secondary);
             flex: 1;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .file-status {
@@ -1031,6 +1135,17 @@ function performAutoFix($scan_data) {
             font-size: 0.65rem;
             font-weight: 600;
             text-transform: uppercase;
+        }
+
+        .scan-number {
+            position: absolute;
+            top: 2px;
+            right: 4px;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.7);
+            padding: 1px 4px;
+            border-radius: 6px;
         }
 
         .status-clean {
@@ -1163,29 +1278,33 @@ function performAutoFix($scan_data) {
             padding: 8px;
             margin-bottom: 6px;
             transition: all 0.3s ease;
-            cursor: pointer;
             position: relative;
         }
 
         .threat-item:hover {
             transform: translateY(-1px);
             box-shadow: var(--shadow-md);
-            border-color: var(--primary-blue);
+            border-color: var(--border-medium);
         }
 
-        .threat-item:hover::after {
-            content: "Click để mở file trong VS Code";
-            position: absolute;
-            top: -30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--text-primary);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            white-space: nowrap;
-            z-index: 1000;
+        .file-item:hover .file-path {
+            color: var(--primary-blue);
+            font-weight: 600;
+        }
+
+        .file-item.slideIn {
+            animation: slideInFromRight 0.3s ease-out;
+        }
+
+        @keyframes slideInFromRight {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
         }
 
         .threat-item:last-child {
@@ -1328,6 +1447,14 @@ function performAutoFix($scan_data) {
             .delete-btn {
                 font-size: 0.6rem;
                 padding: 2px 4px;
+            }
+            
+            .scan-number {
+                display: none; /* Hide scan number on mobile */
+            }
+            
+            .file-path {
+                max-width: 150px;
             }
         }
 
@@ -1615,12 +1742,142 @@ function performAutoFix($scan_data) {
         };
 
         SecurityScanner.prototype.startFileSimulation = function() {
-            // No more fake demo files - will show real scanned files from server response
+            // Start real-time progress polling
             var self = this;
-            this.fileSimulationInterval = setInterval(function() {
-                // Update stats periodically during scan
-                self.updateStats();
-            }, 500);
+            console.log('Starting real-time scanner polling...'); // Debug log
+            this.progressPollingInterval = setInterval(function() {
+                self.checkScanProgress();
+            }, 500); // Poll every 500ms for better performance
+        };
+
+        SecurityScanner.prototype.checkScanProgress = function() {
+            var self = this;
+            
+            if (!this.isScanning) {
+                clearInterval(this.progressPollingInterval);
+                return;
+            }
+            
+            // Create XMLHttpRequest for progress check
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '?scan_progress=1&t=' + Date.now(), true); // Add timestamp to prevent caching
+            xhr.setRequestHeader('Cache-Control', 'no-cache');
+            
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var progress = JSON.parse(xhr.responseText);
+                            console.log('Progress update:', progress); // Debug log
+                            self.updateRealTimeProgress(progress);
+                        } catch (e) {
+                            console.log('Progress parse error:', e, xhr.responseText.substring(0, 100));
+                        }
+                    } else {
+                        console.log('Progress request failed:', xhr.status, xhr.statusText);
+                    }
+                }
+            };
+            
+            xhr.onerror = function() {
+                console.log('Progress request error');
+            };
+            
+            xhr.send();
+        };
+
+        SecurityScanner.prototype.updateRealTimeProgress = function(progress) {
+            // Update scanner content with current file
+            if (progress.current_file && progress.is_scanning) {
+                this.addRealTimeFile(progress.current_file, progress.scanned_count);
+            }
+            
+            // Update stats
+            this.scannedFiles = progress.scanned_count || this.scannedFiles;
+            this.updateStats();
+            
+            // Update progress bar
+            var progressBar = document.getElementById('progressBar');
+            var progressPercentage = document.getElementById('progressPercentage');
+            var currentAction = document.getElementById('currentAction');
+            
+            if (progressBar && progress.percentage !== undefined) {
+                progressBar.style.width = progress.percentage + '%';
+                progressPercentage.textContent = Math.round(progress.percentage) + '%';
+            }
+            
+            if (currentAction && progress.current_file) {
+                var fileName = progress.current_file.split('/').pop();
+                currentAction.innerHTML = '<i class="fas fa-spinner pulse" style="color: var(--primary-blue);"></i> ' + 
+                                        'Quét: ' + fileName;
+            }
+            
+            // Check if scan completed
+            if (progress.completed || !progress.is_scanning) {
+                clearInterval(this.progressPollingInterval);
+            }
+        };
+
+        SecurityScanner.prototype.addRealTimeFile = function(filePath, scanCount) {
+            var scannerContent = document.getElementById('scannerContent');
+            
+            // Clear "empty" state if exists
+            if (scannerContent.querySelector('.scanner-empty')) {
+                scannerContent.innerHTML = '';
+            }
+            
+            // Create file item
+            var fileItem = document.createElement('div');
+            fileItem.className = 'file-item slideIn';
+            
+            // Determine if file is suspicious based on path patterns
+            var isSuspicious = this.isFileSuspicious(filePath);
+            var statusClass = isSuspicious ? 'status-suspicious' : 'status-clean';
+            var statusText = isSuspicious ? 'Checking...' : 'Clean';
+            var iconColor = isSuspicious ? 'var(--warning-text)' : 'var(--success-text)';
+            
+            fileItem.innerHTML = 
+                '<div class="file-icon">' +
+                    '<i class="fas fa-file-code" style="color: ' + iconColor + ';"></i>' +
+                '</div>' +
+                '<div class="file-path">' + filePath + '</div>' +
+                '<div class="file-status ' + statusClass + '">' +
+                    statusText +
+                '</div>' +
+                '<div class="scan-number" style="font-size: 0.6rem; color: var(--text-muted);">' +
+                    '#' + scanCount +
+                '</div>';
+            
+            scannerContent.appendChild(fileItem);
+            scannerContent.scrollTop = scannerContent.scrollHeight;
+            
+            // Keep only last 15 items for performance
+            while (scannerContent.children.length > 15) {
+                scannerContent.removeChild(scannerContent.firstChild);
+            }
+        };
+
+        SecurityScanner.prototype.isFileSuspicious = function(filePath) {
+            // Check for suspicious patterns
+            var suspiciousPatterns = [
+                'virus-files',
+                '.php.jpg',
+                '.php.png', 
+                '.php.gif',
+                'cache.php',
+                'eval',
+                'base64',
+                'shell_exec',
+                'admin/filemanager'
+            ];
+            
+            for (var i = 0; i < suspiciousPatterns.length; i++) {
+                if (filePath.indexOf(suspiciousPatterns[i]) !== -1) {
+                    return true;
+                }
+            }
+            
+            return false;
         };
 
         SecurityScanner.prototype.simulateProgress = function() {
@@ -1838,22 +2095,20 @@ function performAutoFix($scan_data) {
                                 var isCritical = (file.severity === 'critical' && file.category !== 'filemanager') || file.category === 'suspicious_file';
                                 var tooltipContent = self.generateTooltipContent(file.issues);
                                 var firstIssue = file.issues && file.issues.length > 0 ? file.issues[0] : null;
-                                var lineNumber = firstIssue ? firstIssue.line : 1;
                                 
                                 resultHtml += 
                                     '<div class="threat-item" ' +
                                          'data-bs-toggle="tooltip" ' +
                                          'data-bs-placement="top" ' +
                                          'data-bs-html="true" ' +
-                                         'title="' + tooltipContent + '" ' +
-                                         'onclick="scanner.openFileInEditor(\'' + file.path + '\', ' + lineNumber + ')">' +
+                                         'title="' + tooltipContent + '">' +
                                         '<div class="threat-header">' +
                                             '<div class="threat-path">' +
                                                 '<i class="fas fa-file-code"></i> ' + file.path +
                                                 (firstIssue ? ' <span style="color: var(--warning-text); font-size: 0.7rem;">(dòng ' + firstIssue.line + ')</span>' : '') +
                                             '</div>' +
                                             (isCritical ? 
-                                                '<button class="delete-btn" onclick="event.stopPropagation(); scanner.deleteSingleFile(\'' + file.path + '\', ' + file.index + ')">' +
+                                                '<button class="delete-btn" onclick="scanner.deleteSingleFile(\'' + file.path + '\', ' + file.index + ')">' +
                                                     '<i class="fas fa-trash-alt"></i> Xóa' +
                                                 '</button>' 
                                                 : '') +
@@ -1906,61 +2161,7 @@ function performAutoFix($scan_data) {
             return content.replace(/"/g, '&quot;');
         };
 
-        SecurityScanner.prototype.openFileInEditor = function(filePath, lineNumber) {
-            var self = this;
-            
-            // Convert to absolute path
-            var absolutePath = window.location.protocol + '//' + window.location.host + window.location.pathname.replace(/\/[^\/]*$/, '/') + filePath.replace('./', '');
-            
-            // Try different methods to open file
-            var methods = [
-                // Method 1: VS Code protocol
-                function() {
-                    var vscodeUrl = 'vscode://file/' + absolutePath.replace('http://', '').replace('https://', '') + ':' + lineNumber;
-                    window.open(vscodeUrl, '_blank');
-                },
-                
-                // Method 2: File protocol  
-                function() {
-                    window.open('file:///' + absolutePath.replace('http://', '').replace('https://', ''), '_blank');
-                },
-                
-                // Method 3: Copy path to clipboard
-                function() {
-                    var textArea = document.createElement('textarea');
-                    textArea.value = filePath + ' (line ' + lineNumber + ')';
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(textArea);
-                    
-                    Swal.fire({
-                        icon: 'info',
-                        title: 'Đã copy đường dẫn!',
-                        html: '<div style="text-align: left;">' +
-                              '<strong>File:</strong> ' + filePath + '<br>' +
-                              '<strong>Dòng:</strong> ' + lineNumber + '<br><br>' +
-                              '<small>Để mở trong VS Code, dán đường dẫn vào terminal:<br>' +
-                              '<code style="background: #f0f0f0; padding: 2px;">code "' + filePath + '"</code></small>' +
-                              '</div>',
-                        confirmButtonColor: 'var(--primary-blue)',
-                        timer: 5000,
-                        timerProgressBar: true
-                    });
-                }
-            ];
-            
-            // Try first method, fallback to others
-            try {
-                methods[0]();
-                setTimeout(function() {
-                    // If VS Code didn't open, try other methods
-                    methods[2](); // Copy to clipboard as backup
-                }, 1000);
-            } catch (e) {
-                methods[2](); // Copy to clipboard
-            }
-        };
+        // Editor functions removed - only show warning tooltip now
 
         SecurityScanner.prototype.displayError = function(message) {
             var resultsPanel = document.getElementById('resultsPanel');
@@ -1984,6 +2185,7 @@ function performAutoFix($scan_data) {
             
             clearInterval(this.speedInterval);
             clearInterval(this.fileSimulationInterval);
+            clearInterval(this.progressPollingInterval); // Stop real-time polling
             
             setTimeout(function() {
                 var scanBtn = document.getElementById('scanBtn');
@@ -1991,6 +2193,13 @@ function performAutoFix($scan_data) {
                 scanBtn.innerHTML = '<i class="fas fa-redo"></i> Quét Lại';
                 document.getElementById('progressSection').classList.remove('active');
                 self.isScanning = false;
+                
+                // Update final scanner message
+                var currentAction = document.getElementById('currentAction');
+                if (currentAction) {
+                    currentAction.innerHTML = '<i class="fas fa-check-circle" style="color: var(--success-text);"></i> ' + 
+                                            'Scan hoàn tất!';
+                }
             }, 1000);
         };
 
@@ -2255,78 +2464,7 @@ function performAutoFix($scan_data) {
             xhr.send(JSON.stringify(this.lastScanData));
         };
 
-        SecurityScanner.prototype.showInlineEditor = function(filePath, lineNumber, issuePattern) {
-            var self = this;
-            
-            Swal.fire({
-                title: 'Quick Fix Editor',
-                html: '<div style="text-align: left;">' +
-                      '<p><strong>File:</strong> ' + filePath + '</p>' +
-                      '<p><strong>Dòng:</strong> ' + lineNumber + '</p>' +
-                      '<p><strong>Pattern:</strong> <code style="background: #f0f0f0; padding: 2px;">' + issuePattern + '</code></p>' +
-                      '<div style="margin: 10px 0;">' +
-                      '<label style="display: block; margin-bottom: 5px;"><strong>Quick Actions:</strong></label>' +
-                      '<button onclick="scanner.quickFixSuggestion(\'' + issuePattern + '\')" style="margin: 2px; padding: 5px 10px; background: var(--primary-blue); color: white; border: none; border-radius: 4px; cursor: pointer;">Gợi ý sửa</button>' +
-                      '<button onclick="scanner.openFileInEditor(\'' + filePath + '\', ' + lineNumber + ')" style="margin: 2px; padding: 5px 10px; background: var(--success-text); color: white; border: none; border-radius: 4px; cursor: pointer;">Mở VS Code</button>' +
-                      '</div>' +
-                      '</div>',
-                showCancelButton: true,
-                confirmButtonText: 'Đóng',
-                cancelButtonText: 'Copy Path',
-                confirmButtonColor: 'var(--primary-blue)',
-                cancelButtonColor: 'var(--text-light)'
-            }).then(function(result) {
-                if (result.dismiss === Swal.DismissReason.cancel) {
-                    // Copy path to clipboard
-                    var textArea = document.createElement('textarea');
-                    textArea.value = filePath + ' (line ' + lineNumber + ')';
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(textArea);
-                    
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Đã copy!',
-                        text: 'Đường dẫn file đã được copy vào clipboard',
-                        timer: 2000,
-                        timerProgressBar: true
-                    });
-                }
-            });
-        };
-
-        SecurityScanner.prototype.quickFixSuggestion = function(pattern) {
-            var suggestions = {
-                'eval(': 'NGUY HIỂM! Thay thế bằng các function an toàn khác. Eval() có thể execute code độc hại.',
-                'base64_decode(': 'Kiểm tra input trước khi decode. Sử dụng validation và sanitization.',
-                'exec(': 'Thay thế bằng escapeshellarg() và escapeshellcmd() để tránh command injection.',
-                'system(': 'Sử dụng proc_open() hoặc exec() với proper validation.',
-                'shell_exec(': 'Validate input nghiêm ngặt. Sử dụng whitelist các command cho phép.',
-                'move_uploaded_file(': 'Thêm validation file type, size, và rename file upload.',
-                'file_get_contents(': 'Validate URL/path. Sử dụng curl cho remote URLs.',
-                'file_put_contents(': 'Validate path và content. Đặt proper file permissions.',
-                '$_GET': 'Sanitize input với filter_var() hoặc htmlspecialchars().',
-                '$_POST': 'Validate và sanitize POST data. Sử dụng prepared statements cho DB.',
-                '$_REQUEST': 'Tránh sử dụng $_REQUEST. Dùng $_GET hoặc $_POST cụ thể.'
-            };
-            
-            var suggestion = suggestions[pattern] || 'Không có gợi ý cụ thể cho pattern này. Hãy kiểm tra manual.';
-            
-            Swal.fire({
-                icon: 'info',
-                title: 'Gợi ý sửa lỗi',
-                html: '<div style="text-align: left;">' +
-                      '<p><strong>Pattern:</strong> <code style="background: #f0f0f0; padding: 2px;">' + pattern + '</code></p>' +
-                      '<p><strong>Gợi ý:</strong></p>' +
-                      '<div style="background: #f9f9f9; padding: 10px; border-radius: 4px; margin: 10px 0;">' +
-                      suggestion +
-                      '</div>' +
-                      '</div>',
-                confirmButtonColor: 'var(--primary-blue)',
-                confirmButtonText: 'Đã hiểu'
-            });
-        };
+        // Quick fix functions removed
 
         // Initialize scanner when page loads
         var scanner;
