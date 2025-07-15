@@ -12,6 +12,418 @@ if (version_compare(PHP_VERSION, '5.6.0', '<')) {
     die('This scanner requires PHP 5.6 or higher. Current version: ' . PHP_VERSION);
 }
 
+// ========== CẤU HÌNH TỰ ĐỘNG QUÉT VÀ EMAIL ==========
+class SecurityScanConfig {
+    // Cấu hình email
+    const EMAIL_TO = 'your-email@gmail.com'; // THAY ĐỔI EMAIL CỦA BẠN
+    const EMAIL_FROM = 'security-scanner@yourdomain.com';
+    const EMAIL_FROM_NAME = 'Hiệp Security Scanner';
+    
+    // Cấu hình SMTP (nếu cần)
+    const SMTP_HOST = 'smtp.gmail.com';
+    const SMTP_PORT = 587;
+    const SMTP_USERNAME = 'your-email@gmail.com';
+    const SMTP_PASSWORD = 'your-app-password'; // App password cho Gmail
+    const SMTP_SECURE = 'tls';
+    
+    // Cấu hình auto scan
+    const AUTO_SCAN_ENABLED = true;
+    const AUTO_SCAN_INTERVAL = 3600; // 1 giờ (3600 giây)
+    const AUTO_SCAN_CRITICAL_ONLY = true; // Chỉ gửi email khi có critical threats
+    const AUTO_SCAN_MAX_FILES = 50000; // Giới hạn số file quét mỗi lần
+    
+    // Cấu hình lưu trữ
+    const SCAN_HISTORY_DAYS = 30; // Lưu lịch sử quét 30 ngày
+    const LOG_RETENTION_DAYS = 7; // Lưu log 7 ngày
+}
+
+// ========== TỰ ĐỘNG QUÉT THEO LỊCH ==========
+if (isset($_GET['auto_scan']) && $_GET['auto_scan'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    
+    // Kiểm tra thời gian quét cuối cùng
+    $last_scan_file = './logs/last_auto_scan.txt';
+    $current_time = time();
+    
+    if (file_exists($last_scan_file)) {
+        $last_scan_time = (int)file_get_contents($last_scan_file);
+        $time_since_last = $current_time - $last_scan_time;
+        
+        if ($time_since_last < SecurityScanConfig::AUTO_SCAN_INTERVAL) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Scan interval chưa đủ thời gian. Còn lại: ' . (SecurityScanConfig::AUTO_SCAN_INTERVAL - $time_since_last) . ' giây'
+            ]);
+            exit;
+        }
+    }
+    
+    // Ghi lại thời gian quét
+    file_put_contents($last_scan_file, $current_time);
+    
+    // Thực hiện quét tự động
+    $autoScanResult = performAutoScan();
+    
+    echo json_encode($autoScanResult);
+    exit;
+}
+
+// ========== EMAIL NOTIFICATION SYSTEM ==========
+function sendSecurityAlert($scanResults) {
+    if (!SecurityScanConfig::AUTO_SCAN_ENABLED) {
+        return false;
+    }
+    
+    $criticalCount = $scanResults['critical_count'] ?? 0;
+    $suspiciousCount = $scanResults['suspicious_count'] ?? 0;
+    $scannedFiles = $scanResults['scanned_files'] ?? 0;
+    
+    // Chỉ gửi email nếu có critical threats hoặc quá nhiều suspicious files
+    if ($criticalCount === 0 && $suspiciousCount < 10) {
+        return false;
+    }
+    
+    $subject = "🚨 CẢNH BÁO BẢO MẬT: Phát hiện " . $criticalCount . " threats nghiêm trọng";
+    
+    $htmlBody = generateSecurityEmailTemplate($scanResults);
+    
+    // Sử dụng SMTP class có sẵn trong thư mục smtp/
+    return sendEmailSMTP($subject, $htmlBody, $scanResults);
+}
+
+function generateSecurityEmailTemplate($scanResults) {
+    $criticalCount = $scanResults['critical_count'] ?? 0;
+    $suspiciousCount = $scanResults['suspicious_count'] ?? 0;
+    $scannedFiles = $scanResults['scanned_files'] ?? 0;
+    $timestamp = date('d/m/Y H:i:s');
+    $domain = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    
+    $html = '<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #ff4757, #ff3838); color: white; padding: 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .content { padding: 20px; }
+        .alert-box { background: #fee; border: 1px solid #fcc; border-radius: 4px; padding: 15px; margin: 15px 0; }
+        .stats { display: flex; justify-content: space-around; margin: 20px 0; }
+        .stat { text-align: center; padding: 10px; background: #f8f9fa; border-radius: 4px; }
+        .stat-number { font-size: 24px; font-weight: bold; color: #ff4757; }
+        .stat-label { font-size: 12px; color: #666; margin-top: 5px; }
+        .file-list { background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 15px 0; }
+        .file-item { padding: 8px; border-bottom: 1px solid #eee; font-family: monospace; font-size: 12px; }
+        .critical { color: #ff4757; font-weight: bold; }
+        .footer { background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚨 CẢNH BÁO BẢO MẬT</h1>
+            <p>Hiệp Security Scanner - ' . $domain . '</p>
+        </div>
+        
+        <div class="content">
+            <div class="alert-box">
+                <strong>⚠️ PHÁT HIỆN THREATS NGHIÊM TRỌNG</strong><br>
+                Hệ thống đã phát hiện <span class="critical">' . $criticalCount . ' threats nghiêm trọng</span> 
+                trong tổng số <strong>' . $suspiciousCount . ' files đáng ngờ</strong> từ ' . $scannedFiles . ' files đã quét.
+            </div>
+            
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number">' . $scannedFiles . '</div>
+                    <div class="stat-label">Files Quét</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">' . $criticalCount . '</div>
+                    <div class="stat-label">Critical Threats</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">' . $suspiciousCount . '</div>
+                    <div class="stat-label">Suspicious Files</div>
+                </div>
+            </div>';
+    
+    // Thêm danh sách files critical
+    if (isset($scanResults['critical_files']) && !empty($scanResults['critical_files'])) {
+        $html .= '<div class="file-list">
+                    <h3>🔥 Files Nguy Hiểm Cần Xử Lý Ngay:</h3>';
+        
+        $criticalFiles = array_slice($scanResults['critical_files'], 0, 10); // Chỉ show 10 files đầu
+        foreach ($criticalFiles as $file) {
+            $html .= '<div class="file-item critical">🚨 ' . htmlspecialchars($file) . '</div>';
+        }
+        
+        if (count($scanResults['critical_files']) > 10) {
+            $html .= '<div class="file-item">... và ' . (count($scanResults['critical_files']) - 10) . ' files khác</div>';
+        }
+        
+        $html .= '</div>';
+    }
+    
+    $html .= '
+            <div style="margin: 20px 0; padding: 15px; background: #e8f4fd; border-radius: 4px;">
+                <h3>📋 Khuyến Nghị Xử Lý:</h3>
+                <ul>
+                    <li><strong>Ngay lập tức:</strong> Truy cập scanner để xem chi tiết và xóa files nguy hiểm</li>
+                    <li><strong>Kiểm tra:</strong> Backup hệ thống trước khi thực hiện thay đổi</li>
+                    <li><strong>Theo dõi:</strong> Quét lại sau khi xử lý để đảm bảo an toàn</li>
+                </ul>
+            </div>
+            
+            <div style="text-align: center; margin: 20px 0;">
+                <a href="http://' . $domain . '/security_scan.php" 
+                   style="background: #4A90E2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
+                    🔧 Xử Lý Ngay
+                </a>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Hiệp Security Scanner</strong> - Quét tự động lúc ' . $timestamp . '</p>
+            <p>Phát triển bởi <a href="https://www.facebook.com/G.N.S.L.7/">Hiệp Nguyễn</a></p>
+        </div>
+    </div>
+</body>
+</html>';
+    
+    return $html;
+}
+
+function sendEmailSMTP($subject, $htmlBody, $scanResults) {
+    // Sử dụng PHPMailer có sẵn trong thư mục smtp/
+    if (!file_exists('./smtp/class.phpmailer.php')) {
+        logSecurityEvent("SMTP class not found", 'ERROR');
+        return false;
+    }
+    
+    require_once('./smtp/class.phpmailer.php');
+    require_once('./smtp/class.smtp.php');
+    
+    $mail = new PHPMailer();
+    
+    try {
+        // Cấu hình SMTP
+        $mail->isSMTP();
+        $mail->Host = SecurityScanConfig::SMTP_HOST;
+        $mail->SMTPAuth = true;
+        $mail->Username = SecurityScanConfig::SMTP_USERNAME;
+        $mail->Password = SecurityScanConfig::SMTP_PASSWORD;
+        $mail->SMTPSecure = SecurityScanConfig::SMTP_SECURE;
+        $mail->Port = SecurityScanConfig::SMTP_PORT;
+        $mail->CharSet = 'UTF-8';
+        
+        // Cấu hình email
+        $mail->setFrom(SecurityScanConfig::EMAIL_FROM, SecurityScanConfig::EMAIL_FROM_NAME);
+        $mail->addAddress(SecurityScanConfig::EMAIL_TO);
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body = $htmlBody;
+        
+        // Gửi email
+        $result = $mail->send();
+        
+        if ($result) {
+            logSecurityEvent("Email alert sent successfully to " . SecurityScanConfig::EMAIL_TO, 'SUCCESS');
+            return true;
+        } else {
+            logSecurityEvent("Failed to send email: " . $mail->ErrorInfo, 'ERROR');
+            return false;
+        }
+        
+    } catch (Exception $e) {
+        logSecurityEvent("Email error: " . $e->getMessage(), 'ERROR');
+        return false;
+    }
+}
+
+// ========== TỰ ĐỘNG QUÉT VÀ XỬ LÝ ==========
+function performAutoScan() {
+    $startTime = time();
+    
+    try {
+        // Giới hạn thời gian và memory cho auto scan
+        set_time_limit(300); // 5 phút
+        ini_set('memory_limit', '512M');
+        
+        // Thực hiện quét với giới hạn files
+        $scanResult = performLimitedScan(SecurityScanConfig::AUTO_SCAN_MAX_FILES);
+        
+        // Ghi log
+        logSecurityEvent("Auto scan completed: " . $scanResult['scanned_files'] . " files, " . 
+                        $scanResult['suspicious_count'] . " threats found", 'INFO');
+        
+        // Gửi email nếu có threat nghiêm trọng
+        if ($scanResult['critical_count'] > 0 || $scanResult['suspicious_count'] > 10) {
+            sendSecurityAlert($scanResult);
+        }
+        
+        // Lưu kết quả quét
+        saveScanHistory($scanResult);
+        
+        return [
+            'success' => true,
+            'scan_time' => time() - $startTime,
+            'result' => $scanResult
+        ];
+        
+    } catch (Exception $e) {
+        logSecurityEvent("Auto scan error: " . $e->getMessage(), 'ERROR');
+        return [
+            'success' => false,
+            'error' => $e->getMessage()
+        ];
+    }
+}
+
+function performLimitedScan($maxFiles) {
+    // Patterns giống như scan chính nhưng tối ưu hóa
+    $criticalPatterns = [
+        'eval(' => 'Code execution vulnerability',
+        'base64_decode(' => 'Encoded payload execution',
+        'system(' => 'Direct system call',
+        'exec(' => 'System command execution'
+    ];
+    
+    $suspiciousFiles = [];
+    $criticalFiles = [];
+    $scannedFiles = 0;
+    
+    // Quét theo thứ tự ưu tiên
+    $priorityDirs = ['./virus-files', './uploads', './admin/filemanager', './sources'];
+    
+    foreach ($priorityDirs as $dir) {
+        if (!is_dir($dir)) continue;
+        
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::LEAVES_ONLY
+        );
+        
+        foreach ($iterator as $file) {
+            if ($scannedFiles >= $maxFiles) break 2;
+            
+            if ($file->isFile() && strtolower($file->getExtension()) === 'php') {
+                $filePath = $file->getPathname();
+                
+                // Kiểm tra nhanh critical patterns
+                $content = file_get_contents($filePath);
+                if ($content !== false) {
+                    $hasCritical = false;
+                    foreach ($criticalPatterns as $pattern => $description) {
+                        if (strpos($content, $pattern) !== false) {
+                            $criticalFiles[] = $filePath;
+                            $suspiciousFiles[] = [
+                                'path' => $filePath,
+                                'severity' => 'critical',
+                                'pattern' => $pattern,
+                                'description' => $description
+                            ];
+                            $hasCritical = true;
+                            break;
+                        }
+                    }
+                }
+                
+                $scannedFiles++;
+                
+                // Ngưng quét nếu quá nhiều critical files
+                if (count($criticalFiles) >= 50) {
+                    break 2;
+                }
+            }
+        }
+    }
+    
+    return [
+        'success' => true,
+        'scanned_files' => $scannedFiles,
+        'suspicious_count' => count($suspiciousFiles),
+        'critical_count' => count($criticalFiles),
+        'suspicious_files' => $suspiciousFiles,
+        'critical_files' => $criticalFiles,
+        'timestamp' => date('Y-m-d H:i:s')
+    ];
+}
+
+function saveScanHistory($scanResult) {
+    $historyFile = './logs/scan_history.json';
+    $history = [];
+    
+    if (file_exists($historyFile)) {
+        $content = file_get_contents($historyFile);
+        if ($content) {
+            $history = json_decode($content, true) ?: [];
+        }
+    }
+    
+    // Thêm kết quả mới
+    $history[] = [
+        'timestamp' => time(),
+        'scanned_files' => $scanResult['scanned_files'],
+        'suspicious_count' => $scanResult['suspicious_count'],
+        'critical_count' => $scanResult['critical_count'],
+        'scan_type' => 'auto'
+    ];
+    
+    // Giữ lại chỉ 30 ngày gần nhất
+    $cutoff = time() - (SecurityScanConfig::SCAN_HISTORY_DAYS * 24 * 3600);
+    $history = array_filter($history, function($item) use ($cutoff) {
+        return $item['timestamp'] > $cutoff;
+    });
+    
+    // Lưu lại
+    file_put_contents($historyFile, json_encode($history, JSON_PRETTY_PRINT));
+}
+
+function logSecurityEvent($message, $level = 'INFO') {
+    $logFile = './logs/security_events_' . date('Y-m-d') . '.log';
+    $timestamp = date('Y-m-d H:i:s');
+    $clientIP = getClientIP();
+    
+    $logEntry = "[$timestamp] [$level] $message - IP: $clientIP\n";
+    
+    if (!file_exists('./logs')) {
+        mkdir('./logs', 0755, true);
+    }
+    
+    file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
+}
+
+// ========== CRON JOB STATUS ==========
+if (isset($_GET['cron_status']) && $_GET['cron_status'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    
+    $lastScanFile = './logs/last_auto_scan.txt';
+    $historyFile = './logs/scan_history.json';
+    
+    $status = [
+        'auto_scan_enabled' => SecurityScanConfig::AUTO_SCAN_ENABLED,
+        'scan_interval' => SecurityScanConfig::AUTO_SCAN_INTERVAL,
+        'last_scan_time' => 0,
+        'next_scan_time' => 0,
+        'recent_scans' => []
+    ];
+    
+    if (file_exists($lastScanFile)) {
+        $lastTime = (int)file_get_contents($lastScanFile);
+        $status['last_scan_time'] = $lastTime;
+        $status['next_scan_time'] = $lastTime + SecurityScanConfig::AUTO_SCAN_INTERVAL;
+    }
+    
+    if (file_exists($historyFile)) {
+        $history = json_decode(file_get_contents($historyFile), true) ?: [];
+        $status['recent_scans'] = array_slice($history, -10); // 10 lần quét gần nhất
+    }
+    
+    echo json_encode($status);
+    exit;
+}
+
 // Compatibility function for getting client IP
 function getClientIP() {
     if (isset($_SERVER['REMOTE_ADDR'])) {
@@ -2484,9 +2896,27 @@ function performAutoFix($scan_data) {
                     <h3 class="card-title">Bảng Điều Khiển Quét</h3>
                 </div>
                 
+                <!-- Auto Scan Status -->
+                <div id="autoScanStatus" class="alert alert-info" style="margin-bottom: 12px; padding: 8px 12px; font-size: 0.8rem;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-robot"></i>
+                        <span id="autoScanStatusText">Đang kiểm tra trạng thái tự động quét...</span>
+                        <button id="toggleAutoScan" class="btn btn-sm btn-outline-primary" style="margin-left: auto; font-size: 0.7rem;">
+                            <i class="fas fa-toggle-on"></i> Bật/Tắt
+                        </button>
+                    </div>
+                    <div id="autoScanDetails" style="margin-top: 6px; font-size: 0.7rem; color: var(--text-muted);">
+                        <div id="lastScanTime">Lần quét cuối: Chưa quét</div>
+                        <div id="nextScanTime">Lần quét tiếp: Chưa có lịch</div>
+                    </div>
+                </div>
+                
                 <div class="scan-controls">
                     <button id="scanBtn" class="scan-btn">
                         <i class="fas fa-search"></i> Bắt Đầu Quét
+                    </button>
+                    <button id="autoScanBtn" class="scan-btn" style="background: linear-gradient(135deg, #FF8C42, #FF6B35); margin-left: 8px;">
+                        <i class="fas fa-robot"></i> Quét Tự Động
                     </button>
                     <div class="dropdown d-inline-block">
                         <button class="autofix-btn dropdown-toggle" type="button" id="fixDropdown" data-bs-toggle="dropdown" aria-expanded="false" disabled>
@@ -3696,13 +4126,253 @@ function performAutoFix($scan_data) {
 
         // Quick fix functions removed
 
+        // ========== AUTO SCAN MANAGER ==========
+        var AutoScanManager = function() {
+            this.statusInterval = null;
+            this.autoScanEnabled = false;
+            this.init();
+        };
+
+        AutoScanManager.prototype.init = function() {
+            var self = this;
+            
+            // Bind events
+            document.getElementById('autoScanBtn').addEventListener('click', function() {
+                self.performAutoScan();
+            });
+            
+            document.getElementById('toggleAutoScan').addEventListener('click', function() {
+                self.toggleAutoScan();
+            });
+            
+            // Check status on load
+            this.checkAutoScanStatus();
+            
+            // Auto refresh status every 30 seconds
+            this.statusInterval = setInterval(function() {
+                self.checkAutoScanStatus();
+            }, 30000);
+        };
+
+        AutoScanManager.prototype.checkAutoScanStatus = function() {
+            var self = this;
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '?cron_status=1&t=' + Date.now(), true);
+            xhr.setRequestHeader('Cache-Control', 'no-cache');
+            
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        self.updateAutoScanStatus(data);
+                    } catch (e) {
+                        console.error('Auto scan status error:', e);
+                    }
+                }
+            };
+            
+            xhr.send();
+        };
+
+        AutoScanManager.prototype.updateAutoScanStatus = function(data) {
+            var statusText = document.getElementById('autoScanStatusText');
+            var statusDiv = document.getElementById('autoScanStatus');
+            var lastScanTime = document.getElementById('lastScanTime');
+            var nextScanTime = document.getElementById('nextScanTime');
+            
+            this.autoScanEnabled = data.auto_scan_enabled;
+            
+            if (data.auto_scan_enabled) {
+                statusText.textContent = 'Tự động quét: ĐANG HOẠT ĐỘNG';
+                statusDiv.className = 'alert alert-success';
+                statusDiv.style.marginBottom = '12px';
+                statusDiv.style.padding = '8px 12px';
+                statusDiv.style.fontSize = '0.8rem';
+                
+                // Update times
+                if (data.last_scan_time > 0) {
+                    var lastTime = new Date(data.last_scan_time * 1000);
+                    lastScanTime.textContent = 'Lần quét cuối: ' + this.formatDateTime(lastTime);
+                } else {
+                    lastScanTime.textContent = 'Lần quét cuối: Chưa quét';
+                }
+                
+                if (data.next_scan_time > 0) {
+                    var nextTime = new Date(data.next_scan_time * 1000);
+                    var now = new Date();
+                    
+                    if (nextTime > now) {
+                        nextScanTime.textContent = 'Lần quét tiếp: ' + this.formatDateTime(nextTime);
+                    } else {
+                        nextScanTime.textContent = 'Lần quét tiếp: Sẵn sàng quét';
+                    }
+                } else {
+                    nextScanTime.textContent = 'Lần quét tiếp: Chưa có lịch';
+                }
+                
+                // Show recent scans
+                if (data.recent_scans && data.recent_scans.length > 0) {
+                    var recentScan = data.recent_scans[data.recent_scans.length - 1];
+                    var timeAgo = this.getTimeAgo(recentScan.timestamp);
+                    
+                    var detailsDiv = document.getElementById('autoScanDetails');
+                    detailsDiv.innerHTML = 
+                        '<div>Lần quét cuối: ' + this.formatDateTime(new Date(recentScan.timestamp * 1000)) + ' (' + timeAgo + ')</div>' +
+                        '<div>Kết quả: ' + recentScan.scanned_files + ' files, ' + recentScan.critical_count + ' critical threats</div>';
+                }
+                
+            } else {
+                statusText.textContent = 'Tự động quét: TẮT';
+                statusDiv.className = 'alert alert-warning';
+                statusDiv.style.marginBottom = '12px';
+                statusDiv.style.padding = '8px 12px';
+                statusDiv.style.fontSize = '0.8rem';
+                
+                lastScanTime.textContent = 'Lần quét cuối: Chưa quét (Auto scan tắt)';
+                nextScanTime.textContent = 'Lần quét tiếp: Chưa có lịch (Auto scan tắt)';
+            }
+        };
+
+        AutoScanManager.prototype.formatDateTime = function(date) {
+            return date.toLocaleString('vi-VN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        };
+
+        AutoScanManager.prototype.getTimeAgo = function(timestamp) {
+            var now = Math.floor(Date.now() / 1000);
+            var diff = now - timestamp;
+            
+            if (diff < 60) return diff + ' giây trước';
+            if (diff < 3600) return Math.floor(diff / 60) + ' phút trước';
+            if (diff < 86400) return Math.floor(diff / 3600) + ' giờ trước';
+            return Math.floor(diff / 86400) + ' ngày trước';
+        };
+
+        AutoScanManager.prototype.performAutoScan = function() {
+            var self = this;
+            var autoScanBtn = document.getElementById('autoScanBtn');
+            
+            autoScanBtn.disabled = true;
+            autoScanBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang Quét Tự Động...';
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '?auto_scan=1&t=' + Date.now(), true);
+            xhr.setRequestHeader('Cache-Control', 'no-cache');
+            
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            self.handleAutoScanResult(data);
+                        } catch (e) {
+                            self.handleAutoScanError('Lỗi parse JSON: ' + e.message);
+                        }
+                    } else {
+                        self.handleAutoScanError('Lỗi HTTP: ' + xhr.status);
+                    }
+                    
+                    // Reset button
+                    autoScanBtn.disabled = false;
+                    autoScanBtn.innerHTML = '<i class="fas fa-robot"></i> Quét Tự Động';
+                }
+            };
+            
+            xhr.send();
+        };
+
+        AutoScanManager.prototype.handleAutoScanResult = function(data) {
+            if (data.success) {
+                var result = data.result;
+                var scanTime = data.scan_time;
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Quét Tự Động Thành Công!',
+                    html: 
+                        '<div style="text-align: left;">' +
+                        '<strong>📊 Kết quả:</strong><br>' +
+                        '• Files đã quét: ' + result.scanned_files + '<br>' +
+                        '• Threats phát hiện: ' + result.suspicious_count + '<br>' +
+                        '• Critical threats: ' + result.critical_count + '<br>' +
+                        '• Thời gian quét: ' + scanTime + ' giây<br><br>' +
+                        (result.critical_count > 0 ? 
+                            '<strong style="color: #ff4757;">⚠️ Đã gửi email cảnh báo!</strong><br>' +
+                            'Kiểm tra email để xem chi tiết threats nghiêm trọng.' :
+                            '<strong style="color: #2ed573;">✅ Hệ thống an toàn!</strong><br>' +
+                            'Không có threats nghiêm trọng nào được phát hiện.'
+                        ) +
+                        '</div>',
+                    confirmButtonColor: 'var(--primary-blue)',
+                    confirmButtonText: 'Xem Chi Tiết',
+                    showCancelButton: true,
+                    cancelButtonText: 'Đóng'
+                }).then(function(result) {
+                    if (result.isConfirmed) {
+                        // Trigger full scan to show details
+                        if (window.scanner) {
+                            window.scanner.startScan();
+                        }
+                    }
+                });
+                
+                // Update status
+                this.checkAutoScanStatus();
+                
+            } else {
+                this.handleAutoScanError(data.error || 'Unknown error');
+            }
+        };
+
+        AutoScanManager.prototype.handleAutoScanError = function(error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Lỗi Quét Tự Động',
+                text: error,
+                confirmButtonColor: 'var(--danger-text)'
+            });
+        };
+
+        AutoScanManager.prototype.toggleAutoScan = function() {
+            // This would be implemented to toggle auto scan on/off
+            // For now, just show info
+            Swal.fire({
+                icon: 'info',
+                title: 'Cấu Hình Tự Động Quét',
+                html: 
+                    '<div style="text-align: left;">' +
+                    '<strong>🔧 Để bật/tắt tự động quét:</strong><br><br>' +
+                    '1. Chỉnh sửa file <code>security_scan.php</code><br>' +
+                    '2. Tìm dòng <code>const AUTO_SCAN_ENABLED = true;</code><br>' +
+                    '3. Đổi thành <code>false</code> để tắt<br><br>' +
+                    '<strong>⚙️ Cấu hình CRON Job:</strong><br>' +
+                    'Thêm vào crontab: <br>' +
+                    '<code>0 */1 * * * curl -s "http://yourdomain.com/security_scan.php?auto_scan=1"</code><br><br>' +
+                    '<strong>📧 Cấu hình Email:</strong><br>' +
+                    'Chỉnh sửa email trong class <code>SecurityScanConfig</code>' +
+                    '</div>',
+                confirmButtonColor: 'var(--primary-blue)',
+                confirmButtonText: 'Hiểu rồi'
+            });
+        };
+
         // Initialize scanner when page loads
         var scanner;
+        var autoScanManager;
         document.addEventListener('DOMContentLoaded', function() {
             scanner = new SecurityScanner();
+            autoScanManager = new AutoScanManager();
             
-            // Make scanner globally accessible
+            // Make globally accessible
             window.scanner = scanner;
+            window.autoScanManager = autoScanManager;
         });
     </script>
 </body>

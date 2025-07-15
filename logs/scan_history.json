@@ -1,0 +1,9 @@
+[
+    {
+        "timestamp": 1752593794,
+        "scanned_files": 94,
+        "suspicious_count": 9,
+        "critical_count": 9,
+        "scan_type": "auto"
+    }
+]
