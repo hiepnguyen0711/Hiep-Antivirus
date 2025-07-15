@@ -14,16 +14,17 @@ if (version_compare(PHP_VERSION, '5.6.0', '<')) {
 
 // ========== MULTI-WEBSITE SCANNER CONFIGURATION ==========
 class MultiWebsiteConfig {
-    // Cấu hình hosting paths - ĐIỀU CHỈNH CHO HOSTING CỦA BẠN
+    // Cấu hình hosting paths - CẤU HÌNH CHO HOSTINGER
     const HOSTING_PATHS = array(
-        '/public_html/',           // cPanel standard
-        '/htdocs/',               // XAMPP/Local
-        '/domains/',              // Some hosting providers
-        '/var/www/',              // Linux hosting
-        '/home/user/public_html/', // User-specific path
+        '/domains/',              // Hostinger domains directory
+        '/public_html/',          // Hostinger main domain
+        '/home/*/domains/',       // Hostinger full path pattern
+        '/home/*/public_html/',   // Hostinger full path pattern
+        './domains/',             // Relative domains từ thư mục hiện tại
+        './public_html/',         // Relative public_html từ thư mục hiện tại
     );
     
-    // Patterns để detect website directories
+    // Patterns để detect website directories - HOSTINGER
     const WEBSITE_PATTERNS = array(
         '*.com',
         '*.net', 
@@ -31,16 +32,29 @@ class MultiWebsiteConfig {
         '*.info',
         '*.vn',
         '*.edu',
-        '*.gov'
+        '*.gov',
+        '*.xyz',
+        '*.online',
+        '*.store',
+        '*.tech',
+        '*.site',
+        'minhtanphat.vn'  // Domain chính từ hình ảnh
     );
     
-    // Exclude directories - KHÔNG QUÉT
+    // Exclude directories - KHÔNG QUÉT - HOSTINGER OPTIMIZED
     const EXCLUDE_DIRS = array(
+        'cache',        // Hostinger cache
+        'config',       // Hostinger config
+        'local',        // Hostinger local
+        'logs',         // Hostinger logs
+        'nvm',          // Node Version Manager
+        'ssh',          // SSH keys
+        'subversion',   // SVN
+        'trash',        // Trash bin
+        'wp-cli',       // WordPress CLI
         'cgi-bin',
-        'logs',
         'tmp',
         'temp',
-        'cache',
         'backup',
         'mail',
         'ftp',
@@ -121,10 +135,42 @@ class WebsiteDetector {
                     );
                     $this->logMessage("Found website: $item at $fullPath");
                 }
+                
+                // Hostinger specific: Check for subdirectories in domains/
+                if ($item === 'domains' || strpos($path, 'domains') !== false) {
+                    $this->scanDirectory($fullPath);
+                }
+            }
+            
+            // Hostinger: Check if public_html is a symlink to a domain
+            if ($item === 'public_html' && is_link($fullPath)) {
+                $target = readlink($fullPath);
+                if ($target && is_dir($target)) {
+                    $domainName = basename($target);
+                    if (!$this->websiteExists($domainName)) {
+                        $this->websites[] = array(
+                            'name' => $domainName . ' (main)',
+                            'path' => $target,
+                            'domain' => $domainName,
+                            'last_scan' => $this->getLastScanTime($target),
+                            'status' => 'pending'
+                        );
+                        $this->logMessage("Found main website: $domainName at $target");
+                    }
+                }
             }
         }
         
         closedir($handle);
+    }
+    
+    private function websiteExists($name) {
+        foreach ($this->websites as $website) {
+            if ($website['name'] === $name || $website['domain'] === $name) {
+                return true;
+            }
+        }
+        return false;
     }
     
     private function isWebsiteDirectory($path, $name) {
