@@ -36,6 +36,46 @@ if (isset($_GET['test']) && $_GET['test'] === '1') {
     exit;
 }
 
+// Get hosting sites endpoint
+if (isset($_GET['get_sites']) && $_GET['get_sites'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    
+    $json_flags = 0;
+    if (defined('JSON_UNESCAPED_UNICODE')) {
+        $json_flags = JSON_UNESCAPED_UNICODE;
+    }
+    
+    $sites = getHostingSites();
+    echo json_encode(array('sites' => $sites), $json_flags);
+    exit;
+}
+
+// Auto scan endpoint (for cron job)
+if (isset($_GET['auto_scan']) && $_GET['auto_scan'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    
+    try {
+        $result = performAutoScan();
+        echo json_encode($result);
+    } catch (Exception $e) {
+        echo json_encode(array('success' => false, 'error' => $e->getMessage()));
+    }
+    exit;
+}
+
+// Install cron job endpoint
+if (isset($_GET['install_cron']) && $_GET['install_cron'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    
+    try {
+        $result = installCronJob();
+        echo json_encode($result);
+    } catch (Exception $e) {
+        echo json_encode(array('success' => false, 'error' => $e->getMessage()));
+    }
+    exit;
+}
+
 // Delete malware files endpoint
 if (isset($_GET['delete_malware']) && $_GET['delete_malware'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
@@ -202,6 +242,10 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
         $json_flags = JSON_UNESCAPED_UNICODE;
     }
 
+    // Get scan parameters
+    $scan_site = isset($_GET['site']) ? $_GET['site'] : 'current';
+    $scan_all_sites = isset($_GET['all_sites']) && $_GET['all_sites'] === '1';
+    
     // Initialize progress file
     $progress_file = './logs/scan_progress.json';
     $initial_progress = array(
@@ -210,7 +254,9 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
         'total_estimate' => 100,
         'is_scanning' => true,
         'percentage' => 0,
-        'start_time' => time()
+        'start_time' => time(),
+        'scan_mode' => $scan_all_sites ? 'all_sites' : 'single_site',
+        'target_site' => $scan_site
     );
     @file_put_contents($progress_file, json_encode($initial_progress, $json_flags));
 
@@ -298,8 +344,36 @@ if (isset($_GET['scan']) && $_GET['scan'] === '1') {
             'mkdir(' => 'Directory creation'
         );
 
-        // Scan everything in current project only (unlimited comprehensive scan)
-        $directories = array('./'); // Scan chỉ trong thư mục dự án hiện tại
+        // Determine scan directories based on user selection
+        $directories = array();
+        
+        if ($scan_all_sites) {
+            // Scan all sites on hosting
+            $hosting_sites = getHostingSites();
+            foreach ($hosting_sites as $site) {
+                $directories[] = $site['path'];
+            }
+        } else {
+            // Scan specific site or current project
+            if ($scan_site === 'current') {
+                $directories = array('./'); // Current project only
+            } else {
+                // Scan specific site
+                $hosting_sites = getHostingSites();
+                foreach ($hosting_sites as $site) {
+                    if ($site['domain'] === $scan_site) {
+                        $directories[] = $site['path'];
+                        break;
+                    }
+                }
+                
+                // If site not found, default to current
+                if (empty($directories)) {
+                    $directories = array('./');
+                }
+            }
+        }
+        
         $suspicious_files = array();
         $critical_files = array();
         $severe_files = array();
@@ -961,6 +1035,309 @@ function performAutoFix($scan_data)
         'details' => $details
     );
 }
+
+// Function to detect hosting sites (DirectAdmin compatible)
+function getHostingSites()
+{
+    $sites = array();
+    $current_domain = '';
+    
+    // Try to get current domain
+    if (isset($_SERVER['HTTP_HOST'])) {
+        $current_domain = $_SERVER['HTTP_HOST'];
+    } elseif (isset($_SERVER['SERVER_NAME'])) {
+        $current_domain = $_SERVER['SERVER_NAME'];
+    }
+    
+    // Common hosting paths to check
+    $hosting_paths = array(
+        '/home/*/public_html/',
+        '/home/*/domains/',
+        '/usr/local/directadmin/data/users/*/domains/',
+        '/var/www/',
+        '/var/www/html/',
+        '/var/www/vhosts/',
+        '/home/*/www/',
+        '/home/*/htdocs/'
+    );
+    
+    // Get current document root
+    $document_root = $_SERVER['DOCUMENT_ROOT'];
+    $current_site = array(
+        'domain' => $current_domain,
+        'path' => $document_root,
+        'is_current' => true,
+        'size' => getDirSize($document_root),
+        'last_modified' => filemtime($document_root)
+    );
+    
+    $sites[] = $current_site;
+    
+    // Try to detect other sites
+    foreach ($hosting_paths as $path_pattern) {
+        $paths = glob($path_pattern, GLOB_ONLYDIR);
+        if ($paths) {
+            foreach ($paths as $path) {
+                if (is_dir($path) && is_readable($path)) {
+                    // Extract domain from path
+                    $domain = basename(dirname($path));
+                    
+                    // Skip if it's the current domain
+                    if ($domain === $current_domain || $path === $document_root) {
+                        continue;
+                    }
+                    
+                    // Check if it looks like a web directory
+                    if (file_exists($path . '/index.php') || file_exists($path . '/index.html')) {
+                        $sites[] = array(
+                            'domain' => $domain,
+                            'path' => $path,
+                            'is_current' => false,
+                            'size' => getDirSize($path),
+                            'last_modified' => filemtime($path)
+                        );
+                    }
+                }
+            }
+        }
+    }
+    
+    return $sites;
+}
+
+// Function to get directory size
+function getDirSize($path)
+{
+    $size = 0;
+    if (is_dir($path)) {
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path));
+        foreach ($iterator as $file) {
+            if ($file->isFile()) {
+                $size += $file->getSize();
+            }
+        }
+    }
+    return $size;
+}
+
+// Function to perform auto scan (for cron job)
+function performAutoScan()
+{
+    $sites = getHostingSites();
+    $total_threats = 0;
+    $scan_results = array();
+    
+    foreach ($sites as $site) {
+        // Perform scan for each site
+        $scan_result = performScanForSite($site['path']);
+        
+        if ($scan_result['threats_found'] > 0) {
+            $total_threats += $scan_result['threats_found'];
+            $scan_results[] = array(
+                'domain' => $site['domain'],
+                'path' => $site['path'],
+                'threats' => $scan_result['threats_found'],
+                'critical' => $scan_result['critical_count'],
+                'details' => $scan_result['suspicious_files']
+            );
+        }
+    }
+    
+    // If threats found, send email notification
+    if ($total_threats > 0) {
+        sendThreatNotification($scan_results);
+    }
+    
+    // Log scan results
+    $log_data = date('Y-m-d H:i:s') . " - Auto scan completed. Sites scanned: " . count($sites) . ", Total threats: $total_threats\n";
+    @file_put_contents('./logs/auto_scan_' . date('Y-m-d') . '.log', $log_data, FILE_APPEND | LOCK_EX);
+    
+    return array(
+        'success' => true,
+        'sites_scanned' => count($sites),
+        'threats_found' => $total_threats,
+        'results' => $scan_results
+    );
+}
+
+// Function to perform scan for a specific site
+function performScanForSite($site_path)
+{
+    // Critical malware patterns
+    $critical_patterns = array(
+        'eval(' => 'Code execution vulnerability',
+        'base64_decode(' => 'Encoded payload execution',
+        'gzinflate(' => 'Compressed malware payload',
+        'str_rot13(' => 'String obfuscation technique',
+        'exec(' => 'System command execution',
+        'system(' => 'Direct system call',
+        'shell_exec(' => 'Shell command execution'
+    );
+    
+    $suspicious_files = array();
+    $threats_found = 0;
+    $critical_count = 0;
+    
+    // Scan directory recursively
+    if (is_dir($site_path)) {
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($site_path));
+        
+        foreach ($iterator as $file) {
+            if ($file->isFile() && $file->getExtension() === 'php') {
+                $file_path = $file->getPathname();
+                
+                // Check for critical patterns
+                $content = @file_get_contents($file_path);
+                if ($content !== false) {
+                    foreach ($critical_patterns as $pattern => $description) {
+                        if (stripos($content, $pattern) !== false) {
+                            $suspicious_files[] = array(
+                                'path' => $file_path,
+                                'pattern' => $pattern,
+                                'description' => $description,
+                                'severity' => 'critical'
+                            );
+                            $threats_found++;
+                            $critical_count++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    return array(
+        'threats_found' => $threats_found,
+        'critical_count' => $critical_count,
+        'suspicious_files' => $suspicious_files
+    );
+}
+
+// Function to send threat notification email
+function sendThreatNotification($scan_results)
+{
+    // Get admin email from configuration or use default
+    $admin_email = getAdminEmail();
+    
+    if (empty($admin_email)) {
+        return false;
+    }
+    
+    $subject = "[CẢNH BÁO BẢO MẬT] Phát hiện mã độc trên hosting - " . date('Y-m-d H:i:s');
+    
+    $message = "CẢNH BÁO BẢO MẬT - Phát hiện mã độc trên hosting\n\n";
+    $message .= "Thời gian: " . date('Y-m-d H:i:s') . "\n";
+    $message .= "Server: " . $_SERVER['HTTP_HOST'] . "\n";
+    $message .= "IP: " . getClientIP() . "\n\n";
+    
+    $message .= "CHI TIẾT PHÁT HIỆN:\n";
+    $message .= "==================\n\n";
+    
+    foreach ($scan_results as $result) {
+        $message .= "Domain: " . $result['domain'] . "\n";
+        $message .= "Path: " . $result['path'] . "\n";
+        $message .= "Threats: " . $result['threats'] . " (Critical: " . $result['critical'] . ")\n";
+        
+        if (!empty($result['details'])) {
+            $message .= "Files nguy hiểm:\n";
+            foreach ($result['details'] as $detail) {
+                $message .= "  - " . $detail['path'] . " (" . $detail['pattern'] . ")\n";
+            }
+        }
+        
+        $message .= "\n";
+    }
+    
+    $message .= "HÀNH ĐỘNG KHUYẾN NGHỊ:\n";
+    $message .= "====================\n";
+    $message .= "1. Truy cập Security Scanner ngay lập tức\n";
+    $message .= "2. Xem chi tiết và xác nhận các file nguy hiểm\n";
+    $message .= "3. Sử dụng tính năng Auto-Fix để khắc phục\n";
+    $message .= "4. Thay đổi mật khẩu admin và FTP\n";
+    $message .= "5. Kiểm tra log truy cập để tìm nguồn tấn công\n\n";
+    
+    $message .= "Link Scanner: http://" . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'] . "\n\n";
+    $message .= "Đây là email tự động từ hệ thống bảo mật.\n";
+    $message .= "Vui lòng xử lý ngay lập tức!\n";
+    
+    $headers = "From: security-noreply@" . $_SERVER['HTTP_HOST'] . "\r\n";
+    $headers .= "Reply-To: security-noreply@" . $_SERVER['HTTP_HOST'] . "\r\n";
+    $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
+    
+    return mail($admin_email, $subject, $message, $headers);
+}
+
+// Function to get admin email
+function getAdminEmail()
+{
+    // Try to get from config file first
+    $config_files = array(
+        './config.php',
+        './admin/config.php',
+        './includes/config.php',
+        './wp-config.php'
+    );
+    
+    foreach ($config_files as $config_file) {
+        if (file_exists($config_file)) {
+            $content = file_get_contents($config_file);
+            // Look for email patterns
+            if (preg_match('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', $content, $matches)) {
+                return $matches[0];
+            }
+        }
+    }
+    
+    // Default fallback
+    return 'admin@' . $_SERVER['HTTP_HOST'];
+}
+
+// Function to install cron job
+function installCronJob()
+{
+    $current_url = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+    $cron_url = $current_url . '?auto_scan=1';
+    
+    // Generate cron command
+    $cron_command = "0 * * * * /usr/bin/curl -s \"$cron_url\" > /dev/null 2>&1";
+    
+    // Try to add to crontab
+    $temp_file = tempnam(sys_get_temp_dir(), 'cron');
+    
+    // Get existing crontab
+    $existing_cron = shell_exec('crontab -l 2>/dev/null');
+    
+    // Check if our cron job already exists
+    if (strpos($existing_cron, $cron_url) !== false) {
+        return array(
+            'success' => true,
+            'message' => 'Cron job đã được cài đặt trước đó',
+            'command' => $cron_command
+        );
+    }
+    
+    // Add our cron job
+    $new_cron = $existing_cron . "\n" . $cron_command . "\n";
+    file_put_contents($temp_file, $new_cron);
+    
+    // Install new crontab
+    $output = shell_exec("crontab $temp_file 2>&1");
+    unlink($temp_file);
+    
+    if ($output === null) {
+        return array(
+            'success' => true,
+            'message' => 'Cron job đã được cài đặt thành công',
+            'command' => $cron_command
+        );
+    } else {
+        return array(
+            'success' => false,
+            'message' => 'Không thể cài đặt cron job: ' . $output,
+            'command' => $cron_command
+        );
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -1059,6 +1436,40 @@ function performAutoFix($scan_data)
                     <h3 class="card-title">Bảng Điều Khiển Quét</h3>
                 </div>
 
+                <!-- Site Selection -->
+                <div class="site-selection">
+                    <h5 class="section-title">
+                        <i class="fas fa-server"></i> Chọn Trang Web Quét
+                    </h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scanType" id="scanCurrent" value="current" checked>
+                                <label class="form-check-label" for="scanCurrent">
+                                    <i class="fas fa-home"></i> Chỉ trang web hiện tại
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scanType" id="scanAllSites" value="all_sites">
+                                <label class="form-check-label" for="scanAllSites">
+                                    <i class="fas fa-globe"></i> Tất cả trang web trên hosting
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="site-selector mt-3" id="siteSelector" style="display: none;">
+                        <label for="siteSelect" class="form-label">
+                            <i class="fas fa-list"></i> Chọn trang web cụ thể:
+                        </label>
+                        <select class="form-select" id="siteSelect">
+                            <option value="">Đang tải danh sách...</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div class="scan-controls">
                     <button id="scanBtn" class="scan-btn">
                         <i class="fas fa-search"></i> Bắt Đầu Quét
@@ -1119,6 +1530,48 @@ function performAutoFix($scan_data)
                     <div class="current-action">
                         <i class="fas fa-spinner pulse" style="color: var(--primary-blue);"></i>
                         <span id="currentAction">Đang quét hệ thống...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hosting Sites Panel -->
+            <div class="bento-item">
+                <div class="card-header">
+                    <i class="fas fa-server" style="color: var(--info-text);"></i>
+                    <h3 class="card-title">Hosting Sites</h3>
+                </div>
+                <div id="hostingSites" class="hosting-sites">
+                    <div class="loading-sites">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>Đang tải danh sách trang web...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auto Scan Settings -->
+            <div class="bento-item">
+                <div class="card-header">
+                    <i class="fas fa-clock" style="color: var(--warning-text);"></i>
+                    <h3 class="card-title">Tự Động Quét</h3>
+                </div>
+                <div class="auto-scan-settings">
+                    <div class="setting-item">
+                        <label class="form-check-label">
+                            <input type="checkbox" id="enableAutoScan" class="form-check-input">
+                            <i class="fas fa-robot"></i> Bật quét tự động mỗi giờ
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label for="adminEmail" class="form-label">
+                            <i class="fas fa-envelope"></i> Email thông báo:
+                        </label>
+                        <input type="email" class="form-control" id="adminEmail" placeholder="admin@domain.com">
+                    </div>
+                    <div class="setting-item">
+                        <button id="installCronBtn" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-cogs"></i> Cài Đặt Cron Job
+                        </button>
+                        <div id="cronStatus" class="cron-status mt-2" style="display: none;"></div>
                     </div>
                 </div>
             </div>
@@ -1246,5 +1699,4 @@ function performAutoFix($scan_data)
 
     <script src="script.js"></script>
 </body>
-
 </html>
