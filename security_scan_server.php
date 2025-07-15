@@ -1425,37 +1425,31 @@ if (isset($_GET['api'])) {
             const client = clients.find(c => c.id === id);
             if (!client) return;
             
-            showLoading();
+            Swal.fire({
+                title: `Quét ${client.name}`,
+                text: 'Đang thực hiện quét bảo mật...',
+                icon: 'info',
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
             
             fetch(`?api=scan_client&id=${id}`)
                 .then(response => response.json())
                 .then(data => {
-                    hideLoading();
+                    Swal.close();
                     
-                    if (data.success) {
-                        const results = data.scan_results;
-                        let message = `
-                            <div class="text-start">
-                                <strong>📊 Kết quả quét:</strong><br>
-                                • Files quét: ${results.scanned_files}<br>
-                                • Threats: ${results.suspicious_count}<br>
-                                • Critical: ${results.critical_count}<br>
-                                • Thời gian: ${results.scan_time}s<br>
-                                • Trạng thái: ${results.status}
-                            </div>
-                        `;
-                        
-                        const icon = results.critical_count > 0 ? 'warning' : 
-                                   results.suspicious_count > 0 ? 'info' : 'success';
-                        
-                        Swal.fire({
-                            icon: icon,
-                            title: `Quét ${client.name}`,
-                            html: message,
-                            width: 600
-                        });
-                        
+                    if (data.success || data.scan_results) {
+                        // Hiển thị kết quả scan chi tiết
+                        displayScanResults(client, data);
                         loadClients(); // Refresh to update last scan time
+                        
+                        // Scroll to results section
+                        document.getElementById('resultsSection').scrollIntoView({ 
+                            behavior: 'smooth' 
+                        });
                     } else {
                         Swal.fire({
                             icon: 'error',
@@ -1465,7 +1459,7 @@ if (isset($_GET['api'])) {
                     }
                 })
                 .catch(error => {
-                    hideLoading();
+                    Swal.close();
                     console.error('Error:', error);
                     Swal.fire({
                         icon: 'error',
@@ -1473,6 +1467,403 @@ if (isset($_GET['api'])) {
                         text: 'Không thể kết nối đến server!'
                     });
                 });
+        }
+        
+        // Display scan results
+        function displayScanResults(client, data) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            const results = data.scan_results || data;
+            
+            if (!results || (!results.suspicious_files && !results.suspicious_count)) {
+                resultsContainer.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-shield-check"></i>
+                        <strong>✅ Hệ thống ${client.name} an toàn!</strong><br>
+                        Không phát hiện threat nào trong ${results.scanned_files || 0} files đã quét.
+                    </div>
+                `;
+                return;
+            }
+            
+            // Group files by severity
+            const groups = {
+                critical: { 
+                    title: '🚨 Files Virus/Malware Nguy Hiểm', 
+                    icon: 'fa-skull-crossbones', 
+                    files: [], 
+                    color: 'danger' 
+                },
+                suspicious_file: { 
+                    title: '⚠️ Files Đáng Ngờ (.php.jpg, Empty)', 
+                    icon: 'fa-exclamation-circle', 
+                    files: [], 
+                    color: 'warning' 
+                },
+                filemanager: { 
+                    title: '📁 Filemanager Functions', 
+                    icon: 'fa-folder-open', 
+                    files: [], 
+                    color: 'info' 
+                },
+                warning: { 
+                    title: '⚠️ Cảnh Báo Bảo Mật', 
+                    icon: 'fa-exclamation-triangle', 
+                    files: [], 
+                    color: 'warning' 
+                }
+            };
+            
+            const suspiciousFiles = results.suspicious_files || [];
+            suspiciousFiles.forEach((file, index) => {
+                file.index = index;
+                
+                const isCritical = file.severity === 'critical';
+                const isFilemanager = file.category === 'filemanager';
+                const isSuspiciousFile = file.category === 'suspicious_file';
+                
+                if (isSuspiciousFile) {
+                    groups.suspicious_file.files.push(file);
+                } else if (isCritical && !isFilemanager) {
+                    groups.critical.files.push(file);
+                } else if (isFilemanager) {
+                    groups.filemanager.files.push(file);
+                } else {
+                    groups.warning.files.push(file);
+                }
+            });
+            
+            let html = `
+                <div class="scan-results-header">
+                    <div class="alert alert-${results.critical_count > 0 ? 'danger' : 'warning'}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-shield-alt"></i>
+                                <strong>Kết quả quét ${client.name}</strong><br>
+                                <small>
+                                    📊 Files quét: ${results.scanned_files || 0} | 
+                                    🔍 Threats: ${results.suspicious_count || 0} | 
+                                    🚨 Critical: ${results.critical_count || 0} | 
+                                    ⏱️ Thời gian: ${results.scan_time || 0}s
+                                </small>
+                            </div>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary" onclick="scanClient('${client.id}')">
+                                    <i class="fas fa-redo"></i> Quét Lại
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="scan-results-content">
+            `;
+            
+            // Render groups
+            Object.keys(groups).forEach(groupKey => {
+                const group = groups[groupKey];
+                if (group.files.length > 0) {
+                    html += `
+                        <div class="threat-group mb-4">
+                            <div class="threat-group-header">
+                                <div class="alert alert-${group.color}">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">
+                                            <i class="fas ${group.icon}"></i> ${group.title} (${group.files.length})
+                                        </h6>
+                                        ${group.files.some(f => canDeleteFile(f)) ? `
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteAllGroupFiles('${groupKey}', '${client.id}')">
+                                                <i class="fas fa-trash-alt"></i> Xóa Tất Cả
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="threat-files">
+                    `;
+                    
+                    group.files.forEach((file, idx) => {
+                        const canDelete = canDeleteFile(file);
+                        const firstIssue = file.issues && file.issues.length > 0 ? file.issues[0] : null;
+                        
+                        html += `
+                            <div class="threat-item mb-3 p-3 border rounded" data-file-index="${file.index}">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6 class="mb-1">
+                                            <i class="fas fa-file-code text-${group.color}"></i> 
+                                            <code>${file.path}</code>
+                                            ${firstIssue ? `<small class="text-muted ms-2">(dòng ${firstIssue.line})</small>` : ''}
+                                        </h6>
+                                        <p class="mb-1 text-muted small">
+                                            <i class="fas fa-bug"></i> ${file.issues ? file.issues.length : 0} vấn đề phát hiện
+                                            ${firstIssue ? ` - <span class="text-danger fw-bold">${firstIssue.pattern}</span>` : ''}
+                                        </p>
+                                        ${file.issues && file.issues.length > 1 ? `
+                                            <div class="issues-list mt-2">
+                                                <small class="text-muted">Các vấn đề khác:</small>
+                                                <ul class="list-unstyled small">
+                                                    ${file.issues.slice(1, 3).map(issue => `
+                                                        <li><span class="text-warning">• ${issue.pattern}</span> (dòng ${issue.line})</li>
+                                                    `).join('')}
+                                                    ${file.issues.length > 3 ? `<li class="text-muted">... và ${file.issues.length - 3} vấn đề khác</li>` : ''}
+                                                </ul>
+                                            </div>
+                                        ` : ''}
+                                        ${file.metadata ? `
+                                            <div class="file-metadata mt-2">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-clock"></i> ${file.metadata.modified_time ? new Date(file.metadata.modified_time * 1000).toLocaleString('vi-VN') : 'N/A'}
+                                                    <i class="fas fa-hdd ms-3"></i> ${file.metadata.size ? formatFileSize(file.metadata.size) : 'N/A'}
+                                                </small>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                    <div class="col-md-4 text-end">
+                                        ${canDelete ? `
+                                            <button class="btn btn-sm btn-outline-danger" 
+                                                    onclick="deleteFileFromResults('${client.id}', '${file.path}', ${file.index})"
+                                                    title="Xóa file nguy hiểm">
+                                                <i class="fas fa-trash-alt"></i> Xóa File
+                                            </button>
+                                        ` : ''}
+                                        <button class="btn btn-sm btn-outline-secondary ms-2" 
+                                                onclick="viewFileDetails('${client.id}', '${file.path}')"
+                                                title="Xem chi tiết file">
+                                            <i class="fas fa-eye"></i> Chi Tiết
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+            
+            html += '</div>';
+            
+            resultsContainer.innerHTML = html;
+            
+            // Store current scan data
+            window.currentScanData = {
+                client: client,
+                results: results,
+                files: suspiciousFiles
+            };
+        }
+        
+        // Helper functions
+        function canDeleteFile(file) {
+            return (file.severity === 'critical' && file.category !== 'filemanager') || 
+                   file.category === 'suspicious_file';
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function deleteFileFromResults(clientId, filePath, fileIndex) {
+            Swal.fire({
+                title: 'Xác nhận xóa file',
+                html: `
+                    <div class="text-start">
+                        <p><strong>File:</strong> <code>${filePath}</code></p>
+                        <p class="text-warning">
+                            <i class="fas fa-exclamation-triangle"></i> 
+                            Thao tác này sẽ xóa file khỏi server và không thể hoàn tác!
+                        </p>
+                    </div>
+                `,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<i class="fas fa-trash"></i> Xóa File',
+                cancelButtonText: 'Hủy',
+                width: 600
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Show loading
+                    Swal.fire({
+                        title: 'Đang xóa file...',
+                        text: 'Vui lòng chờ',
+                        allowOutsideClick: false,
+                        showConfirmButton: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    // Call API to delete file
+                    fetch(`?api=delete_file`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: `client_id=${clientId}&file_path=${encodeURIComponent(filePath)}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Remove file from display
+                            const fileElement = document.querySelector(`[data-file-index="${fileIndex}"]`);
+                            if (fileElement) {
+                                fileElement.remove();
+                            }
+                            
+                            // Update scan data
+                            if (window.currentScanData && window.currentScanData.files) {
+                                window.currentScanData.files.splice(fileIndex, 1);
+                            }
+                            
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Đã xóa!',
+                                text: 'File đã được xóa thành công.',
+                                timer: 2000,
+                                showConfirmButton: false
+                            });
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Lỗi!',
+                                text: data.error || 'Không thể xóa file.',
+                                width: 600
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error deleting file:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Lỗi!',
+                            text: 'Không thể kết nối đến server.',
+                            width: 600
+                        });
+                    });
+                }
+            });
+        }
+        
+        function deleteAllGroupFiles(groupKey, clientId) {
+            if (!window.currentScanData || !window.currentScanData.files) return;
+            
+            const files = window.currentScanData.files.filter(file => {
+                const isCritical = file.severity === 'critical';
+                const isFilemanager = file.category === 'filemanager';
+                const isSuspiciousFile = file.category === 'suspicious_file';
+                
+                if (groupKey === 'critical') return isCritical && !isFilemanager;
+                if (groupKey === 'suspicious_file') return isSuspiciousFile;
+                if (groupKey === 'filemanager') return isFilemanager;
+                return !isCritical && !isFilemanager && !isSuspiciousFile;
+            }).filter(file => canDeleteFile(file));
+            
+            if (files.length === 0) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Không có file nào để xóa',
+                    text: 'Không có file nào trong nhóm này có thể xóa được.'
+                });
+                return;
+            }
+            
+            Swal.fire({
+                title: 'Xác nhận xóa tất cả files',
+                html: `
+                    <div class="text-start">
+                        <p><strong>Sẽ xóa ${files.length} files:</strong></p>
+                        <ul class="list-unstyled small" style="max-height: 200px; overflow-y: auto;">
+                            ${files.map(file => `<li>• <code>${file.path}</code></li>`).join('')}
+                        </ul>
+                        <p class="text-warning">
+                            <i class="fas fa-exclamation-triangle"></i> 
+                            Thao tác này sẽ xóa tất cả files khỏi server và không thể hoàn tác!
+                        </p>
+                    </div>
+                `,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: `<i class="fas fa-trash"></i> Xóa ${files.length} Files`,
+                cancelButtonText: 'Hủy',
+                width: 700
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Delete files one by one
+                    deleteFilesSequentially(clientId, files, 0);
+                }
+            });
+        }
+        
+        function deleteFilesSequentially(clientId, files, index) {
+            if (index >= files.length) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Hoàn thành!',
+                    text: `Đã xóa ${files.length} files thành công.`,
+                    timer: 3000,
+                    showConfirmButton: false
+                });
+                return;
+            }
+            
+            const file = files[index];
+            
+            // Show progress
+            Swal.fire({
+                title: 'Đang xóa files...',
+                text: `Tiến trình: ${index + 1}/${files.length} - ${file.path}`,
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            fetch(`?api=delete_file`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: `client_id=${clientId}&file_path=${encodeURIComponent(file.path)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove file from display
+                    const fileElement = document.querySelector(`[data-file-index="${file.index}"]`);
+                    if (fileElement) {
+                        fileElement.remove();
+                    }
+                }
+                
+                // Continue to next file
+                deleteFilesSequentially(clientId, files, index + 1);
+            })
+            .catch(error => {
+                console.error('Error deleting file:', error);
+                // Continue to next file even if one fails
+                deleteFilesSequentially(clientId, files, index + 1);
+            });
+        }
+        
+        function viewFileDetails(clientId, filePath) {
+            // TODO: Implement file details view
+            Swal.fire({
+                icon: 'info',
+                title: 'Chi tiết file',
+                text: `Tính năng xem chi tiết file sẽ được bổ sung sau.\n\nFile: ${filePath}`,
+                width: 600
+            });
         }
         
         // Scan all clients
