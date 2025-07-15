@@ -15,15 +15,15 @@ if (version_compare(PHP_VERSION, '5.6.0', '<')) {
 // ========== CẤU HÌNH TỰ ĐỘNG QUÉT VÀ EMAIL ==========
 class SecurityScanConfig {
     // Cấu hình email
-    const EMAIL_TO = 'your-email@gmail.com'; // THAY ĐỔI EMAIL CỦA BẠN
+    const EMAIL_TO = 'nguyenvanhiep0711@gmail.com'; // THAY ĐỔI EMAIL CỦA BẠN
     const EMAIL_FROM = 'security-scanner@yourdomain.com';
     const EMAIL_FROM_NAME = 'Hiệp Security Scanner';
     
     // Cấu hình SMTP (nếu cần)
     const SMTP_HOST = 'smtp.gmail.com';
     const SMTP_PORT = 587;
-    const SMTP_USERNAME = 'your-email@gmail.com';
-    const SMTP_PASSWORD = 'your-app-password'; // App password cho Gmail
+    const SMTP_USERNAME = 'nguyenvanhiep0711@gmail.com';
+    const SMTP_PASSWORD = 'flnd neoz lhqw yzmd'; // App password cho Gmail
     const SMTP_SECURE = 'tls';
     
     // Cấu hình auto scan
