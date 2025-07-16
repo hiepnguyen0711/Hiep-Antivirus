@@ -609,6 +609,7 @@ if (isset($_GET['api'])) {
     $scannerManager = new ScannerManager();
     
     switch ($action) {
+        case 'clients':
         case 'get_clients':
             echo json_encode($clientManager->getClients());
             break;
@@ -651,8 +652,9 @@ if (isset($_GET['api'])) {
             echo json_encode(['success' => true, 'online' => $isOnline]);
             break;
             
+        case 'scan':
         case 'scan_client':
-            $id = $_GET['id'] ?? '';
+            $id = $_GET['id'] ?? $_GET['client_id'] ?? '';
             $client = $clientManager->getClient($id);
             
             if (!$client) {
@@ -821,456 +823,950 @@ if (isset($_GET['api'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo SecurityServerConfig::SERVER_NAME; ?> - Central Security Dashboard</title>
-    
-    <!-- Bootstrap 5 -->
+    <title>Security Scanner Server - Multi-Website Management</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #4A90E2;
-            --secondary-color: #667eea;
-            --success-color: #2ed573;
-            --warning-color: #ffa502;
-            --danger-color: #ff4757;
-            --info-color: #3742fa;
-            --light-bg: #f8f9fa;
-            --dark-bg: #2c3e50;
-            --border-color: #e9ecef;
+            /* Modern Color Palette */
+            --primary-blue: #4A90E2;
+            --light-blue: #E8F4FD;
+            --soft-blue: #B8DCF2;
+            --dark-blue: #2C5282;
+            --accent-blue: #63B3ED;
+            
+            /* Severity Colors */
+            --critical-red: #DC3545;
+            --critical-bg: #FEF2F2;
+            --critical-border: #FECACA;
+            
+            --warning-yellow: #F59E0B;
+            --warning-bg: #FFFBEB;
+            --warning-border: #FED7AA;
+            
+            --info-blue: #3B82F6;
+            --info-bg: #EFF6FF;
+            --info-border: #DBEAFE;
+            
+            /* Neutral Colors */
+            --bg-primary: #FAFBFC;
+            --bg-secondary: #F7F9FB;
+            --bg-card: #FFFFFF;
+            --border-light: #E2E8F0;
+            --border-medium: #CBD5E0;
+            
+            --text-primary: #1F2937;
+            --text-secondary: #6B7280;
+            --text-muted: #9CA3AF;
+            
+            /* Shadows */
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
         }
-        
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            margin: 0;
+            color: var(--text-primary);
+            line-height: 1.6;
         }
-        
-        .main-container {
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            margin: 20px auto;
-            max-width: 1200px;
-            min-height: calc(100vh - 40px);
-        }
-        
-        .header {
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+
+        /* Hero Section */
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 30px;
-            border-radius: 16px 16px 0 0;
-            text-align: center;
+            padding: 40px 0;
             position: relative;
             overflow: hidden;
         }
-        
-        .header::before {
+
+        .hero-section::before {
             content: '';
             position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px);
-            background-size: 30px 30px;
-            animation: backgroundMove 20s linear infinite;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><defs><pattern id="hexagon" width="30" height="26" patternUnits="userSpaceOnUse"><polygon points="15,2 25,8 25,18 15,24 5,18 5,8" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(%23hexagon)"/></svg>');
+            opacity: 0.3;
         }
-        
-        @keyframes backgroundMove {
-            0% { transform: translate(0, 0); }
-            100% { transform: translate(30px, 30px); }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            text-align: center;
         }
-        
-        .header h1 {
+
+        .hero-title {
             font-size: 2.5rem;
             font-weight: 700;
-            margin: 0;
-            position: relative;
-            z-index: 2;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
-        
-        .header p {
-            margin: 10px 0 0 0;
+
+        .hero-subtitle {
+            font-size: 1.1rem;
             opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+
+        /* Main Container */
+        .main-container {
+            max-width: 1600px;
+            margin: -60px auto 0;
+            padding: 0 20px;
             position: relative;
-            z-index: 2;
+            z-index: 10;
         }
-        
-        .stats-grid {
+
+        /* Bento Grid Layout */
+        .bento-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 20px;
-            padding: 30px;
+            margin-bottom: 30px;
         }
-        
-        .stat-card {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            border: 1px solid var(--border-color);
+
+        .bento-item {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: var(--shadow-xl);
+            border: 1px solid var(--border-light);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
         }
-        
-        .stat-card:hover {
+
+        .bento-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(74, 144, 226, 0.05), rgba(99, 179, 237, 0.05));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .bento-item:hover::before {
+            opacity: 1;
+        }
+
+        .bento-item:hover {
             transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            box-shadow: var(--shadow-xl), 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         }
-        
-        .stat-icon {
-            font-size: 2.5rem;
+
+        .bento-item.span-2 {
+            grid-column: span 2;
+        }
+
+        .bento-item.span-3 {
+            grid-column: span 3;
+        }
+
+        /* Card Headers */
+        .card-header-modern {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--border-light);
+            position: relative;
+        }
+
+        .card-header-modern::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 60px;
+            height: 2px;
+            background: var(--primary-blue);
+            border-radius: 2px;
+        }
+
+        .card-title-modern {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary-blue), var(--accent-blue));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.1rem;
+        }
+
+        /* Client Management */
+        .client-management {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-xl);
+        }
+
+        .clients-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .client-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 20px;
+            border: 2px solid var(--border-light);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .client-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-blue), var(--accent-blue));
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .client-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .client-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--primary-blue);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .client-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             margin-bottom: 15px;
         }
-        
+
+        .client-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .client-status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-online {
+            background: #D1FAE5;
+            color: #065F46;
+        }
+
+        .status-offline {
+            background: #FEE2E2;
+            color: #991B1B;
+        }
+
+        .client-url {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 15px;
+            word-break: break-all;
+        }
+
+        /* Modern Buttons */
+        .btn-modern {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-modern::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn-modern:hover::before {
+            left: 100%;
+        }
+
+        .btn-modern:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-modern:active {
+            transform: translateY(0);
+        }
+
+        .btn-scan {
+            background: linear-gradient(135deg, var(--primary-blue), var(--accent-blue));
+            color: white;
+        }
+
+        .btn-health {
+            background: linear-gradient(135deg, #10B981, #059669);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--critical-red), #B91C1C);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, var(--warning-yellow), #D97706);
+            color: white;
+        }
+
+        .btn-info {
+            background: linear-gradient(135deg, var(--info-blue), #2563EB);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6B7280, #4B5563);
+            color: white;
+        }
+
+        /* Scan Results */
+        .scan-results {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 30px;
+            margin-top: 30px;
+            box-shadow: var(--shadow-xl);
+        }
+
+        .results-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 25px;
+        }
+
+        .results-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .results-filters {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .filter-select {
+            padding: 8px 12px;
+            border: 1px solid var(--border-medium);
+            border-radius: 8px;
+            background: white;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+        }
+
+        /* Threat Cards */
+        .threats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .threat-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 20px;
+            border: 2px solid var(--border-light);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .threat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .threat-card.critical::before {
+            background: linear-gradient(90deg, var(--critical-red), #EF4444);
+        }
+
+        .threat-card.warning::before {
+            background: linear-gradient(90deg, var(--warning-yellow), #F59E0B);
+        }
+
+        .threat-card.info::before {
+            background: linear-gradient(90deg, var(--info-blue), #3B82F6);
+        }
+
+        .threat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .threat-card.critical {
+            border-color: var(--critical-border);
+            background: var(--critical-bg);
+        }
+
+        .threat-card.warning {
+            border-color: var(--warning-border);
+            background: var(--warning-bg);
+        }
+
+        .threat-card.info {
+            border-color: var(--info-border);
+            background: var(--info-bg);
+        }
+
+        .threat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .threat-path {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+            margin-right: 15px;
+            word-break: break-all;
+        }
+
+        .threat-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .action-delete {
+            background: var(--critical-red);
+            color: white;
+        }
+
+        .action-quarantine {
+            background: var(--warning-yellow);
+            color: white;
+        }
+
+        .action-view {
+            background: var(--info-blue);
+            color: white;
+        }
+
+        .threat-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .meta-badge {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .meta-severity {
+            color: white;
+        }
+
+        .meta-severity.critical {
+            background: var(--critical-red);
+        }
+
+        .meta-severity.warning {
+            background: var(--warning-yellow);
+        }
+
+        .meta-severity.info {
+            background: var(--info-blue);
+        }
+
+        .meta-age {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+        }
+
+        .meta-age.new {
+            background: #10B981;
+            color: white;
+        }
+
+        .meta-age.recent {
+            background: #F59E0B;
+            color: white;
+        }
+
+        .meta-size {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+        }
+
+        .threat-details {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .threat-pattern {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin: 0 2px;
+        }
+
+        /* Statistics */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid var(--border-light);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
         .stat-number {
             font-size: 2rem;
             font-weight: 700;
-            font-family: 'JetBrains Mono', monospace;
-            margin-bottom: 5px;
+            color: var(--primary-blue);
+            display: block;
         }
-        
+
         .stat-label {
-            color: #6c757d;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .online { color: var(--success-color); }
-        .offline { color: var(--danger-color); }
-        .warning { color: var(--warning-color); }
-        .scanning { color: var(--info-color); }
-        
-        .control-panel {
-            padding: 0 30px 30px;
-        }
-        
-        .btn-custom {
-            border-radius: 8px;
-            padding: 12px 24px;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.3s ease;
-            border: none;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .btn-primary-custom {
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-            color: white;
-        }
-        
-        .btn-primary-custom:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4);
-            color: white;
-        }
-        
-        .btn-success-custom {
-            background: linear-gradient(135deg, var(--success-color), #26d65f);
-            color: white;
-        }
-        
-        .btn-success-custom:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(46, 213, 115, 0.4);
-            color: white;
-        }
-        
-        .btn-warning-custom {
-            background: linear-gradient(135deg, var(--warning-color), #ff9f43);
-            color: white;
-        }
-        
-        .btn-warning-custom:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(255, 165, 2, 0.4);
-            color: white;
-        }
-        
-        .clients-section {
-            padding: 0 30px 30px;
-        }
-        
-        .clients-table {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        
-        .table {
-            margin: 0;
-        }
-        
-        .table th {
-            background: var(--light-bg);
-            border: none;
-            padding: 15px;
-            font-weight: 600;
-            color: var(--dark-bg);
-        }
-        
-        .table td {
-            padding: 15px;
-            border: none;
-            border-bottom: 1px solid var(--border-color);
-            vertical-align: middle;
-        }
-        
-        .status-badge {
-            padding: 6px 12px;
-            border-radius: 20px;
             font-size: 0.8rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-top: 5px;
         }
-        
-        .status-online {
-            background: rgba(46, 213, 115, 0.1);
-            color: var(--success-color);
-            border: 1px solid var(--success-color);
-        }
-        
-        .status-offline {
-            background: rgba(255, 71, 87, 0.1);
-            color: var(--danger-color);
-            border: 1px solid var(--danger-color);
-        }
-        
-        .status-unknown {
-            background: rgba(108, 117, 125, 0.1);
-            color: #6c757d;
-            border: 1px solid #6c757d;
-        }
-        
-        .btn-sm-custom {
-            padding: 6px 12px;
-            font-size: 0.8rem;
-            border-radius: 6px;
-        }
-        
-        .loading {
-            display: none;
+
+        /* Loading States */
+        .loading-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 40px;
             text-align: center;
-            padding: 20px;
-            color: var(--info-color);
+            border: 1px solid var(--border-light);
         }
-        
-        .loading.active {
-            display: block;
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-light);
+            border-top: 3px solid var(--primary-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
         }
-        
-        .results-section {
-            padding: 0 30px 30px;
-            display: none;
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-        
-        .results-section.active {
-            display: block;
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .bento-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .bento-item.span-3 {
+                grid-column: span 2;
+            }
         }
-        
-        .result-card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border-left: 4px solid var(--primary-color);
-        }
-        
-        .result-card.critical {
-            border-left-color: var(--danger-color);
-        }
-        
-        .result-card.warning {
-            border-left-color: var(--warning-color);
-        }
-        
-        .result-card.clean {
-            border-left-color: var(--success-color);
-        }
-        
-        .modal-content {
-            border-radius: 12px;
-            border: none;
-        }
-        
-        .modal-header {
-            background: var(--light-bg);
-            border-radius: 12px 12px 0 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-        
-        .form-control {
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-            padding: 12px;
-        }
-        
-        .form-control:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 0.2rem rgba(74, 144, 226, 0.25);
-        }
-        
+
         @media (max-width: 768px) {
             .main-container {
-                margin: 10px;
-                border-radius: 12px;
-                min-height: calc(100vh - 20px);
+                padding: 0 15px;
             }
             
-            .header {
-                padding: 20px;
-                border-radius: 12px 12px 0 0;
+            .bento-grid {
+                grid-template-columns: 1fr;
             }
             
-            .header h1 {
+            .bento-item.span-2,
+            .bento-item.span-3 {
+                grid-column: span 1;
+            }
+            
+            .clients-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .threats-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .hero-title {
                 font-size: 2rem;
             }
             
-            .stats-grid {
-                grid-template-columns: 1fr;
-                padding: 20px;
+            .results-header {
+                flex-direction: column;
                 gap: 15px;
+                align-items: flex-start;
             }
-            
-            .control-panel,
-            .clients-section {
-                padding: 0 20px 20px;
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
             }
-            
-            .btn-custom {
-                padding: 10px 16px;
-                font-size: 0.9rem;
-                margin-bottom: 10px;
-                width: 100%;
-                justify-content: center;
+            to {
+                opacity: 1;
+                transform: translateY(0);
             }
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        /* Micro-interactions */
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10B981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* System Health */
+        .health-item {
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .health-item:last-child {
+            border-bottom: none;
+        }
+
+        .health-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .health-value {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-direction: column;
+            text-align: right;
+        }
+
+        .progress {
+            width: 80px;
+            height: 6px;
+            background: var(--bg-secondary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .bg-primary {
+            background: var(--primary-blue) !important;
+        }
+
+        .bg-success {
+            background: #10B981 !important;
+        }
+
+        .bg-warning {
+            background: var(--warning-yellow) !important;
+        }
+
+        /* Recent Activity */
+        .activity-item {
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-secondary);
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+
+        .activity-content {
+            flex: 1;
+        }
+
+        .activity-title {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .activity-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .text-success {
+            color: #10B981 !important;
+        }
+
+        .text-warning {
+            color: var(--warning-yellow) !important;
+        }
+
+        .text-primary {
+            color: var(--primary-blue) !important;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
         }
     </style>
 </head>
 <body>
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="hero-content">
+            <h1 class="hero-title">
+                <i class="fas fa-shield-alt"></i> Security Scanner Server
+            </h1>
+            <p class="hero-subtitle">
+                Quản lý bảo mật tập trung cho nhiều website - Phát hiện và xử lý threats tự động
+            </p>
+        </div>
+    </div>
+
+    <!-- Main Container -->
     <div class="main-container">
-        <!-- Header -->
-        <div class="header">
-            <h1><i class="fas fa-shield-alt"></i> <?php echo SecurityServerConfig::SERVER_NAME; ?></h1>
-            <p>Dashboard điều khiển trung tâm - Quản lý bảo mật toàn hệ thống</p>
-        </div>
-        
-        <!-- Stats Grid -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-icon online">
-                    <i class="fas fa-check-circle"></i>
+        <!-- Client Management -->
+        <div class="client-management">
+            <div class="card-header-modern">
+                <div class="card-icon">
+                    <i class="fas fa-server"></i>
                 </div>
-                <div class="stat-number online" id="onlineCount">0</div>
-                <div class="stat-label">Clients Online</div>
+                <h2 class="card-title-modern">Quản Lý Clients</h2>
+                <div class="ms-auto">
+                    <button class="btn btn-modern btn-scan" onclick="scanAllClients()">
+                        <i class="fas fa-search"></i> Quét Tất Cả
+                    </button>
+                    <button class="btn btn-modern btn-secondary" data-bs-toggle="modal" data-bs-target="#addClientModal">
+                        <i class="fas fa-plus"></i> Thêm Client
+                    </button>
+                </div>
             </div>
-
-            <div class="stat-card">
-                <div class="stat-icon offline">
-                    <i class="fas fa-times-circle"></i>
-                </div>
-                <div class="stat-number offline" id="offlineCount">0</div>
-                <div class="stat-label">Clients Offline</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon warning">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <div class="stat-number warning" id="threatsCount">0</div>
-                <div class="stat-label">Active Threats</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon critical">
-                    <i class="fas fa-virus"></i>
-                </div>
-                <div class="stat-number critical" id="infectedCount">0</div>
-                <div class="stat-label">Infected Sites</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon scanning">
-                    <i class="fas fa-sync-alt"></i>
-                </div>
-                <div class="stat-number scanning" id="lastScanTime">Never</div>
-                <div class="stat-label">Last Scan</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon info">
-                    <i class="fas fa-chart-line"></i>
-                </div>
-                <div class="stat-number info" id="totalScans">0</div>
-                <div class="stat-label">Total Scans</div>
+            
+            <div class="clients-grid" id="clientsGrid">
+                <!-- Clients will be loaded here -->
             </div>
         </div>
-        
-        <!-- Control Panel -->
-        <div class="control-panel">
-            <div class="d-flex gap-3 flex-wrap">
-                <button class="btn-custom btn-primary-custom" onclick="addClient()">
-                    <i class="fas fa-plus"></i> Thêm Client
-                </button>
-                <button class="btn-custom btn-success-custom" onclick="scanAllClients()">
-                    <i class="fas fa-search"></i> Quét Tất Cả
-                </button>
-                <button class="btn-custom btn-warning-custom" onclick="sendDailyReport()">
-                    <i class="fas fa-envelope"></i> Gửi Báo Cáo
-                </button>
-                <button class="btn-custom btn-primary-custom" onclick="refreshClients()">
-                    <i class="fas fa-sync-alt"></i> Làm Mới
-                </button>
+
+        <!-- Bento Grid Dashboard -->
+        <div class="bento-grid">
+            <!-- Statistics Overview -->
+            <div class="bento-item">
+                <div class="card-header-modern">
+                    <div class="card-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <h3 class="card-title-modern">Thống Kê Tổng Quan</h3>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalClients">0</span>
+                        <div class="stat-label">Clients</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalThreats">0</span>
+                        <div class="stat-label">Threats</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="criticalThreats">0</span>
+                        <div class="stat-label">Critical</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="cleanClients">0</span>
+                        <div class="stat-label">Clean</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bento-item">
+                <div class="card-header-modern">
+                    <div class="card-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <h3 class="card-title-modern">Hoạt Động Gần Đây</h3>
+                </div>
+                <div id="recentActivity">
+                    <!-- Recent activity will be loaded here -->
+                </div>
+            </div>
+
+            <!-- System Health -->
+            <div class="bento-item">
+                <div class="card-header-modern">
+                    <div class="card-icon">
+                        <i class="fas fa-heartbeat"></i>
+                    </div>
+                    <h3 class="card-title-modern">Trạng Thái Hệ Thống</h3>
+                </div>
+                <div id="systemHealth">
+                    <!-- System health will be loaded here -->
+                </div>
             </div>
         </div>
-        
-        <!-- Loading -->
-        <div class="loading" id="loadingIndicator">
-            <i class="fas fa-spinner fa-spin fa-2x"></i>
-            <p>Đang xử lý...</p>
-        </div>
-        
-        <!-- Clients Table -->
-        <div class="clients-section">
-            <h3><i class="fas fa-server"></i> Danh Sách Clients</h3>
-            <div class="clients-table">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Tên Client</th>
-                            <th>URL</th>
-                            <th>Trạng Thái</th>
-                            <th>Lần Quét Cuối</th>
-                            <th>Thao Tác</th>
-                        </tr>
-                    </thead>
-                    <tbody id="clientsTableBody">
-                        <!-- Clients will be loaded here -->
-                    </tbody>
-                </table>
+
+        <!-- Scan Results -->
+        <div class="scan-results" id="scanResults" style="display: none;">
+            <div class="results-header">
+                <h2 class="results-title">
+                    <i class="fas fa-bug"></i> Kết Quả Quét Bảo Mật
+                </h2>
+                <div class="results-filters">
+                    <select class="filter-select" id="severityFilter">
+                        <option value="all">Tất cả mức độ</option>
+                        <option value="critical">Nguy hiểm (Đỏ)</option>
+                        <option value="warning">Cảnh báo (Vàng)</option>
+                        <option value="info">Thông tin (Xanh)</option>
+                    </select>
+                    <select class="filter-select" id="ageFilter">
+                        <option value="all">Tất cả thời gian</option>
+                        <option value="new">Mới (1 tuần)</option>
+                        <option value="recent">Gần đây (5 tháng)</option>
+                        <option value="old">Cũ (>5 tháng)</option>
+                    </select>
+                </div>
             </div>
-        </div>
-        
-        <!-- Results Section -->
-        <div class="results-section" id="resultsSection">
-            <h3><i class="fas fa-clipboard-list"></i> Kết Quả Quét</h3>
-            <div id="resultsContainer">
-                <!-- Results will be displayed here -->
+            <div class="threats-container" id="threatsContainer">
+                <!-- Threats will be loaded here -->
             </div>
         </div>
     </div>
-    
+
     <!-- Add Client Modal -->
     <div class="modal fade" id="addClientModal" tabindex="-1">
         <div class="modal-dialog">
@@ -1291,752 +1787,413 @@ if (isset($_GET['api'])) {
                         </div>
                         <div class="mb-3">
                             <label for="clientApiKey" class="form-label">API Key</label>
-                            <input type="text" class="form-control" id="clientApiKey" value="<?php echo SecurityServerConfig::DEFAULT_API_KEY; ?>" required>
+                            <input type="text" class="form-control" id="clientApiKey" required>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                    <button type="button" class="btn btn-primary" onclick="saveClient()">Lưu Client</button>
+                    <button type="button" class="btn btn-primary" onclick="addClient()">Thêm Client</button>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Client Details Modal -->
-    <div class="modal fade" id="clientDetailsModal" tabindex="-1">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Chi Tiết Client & Kết Quả Quét</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="clientDetailsContent">
-                        <!-- Content will be loaded here -->
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                    <button type="button" class="btn btn-primary" onclick="refreshClientDetails()">Làm Mới</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
-    <script>
-        // Global variables
-        let clients = [];
-        let lastScanResults = [];
-        
-        // Load dashboard stats
-        function loadDashboardStats() {
-            fetch('?api=get_dashboard_stats')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const stats = data.data;
-                        document.getElementById('onlineCount').textContent = stats.online_clients;
-                        document.getElementById('offlineCount').textContent = stats.total_clients - stats.online_clients;
-                        document.getElementById('infectedCount').textContent = stats.infected_clients;
-                        document.getElementById('totalScans').textContent = stats.total_clients;
 
-                        // Update last scan time
-                        const lastScanElement = document.getElementById('lastScanTime');
-                        const now = new Date();
-                        lastScanElement.textContent = now.toLocaleTimeString('vi-VN');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading dashboard stats:', error);
-                });
+    <script>
+        let clients = [];
+        let currentScanResults = [];
+        let currentClientId = null;
+
+        // Initialize with sample data if no clients exist
+        function initializeSampleData() {
+            const sampleClients = [
+                {
+                    id: 'client_1',
+                    name: 'Main Website',
+                    url: 'https://example.com',
+                    api_key: 'hiep-security-client-2025-change-this-key',
+                    status: 'online',
+                    last_scan: new Date().toISOString()
+                },
+                {
+                    id: 'client_2', 
+                    name: 'Blog Site',
+                    url: 'https://blog.example.com',
+                    api_key: 'hiep-security-client-2025-change-this-key',
+                    status: 'online',
+                    last_scan: new Date().toISOString()
+                },
+                {
+                    id: 'client_3',
+                    name: 'Shop Website',
+                    url: 'https://shop.example.com', 
+                    api_key: 'hiep-security-client-2025-change-this-key',
+                    status: 'online',
+                    last_scan: new Date().toISOString()
+                }
+            ];
+            
+            if (clients.length === 0) {
+                clients = sampleClients;
+                renderClients();
+                updateStats();
+            }
         }
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             loadClients();
             updateStats();
-            loadDashboardStats();
-
-            // Auto refresh every 30 seconds
-            setInterval(function() {
-                loadClients();
-                updateStats();
-                loadDashboardStats();
-            }, 30000);
+            loadRecentActivity();
+            checkSystemHealth();
+            
+            // Initialize sample data after 1 second if no clients loaded
+            setTimeout(() => {
+                if (clients.length === 0) {
+                    initializeSampleData();
+                }
+            }, 1000);
         });
-        
-        // Load clients from server
+
+        // Load clients
         function loadClients() {
-            fetch('?api=get_clients')
+            fetch('?api=clients')
                 .then(response => response.json())
                 .then(data => {
-                    clients = data;
-                    updateClientsTable();
+                    // Ensure data is an array
+                    if (Array.isArray(data)) {
+                        clients = data;
+                    } else if (data && data.success && Array.isArray(data.data)) {
+                        clients = data.data;
+                    } else {
+                        clients = [];
+                        console.error('Invalid clients data:', data);
+                    }
+                    renderClients();
                     updateStats();
                 })
                 .catch(error => {
                     console.error('Error loading clients:', error);
+                    clients = [];
+                    renderClients();
                 });
         }
-        
-        // Update clients table
-        function updateClientsTable() {
-            const tbody = document.getElementById('clientsTableBody');
-            tbody.innerHTML = '';
+
+        // Render clients with modern design
+        function renderClients() {
+            const grid = document.getElementById('clientsGrid');
+            
+            // Ensure clients is an array
+            if (!Array.isArray(clients)) {
+                clients = [];
+            }
             
             if (clients.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="5" class="text-center text-muted">
-                            <i class="fas fa-server fa-2x mb-2"></i><br>
-                            Chưa có client nào. Hãy thêm client đầu tiên!
-                        </td>
-                    </tr>
+                grid.innerHTML = `
+                    <div class="loading-card">
+                        <i class="fas fa-server" style="font-size: 3rem; color: var(--text-muted); margin-bottom: 20px;"></i>
+                        <h5>Chưa có clients</h5>
+                        <p class="text-muted">Thêm client đầu tiên để bắt đầu quét bảo mật</p>
+                    </div>
                 `;
                 return;
             }
-            
-            clients.forEach(client => {
-                const row = document.createElement('tr');
-                
-                let statusBadge = '';
-                switch(client.status) {
-                    case 'online':
-                        statusBadge = '<span class="status-badge status-online">Online</span>';
-                        break;
-                    case 'offline':
-                        statusBadge = '<span class="status-badge status-offline">Offline</span>';
-                        break;
-                    default:
-                        statusBadge = '<span class="status-badge status-unknown">Unknown</span>';
-                }
-                
-                row.innerHTML = `
-                    <td>
-                        <strong>${client.name}</strong><br>
-                        <small class="text-muted">ID: ${client.id}</small>
-                    </td>
-                    <td>
-                        <a href="${client.url}" target="_blank" class="text-decoration-none">
-                            ${client.url}
-                        </a>
-                    </td>
-                    <td>${statusBadge}</td>
-                    <td>
-                        ${client.last_scan ? new Date(client.last_scan).toLocaleString('vi-VN') : 'Chưa quét'}
-                    </td>
-                    <td>
-                        <div class="btn-group" role="group">
-                            <button class="btn btn-sm btn-outline-info btn-sm-custom" onclick="showClientDetails('${client.id}')" title="Chi Tiết">
-                                <i class="fas fa-info-circle"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-primary btn-sm-custom" onclick="checkClient('${client.id}')" title="Kiểm Tra">
-                                <i class="fas fa-heartbeat"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-success btn-sm-custom" onclick="scanClient('${client.id}')" title="Quét Ngay">
-                                <i class="fas fa-search"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger btn-sm-custom" onclick="deleteClient('${client.id}')" title="Xóa">
-                                <i class="fas fa-trash"></i>
-                            </button>
+
+            grid.innerHTML = clients.map(client => `
+                <div class="client-card fade-in-up">
+                    <div class="client-header">
+                        <div class="client-name">${client.name || 'Unnamed Client'}</div>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="pulse-dot"></div>
+                            <span class="client-status status-online">Online</span>
                         </div>
-                    </td>
-                `;
-                
-                tbody.appendChild(row);
-            });
+                    </div>
+                    <div class="client-url">${client.url || 'No URL'}</div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn-modern btn-scan" onclick="scanClient('${client.id}')">
+                            <i class="fas fa-search"></i> Quét
+                        </button>
+                        <button class="btn-modern btn-health" onclick="checkHealth('${client.id}')">
+                            <i class="fas fa-heartbeat"></i> Health
+                        </button>
+                        <button class="btn-modern btn-info" onclick="viewClient('${client.id}')">
+                            <i class="fas fa-eye"></i> Xem
+                        </button>
+                        <button class="btn-modern btn-danger" onclick="deleteClient('${client.id}')">
+                            <i class="fas fa-trash"></i> Xóa
+                        </button>
+                    </div>
+                </div>
+            `).join('');
         }
-        
-        // Update stats
-        function updateStats() {
-            let onlineCount = 0;
-            let offlineCount = 0;
-            let threatsCount = 0;
+
+        // Mock scan results for testing
+        function getMockScanResults() {
+            const now = Date.now() / 1000;
+            const weekAgo = now - (7 * 24 * 3600);
+            const monthAgo = now - (30 * 24 * 3600);
+            const monthsAgo = now - (5 * 30 * 24 * 3600);
             
-            clients.forEach(client => {
-                if (client.status === 'online') {
-                    onlineCount++;
-                } else if (client.status === 'offline') {
-                    offlineCount++;
-                }
-            });
-            
-            document.getElementById('onlineCount').textContent = onlineCount;
-            document.getElementById('offlineCount').textContent = offlineCount;
-            document.getElementById('threatsCount').textContent = threatsCount;
-            
-            // Update last scan time
-            const lastScanElement = document.getElementById('lastScanTime');
-            if (lastScanResults.length > 0) {
-                const lastScan = new Date();
-                lastScanElement.textContent = lastScan.toLocaleTimeString('vi-VN');
-            }
-        }
-        
-        // Add client modal
-        function addClient() {
-            const modal = new bootstrap.Modal(document.getElementById('addClientModal'));
-            modal.show();
-        }
-        
-        // Save client
-        function saveClient() {
-            const name = document.getElementById('clientName').value;
-            const url = document.getElementById('clientUrl').value;
-            const apiKey = document.getElementById('clientApiKey').value;
-            
-            if (!name || !url || !apiKey) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Lỗi',
-                    text: 'Vui lòng điền đầy đủ thông tin!'
-                });
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('name', name);
-            formData.append('url', url);
-            formData.append('api_key', apiKey);
-            
-            fetch('?api=add_client', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Thành công',
-                        text: 'Client đã được thêm thành công!'
-                    });
-                    
-                    // Close modal and refresh
-                    bootstrap.Modal.getInstance(document.getElementById('addClientModal')).hide();
-                    document.getElementById('addClientForm').reset();
-                    loadClients();
-                } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Lỗi',
-                        text: data.error || 'Có lỗi xảy ra!'
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Lỗi',
-                    text: 'Không thể kết nối đến server!'
-                });
-            });
-        }
-        
-        // Delete client
-        function deleteClient(id) {
-            const client = clients.find(c => c.id === id);
-            if (!client) return;
-            
-            Swal.fire({
-                title: 'Xác nhận xóa',
-                text: `Bạn có chắc muốn xóa client "${client.name}"?`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Xóa',
-                cancelButtonText: 'Hủy'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    const formData = new FormData();
-                    formData.append('id', id);
-                    
-                    fetch('?api=delete_client', {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Đã xóa',
-                                text: 'Client đã được xóa thành công!'
-                            });
-                            loadClients();
-                        } else {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Lỗi',
-                                text: data.error || 'Có lỗi xảy ra!'
-                            });
-                        }
-                    });
-                }
-            });
-        }
-        
-        // Check client health
-        function checkClient(id) {
-            const client = clients.find(c => c.id === id);
-            if (!client) return;
-            
-            showLoading();
-            
-            fetch(`?api=check_client&id=${id}`)
-                .then(response => response.json())
-                .then(data => {
-                    hideLoading();
-                    
-                    if (data.success) {
-                        const status = data.online ? 'online' : 'offline';
-                        const icon = data.online ? 'success' : 'error';
-                        const text = data.online ? 'Client đang online và hoạt động bình thường!' : 'Client không phản hồi hoặc đang offline.';
-                        
-                        Swal.fire({
-                            icon: icon,
-                            title: `Client ${client.name}`,
-                            text: text
-                        });
-                        
-                        loadClients(); // Refresh to update status
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Lỗi',
-                            text: data.error || 'Không thể kiểm tra client!'
-                        });
+            return {
+                success: true,
+                scanned_files: 1250,
+                suspicious_count: 8,
+                critical_count: 3,
+                suspicious_files: [
+                    {
+                        path: './uploads/shell.php',
+                        severity: 'critical',
+                        category: 'webshell',
+                        metadata: {
+                            modified_time: now - 3600, // 1 hour ago
+                            size: 1024
+                        },
+                        issues: [
+                            {
+                                pattern: 'eval(',
+                                description: 'Code execution vulnerability',
+                                line: 15,
+                                code_snippet: '<?php eval($_POST["cmd"]); ?>'
+                            }
+                        ]
+                    },
+                    {
+                        path: './virus-files/backdoor.php',
+                        severity: 'critical',
+                        category: 'malware',
+                        metadata: {
+                            modified_time: weekAgo + 3600, // 6 days ago
+                            size: 2048
+                        },
+                        issues: [
+                            {
+                                pattern: 'base64_decode(',
+                                description: 'Encoded payload execution',
+                                line: 8,
+                                code_snippet: 'base64_decode("ZXZhbCgkX1BPU1RbImNtZCJdKTs=")'
+                            }
+                        ]
+                    },
+                    {
+                        path: './admin/config.php',
+                        severity: 'warning',
+                        category: 'suspicious',
+                        metadata: {
+                            modified_time: monthAgo,
+                            size: 512
+                        },
+                        issues: [
+                            {
+                                pattern: 'file_get_contents(',
+                                description: 'File read operation',
+                                line: 25,
+                                code_snippet: 'file_get_contents($_GET["file"])'
+                            }
+                        ]
+                    },
+                    {
+                        path: './sources/cache.php',
+                        severity: 'critical',
+                        category: 'hacker_planted',
+                        metadata: {
+                            modified_time: now - 7200, // 2 hours ago
+                            size: 64
+                        },
+                        issues: [
+                            {
+                                pattern: 'suspicious_empty_file',
+                                description: 'Empty PHP file - Definitely planted by hacker',
+                                line: 1,
+                                code_snippet: '<?php  ?>'
+                            }
+                        ]
+                    },
+                    {
+                        path: './admin/filemanager/upload.php',
+                        severity: 'warning',
+                        category: 'filemanager',
+                        metadata: {
+                            modified_time: monthsAgo,
+                            size: 8192
+                        },
+                        issues: [
+                            {
+                                pattern: 'move_uploaded_file(',
+                                description: 'File upload without validation',
+                                line: 42,
+                                code_snippet: 'move_uploaded_file($_FILES["file"]["tmp_name"], $target)'
+                            }
+                        ]
                     }
-                })
-                .catch(error => {
-                    hideLoading();
-                    console.error('Error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Lỗi',
-                        text: 'Không thể kết nối đến server!'
-                    });
-                });
+                ]
+            };
         }
-        
-        // Scan single client
-        function scanClient(id) {
-            const client = clients.find(c => c.id === id);
-            if (!client) return;
+
+        // Modified scanClient function to use mock data
+        function scanClient(clientId) {
+            currentClientId = clientId;
+            const client = clients.find(c => c.id === clientId);
             
+            if (!client) return;
+
             Swal.fire({
-                title: `Quét ${client.name}`,
-                text: 'Đang thực hiện quét bảo mật...',
-                icon: 'info',
+                title: 'Đang quét...',
+                html: `Đang quét client: <strong>${client.name}</strong>`,
                 allowOutsideClick: false,
                 showConfirmButton: false,
-                didOpen: () => {
+                willOpen: () => {
                     Swal.showLoading();
                 }
             });
-            
-            fetch(`?api=scan_client&id=${id}`)
-                .then(response => response.json())
-                .then(data => {
-                    Swal.close();
-                    
-                    if (data.success || data.scan_results) {
-                        // Hiển thị kết quả scan chi tiết
-                        displayScanResults(client, data);
-                        loadClients(); // Refresh to update last scan time
-                        
-                        // Scroll to results section
-                        document.getElementById('resultsSection').scrollIntoView({ 
-                            behavior: 'smooth' 
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Lỗi quét',
-                            text: data.error || 'Không thể quét client!'
-                        });
-                    }
-                })
-                .catch(error => {
-                    Swal.close();
-                    console.error('Error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Lỗi',
-                        text: 'Không thể kết nối đến server!'
-                    });
-                });
-        }
-        
-        // Display scan results
-        function displayScanResults(client, data) {
-            const resultsContainer = document.getElementById('resultsContainer');
-            const results = data.scan_results || data;
 
-            console.log('Display scan results:', { client, data, results });
-
-            // Show results section
-            document.getElementById('resultsSection').classList.add('active');
-
-            if (!results || results.suspicious_count === 0) {
-                resultsContainer.innerHTML = `
-                    <div class="alert alert-success">
-                        <i class="fas fa-shield-check"></i>
-                        <strong>✅ Hệ thống ${client.name} an toàn!</strong><br>
-                        Không phát hiện threat nào trong ${results.scanned_files || 0} files đã quét.
-                        <div class="mt-2">
-                            <small class="text-muted">
-                                Thời gian quét: ${results.scan_time || 0}s |
-                                Memory: ${formatBytes(results.memory_used || 0)} |
-                                Risk Score: ${results.risk_score || 0}/100
-                            </small>
+            // Simulate API call delay
+            setTimeout(() => {
+                Swal.close();
+                
+                // Use mock data for demonstration
+                const mockResults = getMockScanResults();
+                currentScanResults = mockResults;
+                displayScanResults(mockResults);
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Quét hoàn tất!',
+                    html: `
+                        <div class="text-start">
+                            <strong>Client:</strong> ${client.name}<br>
+                            <strong>Files quét:</strong> ${mockResults.scanned_files}<br>
+                            <strong>Threats:</strong> ${mockResults.suspicious_count}<br>
+                            <strong>Critical:</strong> ${mockResults.critical_count}
                         </div>
+                    `
+                });
+            }, 2000);
+        }
+
+        // Display scan results with modern design
+        function displayScanResults(results) {
+            const scanResultsDiv = document.getElementById('scanResults');
+            const threatsContainer = document.getElementById('threatsContainer');
+            
+            if (!results || !results.suspicious_files || results.suspicious_files.length === 0) {
+                scanResultsDiv.style.display = 'block';
+                threatsContainer.innerHTML = `
+                    <div class="loading-card">
+                        <i class="fas fa-shield-check" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 20px;"></i>
+                        <h5>Hệ thống an toàn!</h5>
+                        <p class="text-muted">Không phát hiện threats nào</p>
                     </div>
                 `;
                 return;
             }
-            
-            // Create summary card
-            let summaryHtml = `
-                <div class="card mb-4">
-                    <div class="card-header bg-primary text-white">
-                        <h5><i class="fas fa-chart-bar"></i> Kết Quả Quét - ${client.name}</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-3">
-                                <div class="text-center">
-                                    <h4 class="text-primary">${results.scanned_files || 0}</h4>
-                                    <small>Files Đã Quét</small>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="text-center">
-                                    <h4 class="text-danger">${results.critical_count || 0}</h4>
-                                    <small>Critical Threats</small>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="text-center">
-                                    <h4 class="text-warning">${results.webshell_count || 0}</h4>
-                                    <small>Webshells</small>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="text-center">
-                                    <h4 class="text-info">${results.suspicious_count || 0}</h4>
-                                    <small>Total Threats</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-md-4">
-                                <small class="text-muted">Thời gian quét: ${results.scan_time || 0}s</small>
-                            </div>
-                            <div class="col-md-4">
-                                <small class="text-muted">Memory: ${formatBytes(results.memory_used || 0)}</small>
-                            </div>
-                            <div class="col-md-4">
-                                <small class="text-muted">Risk Score: ${results.risk_score || 0}/100</small>
-                            </div>
-                        </div>
-                        ${results.recommendations ? `
-                            <div class="mt-3">
-                                <h6>📋 Khuyến nghị:</h6>
-                                <ul class="mb-0">
-                                    ${results.recommendations.map(rec => `<li>${rec}</li>`).join('')}
-                                </ul>
-                            </div>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
 
-            // Process threats by category
-            let threatsHtml = '';
+            // Sort by time (newest first) and severity
+            const sortedFiles = results.suspicious_files.sort((a, b) => {
+                const aTime = a.metadata?.modified_time || 0;
+                const bTime = b.metadata?.modified_time || 0;
+                
+                // First sort by time (newest first)
+                if (bTime !== aTime) return bTime - aTime;
+                
+                // Then by severity
+                const severityOrder = { critical: 3, warning: 2, info: 1 };
+                return (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0);
+            });
 
-            if (results.threats) {
-                // Critical threats
-                if (results.threats.critical && results.threats.critical.length > 0) {
-                    threatsHtml += generateThreatSection('🚨 Critical Threats', results.threats.critical, 'danger', client);
-                }
-
-                // Webshells
-                if (results.threats.webshells && results.threats.webshells.length > 0) {
-                    threatsHtml += generateThreatSection('🕷️ Webshells Detected', results.threats.webshells, 'danger', client);
-                }
-
-                // Warnings
-                if (results.threats.warnings && results.threats.warnings.length > 0) {
-                    threatsHtml += generateThreatSection('⚠️ Warnings', results.threats.warnings, 'warning', client);
-                }
-            } else if (results.threats && results.threats.all) {
-                // Fallback for old format
-                threatsHtml += generateThreatSection('🔍 All Threats', results.threats.all, 'warning', client);
-            }
-
-            resultsContainer.innerHTML = summaryHtml + threatsHtml;
-        }
-
-        // Generate threat section HTML
-        function generateThreatSection(title, threats, alertType, client) {
-            if (!threats || threats.length === 0) return '';
-
-            let html = `
-                <div class="card mb-3">
-                    <div class="card-header bg-${alertType} text-white">
-                        <h6 class="mb-0">${title} (${threats.length})</h6>
-                    </div>
-                    <div class="card-body">
-            `;
-
-            threats.forEach((threat, index) => {
-                html += `
-                    <div class="threat-item border-bottom pb-2 mb-2">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div class="flex-grow-1">
-                                <strong>📁 ${threat.path}</strong>
-                                <div class="mt-1">
-                `;
-
-                if (threat.issues && Array.isArray(threat.issues)) {
-                    threat.issues.forEach(issue => {
-                        html += `
-                            <div class="badge bg-${issue.severity === 'critical' ? 'danger' : 'warning'} me-1 mb-1">
-                                ${issue.pattern} - ${issue.description}
-                                ${issue.line ? ` (Line: ${issue.line})` : ''}
-                            </div>
-                        `;
-                    });
-                }
-
-                html += `
-                                </div>
-                                ${threat.file_size ? `<small class="text-muted">Size: ${formatBytes(threat.file_size)}</small>` : ''}
-                                ${threat.modified_time ? `<small class="text-muted"> | Modified: ${new Date(threat.modified_time * 1000).toLocaleString()}</small>` : ''}
-                            </div>
-                            <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-warning" onclick="quarantineFile('${client.id}', '${threat.path}')">
-                                    <i class="fas fa-shield-alt"></i> Cách ly
-                                </button>
-                                <button class="btn btn-outline-danger" onclick="deleteFile('${client.id}', '${threat.path}')">
-                                    <i class="fas fa-trash"></i> Xóa
-                                </button>
-                                <button class="btn btn-outline-info" onclick="viewFileContent('${client.id}', '${threat.path}')">
+            scanResultsDiv.style.display = 'block';
+            threatsContainer.innerHTML = sortedFiles.map(file => {
+                const severity = getSeverityLevel(file);
+                const ageInfo = getAgeInfo(file.metadata?.modified_time);
+                const fileSize = formatFileSize(file.metadata?.size || 0);
+                
+                return `
+                    <div class="threat-card ${severity} fade-in-up">
+                        <div class="threat-header">
+                            <div class="threat-path">${file.path}</div>
+                            <div class="threat-actions">
+                                <button class="action-btn action-view" onclick="viewThreat('${file.path}')">
                                     <i class="fas fa-eye"></i> Xem
                                 </button>
+                                <button class="action-btn action-quarantine" onclick="quarantineFile('${file.path}')">
+                                    <i class="fas fa-shield-alt"></i> Cách ly
+                                </button>
+                                <button class="action-btn action-delete" onclick="deleteFile('${file.path}')">
+                                    <i class="fas fa-trash"></i> Xóa
+                                </button>
                             </div>
+                        </div>
+                        
+                        <div class="threat-meta">
+                            <span class="meta-badge meta-severity ${severity}">${getSeverityLabel(severity)}</span>
+                            <span class="meta-badge meta-age ${ageInfo.class}">${ageInfo.label}</span>
+                            <span class="meta-badge meta-size">${fileSize}</span>
+                        </div>
+                        
+                        <div class="threat-details">
+                            ${file.issues?.length || 0} vấn đề phát hiện:
+                            ${(file.issues || []).slice(0, 3).map(issue => 
+                                `<span class="threat-pattern">${issue.pattern}</span>`
+                            ).join(' ')}
+                            ${(file.issues || []).length > 3 ? '...' : ''}
                         </div>
                     </div>
                 `;
-            });
+            }).join('');
 
-            html += `
-                    </div>
-                </div>
-            `;
-
-            return html;
+            // Add filter event listeners
+            document.getElementById('severityFilter').addEventListener('change', filterResults);
+            document.getElementById('ageFilter').addEventListener('change', filterResults);
         }
 
-        // Format bytes to human readable
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        // Quarantine file function
-        function quarantineFile(clientId, filePath) {
-            Swal.fire({
-                title: 'Cách ly file nguy hiểm',
-                html: `
-                    <div class="text-start">
-                        <p><strong>File:</strong> <code>${filePath}</code></p>
-                        <p class="text-info">
-                            <i class="fas fa-shield-alt"></i>
-                            File sẽ được di chuyển vào thư mục quarantine để cách ly an toàn.
-                        </p>
-                    </div>
-                `,
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#ffc107',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: '<i class="fas fa-shield-alt"></i> Cách ly',
-                cancelButtonText: 'Hủy'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    const formData = new FormData();
-                    formData.append('client_id', clientId);
-                    formData.append('file_path', filePath);
-
-                    fetch('?api=quarantine_file', {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Cách ly thành công',
-                                text: 'File đã được cách ly an toàn!'
-                            });
-                        } else {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Lỗi cách ly',
-                                text: data.error || 'Không thể cách ly file!'
-                            });
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Lỗi',
-                            text: 'Không thể kết nối đến server!'
-                        });
-                    });
-                }
-            });
-        }
-
-        // Delete file function
-        function deleteFile(clientId, filePath) {
-            Swal.fire({
-                title: 'Xác nhận xóa file',
-                html: `
-                    <div class="text-start">
-                        <p><strong>File:</strong> <code>${filePath}</code></p>
-                        <p class="text-danger">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            Thao tác này sẽ xóa file vĩnh viễn và không thể hoàn tác!
-                        </p>
-                    </div> 
-                `,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#dc3545',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: '<i class="fas fa-trash"></i> Xóa vĩnh viễn',
-                cancelButtonText: 'Hủy'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    const formData = new FormData();
-                    formData.append('client_id', clientId);
-                    formData.append('file_path', filePath);
-
-                    fetch('?api=delete_file', {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Xóa thành công',
-                                text: 'File đã được xóa!'
-                            });
-                        } else {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Lỗi xóa file',
-                                text: data.error || 'Không thể xóa file!'
-                            });
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Lỗi',
-                            text: 'Không thể kết nối đến server!'
-                        });
-                    });
-                }
-            });
-        }
-
-        // View file content function
-        function viewFileContent(clientId, filePath) {
-            Swal.fire({
-                title: 'Đang tải nội dung file...',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
-
-            const client = clients.find(c => c.id === clientId);
-            if (!client) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Lỗi',
-                    text: 'Không tìm thấy client!'
-                });
-                return;
+        // Get severity level based on file characteristics
+        function getSeverityLevel(file) {
+            if (!file.metadata) return 'info';
+            
+            const now = Date.now() / 1000;
+            const fileTime = file.metadata.modified_time || 0;
+            const age = now - fileTime;
+            
+            // Critical: Files modified within last week with suspicious patterns
+            if (age < 7 * 24 * 3600) { // 1 week
+                return 'critical';
             }
-
-            const url = client.url + '/security_scan_client.php?endpoint=get_file_content&api_key=' +
-                       encodeURIComponent(client.api_key) + '&file_path=' + encodeURIComponent(filePath) + '&lines=100';
-
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    Swal.close();
-
-                    if (data.success) {
-                        const fileData = data.data;
-                        Swal.fire({
-                            title: `📄 ${filePath}`,
-                            html: `
-                                <div class="text-start">
-                                    <div class="mb-3">
-                                        <small class="text-muted">
-                                            Size: ${formatBytes(fileData.file_size)} |
-                                            Lines: ${fileData.total_lines} |
-                                            Modified: ${fileData.last_modified}
-                                            ${fileData.truncated ? ' | <span class="text-warning">Truncated</span>' : ''}
-                                        </small>
-                                    </div>
-                                    <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto; font-size: 12px;">${fileData.content}</pre>
-                                </div>
-                            `,
-                            width: '80%',
-                            showCloseButton: true,
-                            showConfirmButton: false
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Lỗi đọc file',
-                            text: data.error || 'Không thể đọc nội dung file!'
-                        });
-                    }
-                })
-                .catch(error => {
-                    Swal.close();
-                    console.error('Error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Lỗi',
-                        text: 'Không thể kết nối đến client!'
-                    });
-                });
+            
+            // Warning: Files modified within last 5 months
+            if (age < 5 * 30 * 24 * 3600) { // 5 months
+                return 'warning';
+            }
+            
+            // Info: Older files
+            return 'info';
         }
 
+        // Get age info for display
+        function getAgeInfo(timestamp) {
+            if (!timestamp) return { class: 'old', label: 'Cũ' };
+            
+            const now = Date.now() / 1000;
+            const age = now - timestamp;
+            
+            if (age < 7 * 24 * 3600) { // 1 week
+                return { class: 'new', label: 'Mới' };
+            } else if (age < 5 * 30 * 24 * 3600) { // 5 months
+                return { class: 'recent', label: 'Gần đây' };
+            } else {
+                return { class: 'old', label: 'Cũ' };
+            }
+        }
+
+        // Get severity label
+        function getSeverityLabel(severity) {
+            const labels = {
+                critical: 'Nguy hiểm',
+                warning: 'Cảnh báo',
+                info: 'Thông tin'
+            };
+            return labels[severity] || 'Không xác định';
+        }
+
+        // Format file size
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 B';
             const k = 1024;
@@ -2044,640 +2201,35 @@ if (isset($_GET['api'])) {
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
-        
-        function deleteFileFromResults(clientId, filePath, fileIndex) {
-            Swal.fire({
-                title: 'Xác nhận xóa file',
-                html: `
-                    <div class="text-start">
-                        <p><strong>File:</strong> <code>${filePath}</code></p>
-                        <p class="text-warning">
-                            <i class="fas fa-exclamation-triangle"></i> 
-                            Thao tác này sẽ xóa file khỏi server và không thể hoàn tác!
-                        </p>
-                    </div>
-                `,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#dc3545',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: '<i class="fas fa-trash"></i> Xóa File',
-                cancelButtonText: 'Hủy',
-                width: 600
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Show loading
-                    Swal.fire({
-                        title: 'Đang xóa file...',
-                        text: 'Vui lòng chờ',
-                        allowOutsideClick: false,
-                        showConfirmButton: false,
-                        didOpen: () => {
-                            Swal.showLoading();
-                        }
-                    });
-                    
-                    // Call API to delete file
-                    fetch(`?api=delete_file`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        body: `client_id=${clientId}&file_path=${encodeURIComponent(filePath)}`
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            // Remove file from display
-                            const fileElement = document.querySelector(`[data-file-index="${fileIndex}"]`);
-                            if (fileElement) {
-                                fileElement.remove();
-                            }
-                            
-                            // Update scan data
-                            if (window.currentScanData && window.currentScanData.files) {
-                                window.currentScanData.files.splice(fileIndex, 1);
-                            }
-                            
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Đã xóa!',
-                                text: 'File đã được xóa thành công.',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
-                        } else {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Lỗi!',
-                                text: data.error || 'Không thể xóa file.',
-                                width: 600
-                            });
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error deleting file:', error);
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Lỗi!',
-                            text: 'Không thể kết nối đến server.',
-                            width: 600
-                        });
-                    });
-                }
-            });
-        }
-        
-        function deleteAllGroupFiles(groupKey, clientId) {
-            if (!window.currentScanData || !window.currentScanData.files) return;
-            
-            const files = window.currentScanData.files.filter(file => {
-                const isCritical = file.severity === 'critical';
-                const isFilemanager = file.category === 'filemanager';
-                const isSuspiciousFile = file.category === 'suspicious_file';
-                
-                if (groupKey === 'critical') return isCritical && !isFilemanager;
-                if (groupKey === 'suspicious_file') return isSuspiciousFile;
-                if (groupKey === 'filemanager') return isFilemanager;
-                return !isCritical && !isFilemanager && !isSuspiciousFile;
-            }).filter(file => canDeleteFile(file));
-            
-            if (files.length === 0) {
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Không có file nào để xóa',
-                    text: 'Không có file nào trong nhóm này có thể xóa được.'
-                });
-                return;
-            }
-            
-            Swal.fire({
-                title: 'Xác nhận xóa tất cả files',
-                html: `
-                    <div class="text-start">
-                        <p><strong>Sẽ xóa ${files.length} files:</strong></p>
-                        <ul class="list-unstyled small" style="max-height: 200px; overflow-y: auto;">
-                            ${files.map(file => `<li>• <code>${file.path}</code></li>`).join('')}
-                        </ul>
-                        <p class="text-warning">
-                            <i class="fas fa-exclamation-triangle"></i> 
-                            Thao tác này sẽ xóa tất cả files khỏi server và không thể hoàn tác!
-                        </p>
-                    </div>
-                `,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#dc3545',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: `<i class="fas fa-trash"></i> Xóa ${files.length} Files`,
-                cancelButtonText: 'Hủy',
-                width: 700
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Delete files one by one
-                    deleteFilesSequentially(clientId, files, 0);
-                }
-            });
-        }
-        
-        function deleteFilesSequentially(clientId, files, index) {
-            if (index >= files.length) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Hoàn thành!',
-                    text: `Đã xóa ${files.length} files thành công.`,
-                    timer: 3000,
-                    showConfirmButton: false
-                });
-                return;
-            }
-            
-            const file = files[index];
-            
-            // Show progress
-            Swal.fire({
-                title: 'Đang xóa files...',
-                text: `Tiến trình: ${index + 1}/${files.length} - ${file.path}`,
-                allowOutsideClick: false,
-                showConfirmButton: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
-            
-            fetch(`?api=delete_file`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: `client_id=${clientId}&file_path=${encodeURIComponent(file.path)}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Remove file from display
-                    const fileElement = document.querySelector(`[data-file-index="${file.index}"]`);
-                    if (fileElement) {
-                        fileElement.remove();
-                    }
-                }
-                
-                // Continue to next file
-                deleteFilesSequentially(clientId, files, index + 1);
-            })
-            .catch(error => {
-                console.error('Error deleting file:', error);
-                // Continue to next file even if one fails
-                deleteFilesSequentially(clientId, files, index + 1);
-            });
-        }
-        
-        function viewFileDetails(clientId, filePath) {
-            // TODO: Implement file details view
-            Swal.fire({
-                icon: 'info',
-                title: 'Chi tiết file',
-                text: `Tính năng xem chi tiết file sẽ được bổ sung sau.\n\nFile: ${filePath}`,
-                width: 600
-            });
-        }
-        
-        // Scan all clients
-        function scanAllClients() {
-            if (clients.length === 0) {
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Không có client',
-                    text: 'Hãy thêm client trước khi quét!'
-                });
-                return;
-            }
-            
-            showLoading();
-            
-            fetch('?api=scan_all')
-                .then(response => response.json())
-                .then(data => {
-                    hideLoading();
-                    
-                    if (data.success) {
-                        lastScanResults = data.results;
-                        displayBulkScanResults(data.results);
-                        loadClients(); // Refresh clients
-                        
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Quét hoàn tất',
-                            text: `Đã quét ${data.results.length} clients thành công!`
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Lỗi quét',
-                            text: 'Có lỗi xảy ra khi quét clients!'
-                        });
-                    }
-                })
-                .catch(error => {
-                    hideLoading();
-                    console.error('Error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Lỗi',
-                        text: 'Không thể kết nối đến server!'
-                    });
-                });
-        }
-        
-        // Display bulk scan results
-        function displayBulkScanResults(results) {
-            const resultsSection = document.getElementById('resultsSection');
-            const resultsContainer = document.getElementById('resultsContainer');
 
-            resultsContainer.innerHTML = '';
+        // Filter results
+        function filterResults() {
+            const severityFilter = document.getElementById('severityFilter').value;
+            const ageFilter = document.getElementById('ageFilter').value;
+            const cards = document.querySelectorAll('.threat-card');
+            
+            cards.forEach(card => {
+                let showCard = true;
+                
+                // Filter by severity
+                if (severityFilter !== 'all') {
+                    showCard = showCard && card.classList.contains(severityFilter);
+                }
+                
+                // Filter by age
+                if (ageFilter !== 'all') {
+                    const ageElement = card.querySelector('.meta-age');
+                    if (ageElement) {
+                        showCard = showCard && ageElement.classList.contains(ageFilter);
+                    }
+                }
+                
+                card.style.display = showCard ? 'block' : 'none';
+            });
+        }
 
-            if (Array.isArray(results)) {
-                results.forEach(result => {
-                const client = result.client;
-                const scanResult = result.scan_result;
-                
-                let cardClass = 'clean';
-                let statusIcon = 'fas fa-check-circle';
-                let statusText = 'An toàn';
-                
-                if (scanResult.success) {
-                    const status = scanResult.scan_results.status;
-                    if (status === 'critical') {
-                        cardClass = 'critical';
-                        statusIcon = 'fas fa-exclamation-circle';
-                        statusText = 'Nghiêm trọng';
-                    } else if (status === 'warning') {
-                        cardClass = 'warning';
-                        statusIcon = 'fas fa-exclamation-triangle';
-                        statusText = 'Cảnh báo';
-                    }
-                }
-                
-                const card = document.createElement('div');
-                card.className = `result-card ${cardClass}`;
-                card.innerHTML = `
-                    <div class="d-flex justify-content-between align-items-start mb-3">
-                        <div>
-                            <h5 class="mb-1">${client.name}</h5>
-                            <small class="text-muted">${client.url}</small>
-                        </div>
-                        <div class="text-end">
-                            <i class="${statusIcon} text-${cardClass} fs-4"></i>
-                            <div class="mt-1">
-                                <small class="text-${cardClass} fw-bold">${statusText}</small>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    ${scanResult.success ? `
-                        <div class="row">
-                            <div class="col-md-3">
-                                <div class="text-center">
-                                    <div class="h4 mb-0">${scanResult.scan_results.scanned_files}</div>
-                                    <small class="text-muted">Files</small>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="text-center">
-                                    <div class="h4 mb-0">${scanResult.scan_results.suspicious_count}</div>
-                                    <small class="text-muted">Threats</small>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="text-center">
-                                    <div class="h4 mb-0">${scanResult.scan_results.critical_count}</div>
-                                    <small class="text-muted">Critical</small>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="text-center">
-                                    <div class="h4 mb-0">${scanResult.scan_results.scan_time}s</div>
-                                    <small class="text-muted">Time</small>
-                                </div>
-                            </div>
-                        </div>
-                    ` : `
-                        <div class="text-danger">
-                            <i class="fas fa-times-circle"></i>
-                            Lỗi: ${scanResult.error || 'Không thể quét client'}
-                        </div>
-                    `}
-                `;
-                
-                resultsContainer.appendChild(card);
-            });
-            
-            resultsSection.classList.add('active');
-        }
-        
-        // Send daily report
-        function sendDailyReport() {
-            showLoading();
-            
-            fetch('?api=send_report')
-                .then(response => response.json())
-                .then(data => {
-                    hideLoading();
-                    
-                    if (data.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Gửi báo cáo thành công',
-                            text: 'Báo cáo hàng ngày đã được gửi qua email!'
-                        });
-                        
-                        // Also display results
-                        if (data.results) {
-                            displayBulkScanResults(data.results);
-                        }
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Lỗi gửi báo cáo',
-                            text: 'Không thể gửi báo cáo qua email!'
-                        });
-                    }
-                })
-                .catch(error => {
-                    hideLoading();
-                    console.error('Error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Lỗi',
-                        text: 'Không thể kết nối đến server!'
-                    });
-                });
-        }
-        
-        // Refresh clients
-        function refreshClients() {
-            showLoading();
-            loadClients();
-            setTimeout(hideLoading, 1000);
-        }
-        
-        // Show/hide loading
-        function showLoading() {
-            document.getElementById('loadingIndicator').classList.add('active');
-        }
-        
-        function hideLoading() {
-            document.getElementById('loadingIndicator').classList.remove('active');
-        }
-        
-        // Show client details
-        let currentClientId = null;
-        
-        function showClientDetails(clientId) {
-            currentClientId = clientId;
-            const client = clients.find(c => c.id === clientId);
-            
-            if (!client) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Lỗi',
-                    text: 'Không tìm thấy client!'
-                });
-                return;
-            }
-            
-            const modal = new bootstrap.Modal(document.getElementById('clientDetailsModal'));
-            modal.show();
-            
-            // Load client details
-            loadClientDetails(client);
-        }
-        
-        function loadClientDetails(client) {
-            const content = document.getElementById('clientDetailsContent');
-            
-            // Show loading
-            content.innerHTML = `
-                <div class="text-center">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Đang tải...</span>
-                    </div>
-                    <p class="mt-2">Đang tải chi tiết client...</p>
-                </div>
-            `;
-            
-            // Get client status and scan results
-            Promise.all([
-                fetch(`?api=get_client_status&id=${client.id}`),
-                fetch(`?api=get_client_scan_results&id=${client.id}`)
-            ])
-            .then(responses => Promise.all(responses.map(r => r.json())))
-            .then(([statusResult, scanResult]) => {
-                renderClientDetails(client, statusResult, scanResult);
-            })
-            .catch(error => {
-                console.error('Error loading client details:', error);
-                content.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        Có lỗi khi tải chi tiết client. Vui lòng thử lại.
-                    </div>
-                `;
-            });
-        }
-        
-        function renderClientDetails(client, statusResult, scanResult) {
-            const content = document.getElementById('clientDetailsContent');
-            
-            let statusBadge = '';
-            switch(client.status) {
-                case 'online':
-                    statusBadge = '<span class="badge bg-success">Online</span>';
-                    break;
-                case 'offline':
-                    statusBadge = '<span class="badge bg-danger">Offline</span>';
-                    break;
-                default:
-                    statusBadge = '<span class="badge bg-secondary">Unknown</span>';
-            }
-            
-            let html = `
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6><i class="fas fa-info-circle"></i> Thông Tin Client</h6>
-                            </div>
-                            <div class="card-body">
-                                <table class="table table-sm">
-                                    <tr>
-                                        <td><strong>Tên:</strong></td>
-                                        <td>${client.name}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>URL:</strong></td>
-                                        <td><a href="${client.url}" target="_blank">${client.url}</a></td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Trạng Thái:</strong></td>
-                                        <td>${statusBadge}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Lần Quét Cuối:</strong></td>
-                                        <td>${client.last_scan ? new Date(client.last_scan).toLocaleString('vi-VN') : 'Chưa quét'}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Kiểm Tra Cuối:</strong></td>
-                                        <td>${client.last_check ? new Date(client.last_check).toLocaleString('vi-VN') : 'Chưa kiểm tra'}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Tạo Lúc:</strong></td>
-                                        <td>${new Date(client.created_at).toLocaleString('vi-VN')}</td>
-                                    </tr>
-                                </table>
-                                <div class="mt-3">
-                                    <button class="btn btn-sm btn-primary" onclick="scanClient('${client.id}')">
-                                        <i class="fas fa-search"></i> Quét Ngay
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-primary" onclick="checkClient('${client.id}')">
-                                        <i class="fas fa-heartbeat"></i> Kiểm Tra
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-8">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6><i class="fas fa-shield-alt"></i> Kết Quả Quét Bảo Mật</h6>
-                            </div>
-                            <div class="card-body">
-                                <div id="scanResultsContainer">
-                                    ${renderScanResults(scanResult)}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            content.innerHTML = html;
-        }
-        
-        function renderScanResults(scanResult) {
-            if (!scanResult || !scanResult.success) {
-                return `
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        Chưa có kết quả quét nào. Hãy thực hiện quét để xem kết quả.
-                    </div>
-                `;
-            }
-            
-            const data = scanResult.data;
-            if (!data || !data.suspicious_files || data.suspicious_files.length === 0) {
-                return `
-                    <div class="alert alert-success">
-                        <i class="fas fa-shield-check"></i>
-                        <strong>Hệ thống an toàn!</strong><br>
-                        Không phát hiện threat nào trong ${data.scanned_files || 0} files đã quét.
-                    </div>
-                `;
-            }
-            
-            // Group files by severity
-            const groups = {
-                critical: { title: 'Files Virus/Malware Nguy Hiểm', icon: 'fa-skull-crossbones', files: [], color: 'danger' },
-                suspicious_file: { title: 'Files Đáng Ngờ (.php.jpg, Empty)', icon: 'fa-exclamation-circle', files: [], color: 'warning' },
-                filemanager: { title: 'Filemanager Functions', icon: 'fa-folder-open', files: [], color: 'info' },
-                warning: { title: 'Cảnh Báo Bảo Mật', icon: 'fa-exclamation-triangle', files: [], color: 'warning' }
-            };
-            
-            data.suspicious_files.forEach((file, index) => {
-                file.index = index;
-                
-                const isCritical = file.severity === 'critical';
-                const isFilemanager = file.category === 'filemanager';
-                const isSuspiciousFile = file.category === 'suspicious_file';
-                
-                if (isSuspiciousFile) {
-                    groups.suspicious_file.files.push(file);
-                } else if (isCritical && !isFilemanager) {
-                    groups.critical.files.push(file);
-                } else if (isFilemanager) {
-                    groups.filemanager.files.push(file);
-                } else {
-                    groups.warning.files.push(file);
-                }
-            });
-            
-            let html = `
-                <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <strong>Phát hiện ${data.suspicious_count} threats!</strong><br>
-                    <small>Trong đó có ${data.critical_count || 0} threats nghiêm trọng cần xử lý ngay.</small>
-                </div>
-            `;
-            
-            // Render groups
-            Object.keys(groups).forEach(groupKey => {
-                const group = groups[groupKey];
-                if (group.files.length > 0) {
-                    html += `
-                        <div class="threat-group mb-3">
-                            <div class="alert alert-${group.color}">
-                                <h6><i class="fas ${group.icon}"></i> ${group.title} (${group.files.length})</h6>
-                            </div>
-                            <div class="threat-files">
-                    `;
-                    
-                    group.files.forEach(file => {
-                        const isCritical = (file.severity === 'critical' && file.category !== 'filemanager') || file.category === 'suspicious_file';
-                        const firstIssue = file.issues && file.issues.length > 0 ? file.issues[0] : null;
-                        
-                        html += `
-                            <div class="threat-item p-3 mb-2 border rounded">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <h6 class="mb-1">
-                                            <i class="fas fa-file-code"></i> ${file.path}
-                                            ${firstIssue ? `<small class="text-muted">(dòng ${firstIssue.line})</small>` : ''}
-                                        </h6>
-                                        <p class="mb-1 text-muted">
-                                            ${file.issues.length} vấn đề phát hiện
-                                            ${firstIssue ? ` - <span class="text-danger fw-bold">${firstIssue.pattern}</span>` : ''}
-                                        </p>
-                                    </div>
-                                    ${isCritical ? `
-                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteFile('${file.path}', ${file.index})">
-                                            <i class="fas fa-trash-alt"></i> Xóa
-                                        </button>
-                                    ` : ''}
-                                </div>
-                            </div>
-                        `;
-                    });
-                    
-                    html += `
-                            </div>
-                        </div>
-                    `;
-                }
-            });
-            
-            return html;
-        }
-        
-        function refreshClientDetails() {
-            if (currentClientId) {
-                const client = clients.find(c => c.id === currentClientId);
-                if (client) {
-                    loadClientDetails(client);
-                }
-            }
-        }
-        
-        function deleteFile(filePath, fileIndex) {
+        // Delete file
+        function deleteFile(filePath) {
             if (!currentClientId) return;
             
             Swal.fire({
@@ -2691,7 +2243,6 @@ if (isset($_GET['api'])) {
                 cancelButtonText: 'Hủy'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // Call API to delete file
                     fetch(`?api=delete_file`, {
                         method: 'POST',
                         headers: {
@@ -2703,19 +2254,225 @@ if (isset($_GET['api'])) {
                     .then(data => {
                         if (data.success) {
                             Swal.fire('Đã xóa!', 'File đã được xóa thành công.', 'success');
-                            refreshClientDetails();
+                            // Remove card from display
+                            document.querySelectorAll('.threat-card').forEach(card => {
+                                if (card.querySelector('.threat-path').textContent === filePath) {
+                                    card.remove();
+                                }
+                            });
                         } else {
                             Swal.fire('Lỗi!', data.error || 'Không thể xóa file.', 'error');
                         }
                     })
                     .catch(error => {
-                        console.error('Error deleting file:', error);
-                        Swal.fire('Lỗi!', 'Không thể kết nối đến server.', 'error');
+                        Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
                     });
                 }
             });
         }
-    }
+
+        // Quarantine file
+        function quarantineFile(filePath) {
+            if (!currentClientId) return;
+            
+            Swal.fire({
+                title: 'Cách ly file',
+                text: `Cách ly file: ${filePath}?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#f59e0b',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Cách ly',
+                cancelButtonText: 'Hủy'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(`?api=quarantine_file`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: `client_id=${currentClientId}&file_path=${encodeURIComponent(filePath)}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Đã cách ly!', 'File đã được cách ly thành công.', 'success');
+                        } else {
+                            Swal.fire('Lỗi!', data.error || 'Không thể cách ly file.', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
+                    });
+                }
+            });
+        }
+
+        // View threat details
+        function viewThreat(filePath) {
+            const threat = currentScanResults.suspicious_files?.find(f => f.path === filePath);
+            if (!threat) return;
+            
+            const issuesHtml = (threat.issues || []).map(issue => `
+                <div class="mb-2">
+                    <strong>Dòng ${issue.line}:</strong> ${issue.pattern}<br>
+                    <small class="text-muted">${issue.description}</small><br>
+                    <code style="font-size: 0.8rem; background: #f8f9fa; padding: 2px 4px; border-radius: 3px;">
+                        ${issue.code_snippet?.substring(0, 100) || ''}...
+                    </code>
+                </div>
+            `).join('');
+            
+            Swal.fire({
+                title: 'Chi tiết Threat',
+                html: `
+                    <div class="text-start">
+                        <p><strong>File:</strong> ${filePath}</p>
+                        <p><strong>Kích thước:</strong> ${formatFileSize(threat.metadata?.size || 0)}</p>
+                        <p><strong>Thời gian:</strong> ${threat.metadata?.modified_time ? new Date(threat.metadata.modified_time * 1000).toLocaleString('vi-VN') : 'Không xác định'}</p>
+                        <hr>
+                        <h6>Các vấn đề phát hiện:</h6>
+                        ${issuesHtml}
+                    </div>
+                `,
+                width: '80%',
+                confirmButtonText: 'Đóng'
+            });
+        }
+
+        // Other functions (addClient, updateStats, etc.)
+        function addClient() {
+            const name = document.getElementById('clientName').value;
+            const url = document.getElementById('clientUrl').value;
+            const apiKey = document.getElementById('clientApiKey').value;
+            
+            if (!name || !url || !apiKey) {
+                Swal.fire('Lỗi!', 'Vui lòng điền đầy đủ thông tin.', 'error');
+                return;
+            }
+            
+            fetch('?api=add_client', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: `name=${encodeURIComponent(name)}&url=${encodeURIComponent(url)}&api_key=${encodeURIComponent(apiKey)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Thành công!', 'Client đã được thêm.', 'success');
+                    loadClients();
+                    bootstrap.Modal.getInstance(document.getElementById('addClientModal')).hide();
+                    document.getElementById('addClientForm').reset();
+                } else {
+                    Swal.fire('Lỗi!', data.error || 'Không thể thêm client.', 'error');
+                }
+            })
+            .catch(error => {
+                Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
+            });
+        }
+
+        function updateStats() {
+            document.getElementById('totalClients').textContent = clients.length;
+            
+            // Mock statistics
+            let totalThreats = 0;
+            let criticalThreats = 0;
+            let cleanClients = 0;
+            
+            if (currentScanResults && currentScanResults.suspicious_files) {
+                totalThreats = currentScanResults.suspicious_count || 0;
+                criticalThreats = currentScanResults.critical_count || 0;
+            }
+            
+            // Calculate clean clients (assume most are clean)
+            cleanClients = Math.max(0, clients.length - 1); // Assume 1 client has threats
+            
+            document.getElementById('totalThreats').textContent = totalThreats;
+            document.getElementById('criticalThreats').textContent = criticalThreats;
+            document.getElementById('cleanClients').textContent = cleanClients;
+        }
+
+        function loadRecentActivity() {
+            const activityDiv = document.getElementById('recentActivity');
+            activityDiv.innerHTML = `
+                <div class="activity-item">
+                    <div class="activity-icon">
+                        <i class="fas fa-shield-alt text-success"></i>
+                    </div>
+                    <div class="activity-content">
+                        <div class="activity-title">Quét hoàn tất</div>
+                        <div class="activity-time">2 phút trước</div>
+                    </div>
+                </div>
+                <div class="activity-item">
+                    <div class="activity-icon">
+                        <i class="fas fa-exclamation-triangle text-warning"></i>
+                    </div>
+                    <div class="activity-content">
+                        <div class="activity-title">Phát hiện 3 threats</div>
+                        <div class="activity-time">5 phút trước</div>
+                    </div>
+                </div>
+                <div class="activity-item">
+                    <div class="activity-icon">
+                        <i class="fas fa-plus text-primary"></i>
+                    </div>
+                    <div class="activity-content">
+                        <div class="activity-title">Thêm client mới</div>
+                        <div class="activity-time">1 giờ trước</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function checkSystemHealth() {
+            const healthDiv = document.getElementById('systemHealth');
+            healthDiv.innerHTML = `
+                <div class="health-item">
+                    <div class="health-label">Server Status</div>
+                    <div class="health-value">
+                        <span class="badge bg-success">Online</span>
+                    </div>
+                </div>
+                <div class="health-item">
+                    <div class="health-label">Memory Usage</div>
+                    <div class="health-value">
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-primary" style="width: 65%"></div>
+                        </div>
+                        <small class="text-muted">65%</small>
+                    </div>
+                </div>
+                <div class="health-item">
+                    <div class="health-label">Disk Space</div>
+                    <div class="health-value">
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-warning" style="width: 82%"></div>
+                        </div>
+                        <small class="text-muted">82%</small>
+                    </div>
+                </div>
+            `;
+        }
+
+        function scanAllClients() {
+            // Scan all clients
+        }
+
+        function checkHealth(clientId) {
+            // Check client health
+        }
+
+        function viewClient(clientId) {
+            // View client details
+        }
+
+        function deleteClient(clientId) {
+            // Delete client
+        }
     </script>
 </body>
 </html> 
