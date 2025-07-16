@@ -1521,7 +1521,7 @@ if (isset($_GET['api'])) {
         }
 
         .meta-age.recent {
-            background: #F59E0B;
+            background: #3742fa;
             color: white;
         }
 
@@ -2733,9 +2733,7 @@ if (isset($_GET['api'])) {
                                 <button class="action-btn action-view" onclick="viewThreat('${file.path}')">
                                     <i class="fas fa-eye"></i> Xem
                                 </button>
-                                <button class="action-btn action-quarantine" onclick="quarantineFile('${file.path}')">
-                                    <i class="fas fa-shield-alt"></i> Cách ly
-                                </button>
+                               
                                 <button class="action-btn action-delete" onclick="deleteFile('${file.path}')">
                                     <i class="fas fa-trash"></i> Xóa
                                 </button>
@@ -2743,7 +2741,6 @@ if (isset($_GET['api'])) {
                         </div>
                         
                         <div class="threat-meta">
-                            <span class="meta-badge meta-severity ${severity}">${getSeverityLabel(severity)}</span>
                             <span class="meta-badge meta-age ${ageInfo.class}">${ageInfo.label}</span>
                             <span class="meta-badge meta-size">${fileSize}</span>
                         </div>
@@ -3399,10 +3396,18 @@ if (isset($_GET['api'])) {
             });
         }
 
-        // Open file in editor
+                // Open file in editor
         function openFileInEditor(clientId, filePath) {
             currentEditingClientId = clientId;
             currentEditingFile = filePath;
+            
+            // Check if DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    openFileInEditor(clientId, filePath);
+                });
+                return;
+            }
             
             // Show loading
             Swal.fire({
@@ -3416,7 +3421,7 @@ if (isset($_GET['api'])) {
             });
 
             // Fetch file content
-                         fetch(`?api=get_file_content&client_id=${clientId}&file_path=${encodeURIComponent(filePath)}`)
+            fetch(`?api=get_file_content&client_id=${clientId}&file_path=${encodeURIComponent(filePath)}`)
                 .then(response => {
                     console.log('Response status:', response.status);
                     console.log('Response headers:', response.headers);
@@ -3439,62 +3444,88 @@ if (isset($_GET['api'])) {
                         }
                         
                         // Check if modal element exists
-                        const modalElement = document.getElementById('codeEditorModal');
+                        let modalElement = document.getElementById('codeEditorModal');
                         if (!modalElement) {
-                            console.error('Modal element not found');
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Lỗi!',
-                                text: 'Không tìm thấy modal editor. Vui lòng tải lại trang.'
-                            });
+                            console.error('Modal element not found, attempting to create...');
+                            console.log('All elements with modal in ID:', document.querySelectorAll('[id*="modal"]'));
+                            console.log('Body innerHTML length:', document.body.innerHTML.length);
+                            console.log('Contains codeEditorModal:', document.body.innerHTML.includes('codeEditorModal'));
+                            
+                            // Try to wait and check again
+                            setTimeout(() => {
+                                modalElement = document.getElementById('codeEditorModal');
+                                if (!modalElement) {
+                                    console.error('Modal element still not found after waiting');
+                                    console.log('All divs:', document.querySelectorAll('div').length);
+                                    
+                                    // Create modal dynamically
+                                    const modalHTML = `
+                                        <div class="modal fade" id="codeEditorModal" tabindex="-1" aria-labelledby="codeEditorModalLabel" aria-hidden="true">
+                                            <div class="modal-dialog modal-xl">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title" id="codeEditorModalLabel">
+                                                            <i class="fas fa-code me-2"></i>Code Editor
+                                                        </h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="closeCodeEditor()"></button>
+                                                    </div>
+                                                    <div class="modal-body p-0">
+                                                        <div class="code-editor-container">
+                                                            <div class="editor-toolbar">
+                                                                <div class="file-info">
+                                                                    <span class="file-path" id="currentFilePath"></span>
+                                                                    <span class="file-size" id="currentFileSize"></span>
+                                                                </div>
+                                                                <div class="editor-actions">
+                                                                    <button class="btn btn-sm btn-outline-secondary" onclick="formatCode()">
+                                                                        <i class="fas fa-align-left me-1"></i>Format
+                                                                    </button>
+                                                                    <button class="btn btn-sm btn-outline-info" onclick="findInCode()">
+                                                                        <i class="fas fa-search me-1"></i>Find
+                                                                    </button>
+                                                                    <button class="btn btn-sm btn-success" onclick="saveCode()">
+                                                                        <i class="fas fa-save me-1"></i>Save
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            <div id="monacoEditor" style="height: 500px; width: 100%;"></div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <div class="editor-status">
+                                                            <span id="cursorPosition">Line 1, Column 1</span>
+                                                            <span id="fileType">PHP</span>
+                                                        </div>
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="closeCodeEditor()">Close</button>
+                                                        <button type="button" class="btn btn-primary" onclick="saveAndClose()">Save & Close</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `;
+                                    
+                                    document.body.insertAdjacentHTML('beforeend', modalHTML);
+                                    modalElement = document.getElementById('codeEditorModal');
+                                    
+                                    if (modalElement) {
+                                        console.log('Modal created successfully');
+                                        proceedWithModal(modalElement, data, filePath);
+                                    } else {
+                                        Swal.fire({
+                                            icon: 'error',
+                                            title: 'Lỗi!',
+                                            text: 'Không thể tạo modal editor.',
+                                            footer: '<small>Debug: Failed to create modal</small>'
+                                        });
+                                    }
+                                } else {
+                                    proceedWithModal(modalElement, data, filePath);
+                                }
+                            }, 500);
                             return;
                         }
                         
-                        // Update file info first
-                        const filePathElement = document.getElementById('currentFilePath');
-                        const fileSizeElement = document.getElementById('currentFileSize');
-                        const fileTypeElement = document.getElementById('fileType');
-                        
-                        if (filePathElement) filePathElement.textContent = filePath;
-                        if (fileSizeElement) fileSizeElement.textContent = `${data.size} bytes`;
-                        
-                        // Set file type
-                        const extension = filePath.split('.').pop().toLowerCase();
-                        const language = getLanguageFromExtension(extension);
-                        if (fileTypeElement) fileTypeElement.textContent = language.toUpperCase();
-                        
-                        // Set editor content
-                        if (monacoEditor) {
-                            try {
-                                monaco.editor.setModelLanguage(monacoEditor.getModel(), language);
-                                monacoEditor.setValue(data.content);
-                            } catch (err) {
-                                console.error('Monaco editor error:', err);
-                            }
-                        }
-                        
-                        // Show modal using jQuery as fallback
-                        try {
-                            const modal = new bootstrap.Modal(modalElement);
-                            modal.show();
-                        } catch (err) {
-                            console.error('Bootstrap Modal error:', err);
-                            // Fallback to jQuery if available
-                            if (typeof $ !== 'undefined') {
-                                $(modalElement).modal('show');
-                            } else {
-                                // Manual show
-                                modalElement.style.display = 'block';
-                                modalElement.classList.add('show');
-                                document.body.classList.add('modal-open');
-                                
-                                // Add backdrop
-                                const backdrop = document.createElement('div');
-                                backdrop.className = 'modal-backdrop fade show';
-                                backdrop.id = 'editorBackdrop';
-                                document.body.appendChild(backdrop);
-                            }
-                        }
+                                                proceedWithModal(modalElement, data, filePath);
                     } else {
                         console.error('API returned error:', data);
                         Swal.fire({
@@ -3515,6 +3546,79 @@ if (isset($_GET['api'])) {
                         footer: `<small>Debug: ${error.message}</small>`
                     });
                 });
+        }
+
+        // Proceed with modal setup
+        function proceedWithModal(modalElement, data, filePath) {
+            // Update file info first
+            const filePathElement = document.getElementById('currentFilePath');
+            const fileSizeElement = document.getElementById('currentFileSize');
+            const fileTypeElement = document.getElementById('fileType');
+            
+            if (filePathElement) filePathElement.textContent = filePath;
+            if (fileSizeElement) fileSizeElement.textContent = `${data.size} bytes`;
+            
+            // Set file type
+            const extension = filePath.split('.').pop().toLowerCase();
+            const language = getLanguageFromExtension(extension);
+            if (fileTypeElement) fileTypeElement.textContent = language.toUpperCase();
+            
+            // Set editor content
+            if (monacoEditor) {
+                try {
+                    console.log('Setting Monaco editor content...');
+                    monaco.editor.setModelLanguage(monacoEditor.getModel(), language);
+                    monacoEditor.setValue(data.content);
+                    console.log('Monaco editor content set successfully');
+                } catch (err) {
+                    console.error('Monaco editor error:', err);
+                }
+            } else {
+                console.error('Monaco editor not initialized');
+                // Try to initialize Monaco editor
+                setTimeout(() => {
+                    initMonacoEditor();
+                    setTimeout(() => {
+                        if (monacoEditor) {
+                            try {
+                                monaco.editor.setModelLanguage(monacoEditor.getModel(), language);
+                                monacoEditor.setValue(data.content);
+                                console.log('Monaco editor content set after re-initialization');
+                            } catch (err) {
+                                console.error('Monaco editor error after re-init:', err);
+                                // Fallback: show content in textarea
+                                const editorDiv = document.getElementById('monacoEditor');
+                                if (editorDiv) {
+                                    editorDiv.innerHTML = `<textarea style="width: 100%; height: 500px; font-family: monospace; font-size: 14px; padding: 10px; border: none; outline: none; background: #1e1e1e; color: #d4d4d4;">${data.content}</textarea>`;
+                                }
+                            }
+                        }
+                    }, 1000);
+                }, 100);
+            }
+            
+            // Show modal using jQuery as fallback
+            try {
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+            } catch (err) {
+                console.error('Bootstrap Modal error:', err);
+                // Fallback to jQuery if available
+                if (typeof $ !== 'undefined') {
+                    $(modalElement).modal('show');
+                } else {
+                    // Manual show
+                    modalElement.style.display = 'block';
+                    modalElement.classList.add('show');
+                    document.body.classList.add('modal-open');
+                    
+                    // Add backdrop
+                    const backdrop = document.createElement('div');
+                    backdrop.className = 'modal-backdrop fade show';
+                    backdrop.id = 'editorBackdrop';
+                    document.body.appendChild(backdrop);
+                }
+            }
         }
 
         // Get language from file extension
