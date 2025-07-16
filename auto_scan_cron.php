@@ -16,8 +16,8 @@ if (php_sapi_name() !== 'cli') {
     if (!isset($_SERVER['REMOTE_ADDR']) || 
         ($_SERVER['REMOTE_ADDR'] !== '127.0.0.1' && $_SERVER['REMOTE_ADDR'] !== '::1')) {
         die('Access denied. Only CLI or localhost allowed.');
-    }
-}
+    } 
+}  
 
 // Đặt thời gian chạy và memory limit
 set_time_limit(600); // 10 phút

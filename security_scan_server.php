@@ -1886,7 +1886,7 @@ if (isset($_GET['api'])) {
                             <i class="fas fa-exclamation-triangle"></i>
                             Thao tác này sẽ xóa file vĩnh viễn và không thể hoàn tác!
                         </p>
-                    </div>
+                    </div> 
                 `,
                 icon: 'warning',
                 showCancelButton: true,
@@ -2678,6 +2678,7 @@ if (isset($_GET['api'])) {
                 }
             });
         }
+    }
     </script>
 </body>
 </html> 
