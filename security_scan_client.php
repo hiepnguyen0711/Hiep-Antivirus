@@ -132,6 +132,9 @@ class SecurityScanner {
             $this->scannedFiles = 0;
             $this->suspiciousFiles = [];
             $this->criticalFiles = [];
+            
+            // Lấy priority files từ options
+            $priorityFiles = $options['priority_files'] ?? [];
 
             // Enhanced Critical Threat Patterns
             $criticalPatterns = [
@@ -221,8 +224,8 @@ class SecurityScanner {
             // Webshell Detection Patterns
             $webshellPatterns = $this->getWebshellPatterns();
 
-            // Bắt đầu quét
-            $this->scanDirectory('./', $criticalPatterns, $suspiciousPatterns, $webshellPatterns);
+            // Bắt đầu quét - ưu tiên priority files trước
+            $this->scanDirectoryWithPriority('./', $criticalPatterns, $suspiciousPatterns, $webshellPatterns, $priorityFiles);
 
             // Tạo kết quả
             $this->generateScanResults();
@@ -308,7 +311,107 @@ class SecurityScanner {
         }
     }
     
-    private function scanFile($filePath, $criticalPatterns, $suspiciousPatterns, $webshellPatterns = []) {
+    private function scanDirectoryWithPriority($dir, $criticalPatterns, $suspiciousPatterns, $webshellPatterns = [], $priorityFiles = []) {
+        if (!is_dir($dir) || $this->scannedFiles >= SecurityClientConfig::MAX_SCAN_FILES) {
+            return;
+        }
+
+        $excludeDirs = ['.git', '.svn', 'node_modules', 'vendor', 'cache', 'logs', 'tmp', 'temp'];
+        $excludeFiles = ['security_scan_client.php', 'security_scan_server.php']; // Bỏ qua chính file này
+        
+        try {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::LEAVES_ONLY
+            );
+            
+            // Collect all files first
+            $allFiles = [];
+            $priorityMatches = [];
+            
+            foreach ($iterator as $file) {
+                if ($file->isFile()) {
+                    $filePath = $file->getPathname();
+                    $fileName = basename($filePath);
+                    $extension = strtolower($file->getExtension());
+                    
+                    // Bỏ qua file không cần thiết
+                    if (in_array($fileName, $excludeFiles)) {
+                        continue;
+                    }
+                    
+                    // Bỏ qua thư mục loại trừ
+                    $skip = false;
+                    foreach ($excludeDirs as $excludeDir) {
+                        if (strpos($filePath, $excludeDir) !== false) {
+                            $skip = true;
+                            break;
+                        }
+                    }
+                    
+                    if ($skip) {
+                        continue;
+                    }
+                    
+                    // Chỉ quét file PHP và một số file cấu hình
+                    if ($extension === 'php' || strpos($fileName, '.php.') !== false ||
+                        $this->isSuspiciousFileExtension($fileName)) {
+                        
+                        // Check if file matches priority patterns
+                        $isPriority = false;
+                        foreach ($priorityFiles as $pattern) {
+                            if ($this->matchesPattern($filePath, $pattern)) {
+                                $isPriority = true;
+                                break;
+                            }
+                        }
+                        
+                        if ($isPriority) {
+                            $priorityMatches[] = $filePath;
+                        } else {
+                            $allFiles[] = $filePath;
+                        }
+                    }
+                }
+            }
+            
+            // Scan priority files first
+            foreach ($priorityMatches as $filePath) {
+                if ($this->scannedFiles >= SecurityClientConfig::MAX_SCAN_FILES) {
+                    break;
+                }
+                
+                $this->scanFile($filePath, $criticalPatterns, $suspiciousPatterns, $webshellPatterns, true);
+                $this->scannedFiles++;
+            }
+            
+            // Then scan regular files
+            foreach ($allFiles as $filePath) {
+                if ($this->scannedFiles >= SecurityClientConfig::MAX_SCAN_FILES) {
+                    break;
+                }
+                
+                $this->scanFile($filePath, $criticalPatterns, $suspiciousPatterns, $webshellPatterns, false);
+                $this->scannedFiles++;
+            }
+            
+        } catch (Exception $e) {
+            // Tiếp tục quét nếu có lỗi
+            error_log("Scan error in directory $dir: " . $e->getMessage());
+        }
+    }
+    
+    private function matchesPattern($filePath, $pattern) {
+        // Convert wildcard pattern to regex
+        $pattern = str_replace(['*', '?'], ['.*', '.'], $pattern);
+        $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/i';
+        
+        // Check if filename matches pattern
+        $fileName = basename($filePath);
+        return preg_match($pattern, $fileName) || preg_match($pattern, $filePath);
+    }
+    
+    private function scanFile($filePath, $criticalPatterns, $suspiciousPatterns, $webshellPatterns = [], $isPriority = false) {
         if (!file_exists($filePath) || !is_readable($filePath)) {
             return;
         }
@@ -380,7 +483,8 @@ class SecurityScanner {
                 'file_size' => filesize($filePath),
                 'modified_time' => filemtime($filePath),
                 'md5' => md5_file($filePath),
-                'category' => $this->categorizeFile($filePath, $issues)
+                'category' => $this->categorizeFile($filePath, $issues),
+                'is_priority' => $isPriority
             ];
             
             $this->suspiciousFiles[] = $fileInfo;
@@ -759,7 +863,7 @@ function handleScanRequest() {
     // Lấy options từ request
     $options = json_decode(file_get_contents('php://input'), true) ?: [];
     
-    // Thực hiện scan
+    // Thực hiện scan với priority files
     $result = $scanner->performScan($options);
     
     // Lưu kết quả

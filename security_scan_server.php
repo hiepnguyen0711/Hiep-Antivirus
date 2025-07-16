@@ -144,7 +144,7 @@ class ScannerManager {
         }
     }
     
-    public function scanClient($client) {
+    public function scanClient($client, $priorityFiles = []) {
         // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
         $url = rtrim($client['url'], '/');
         if (strpos($url, 'security_scan_client.php') === false) {
@@ -152,7 +152,12 @@ class ScannerManager {
         }
         $url .= '?endpoint=scan&api_key=' . urlencode($client['api_key']);
         
-        $response = $this->makeApiRequest($url, 'POST', [], null);
+        // Gửi priority files sang client
+        $scanData = [
+            'priority_files' => $priorityFiles
+        ];
+        
+        $response = $this->makeApiRequest($url, 'POST', [], json_encode($scanData));
         
         if ($response['success']) {
             $this->clientManager->updateClient($client['id'], [
@@ -660,7 +665,11 @@ if (isset($_GET['api'])) {
                 break;
             }
             
-            $result = $scannerManager->scanClient($client);
+            // Get priority files from request
+            $requestData = json_decode(file_get_contents('php://input'), true);
+            $priorityFiles = $requestData['priority_files'] ?? [];
+            
+            $result = $scannerManager->scanClient($client, $priorityFiles);
             echo json_encode($result);
             break;
             
@@ -838,6 +847,9 @@ if (isset($_GET['api'])) {
             
             /* Severity Colors */
             --critical-red: #DC3545;
+            --priority-color: #9333ea;
+            --priority-light: #faf5ff;
+            --priority-border: #e9d5ff;
             --critical-bg: #FEF2F2;
             --critical-border: #FECACA;
             
@@ -1498,6 +1510,208 @@ if (isset($_GET['api'])) {
             }
         }
 
+        /* Priority Files Styles */
+        .priority-files-input-container {
+            position: relative;
+            margin-bottom: 15px;
+        }
+
+        .priority-files-input {
+            background: var(--priority-light);
+            border: 2px solid var(--priority-border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .priority-files-input:focus {
+            border-color: var(--priority-color);
+            box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.1);
+            outline: none;
+        }
+
+        .input-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid var(--priority-border);
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .suggestion-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--priority-border);
+            transition: background-color 0.2s ease;
+        }
+
+        .suggestion-item:hover {
+            background-color: var(--priority-light);
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .priority-files-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            min-height: 40px;
+            padding: 8px 0;
+        }
+
+        .priority-tag {
+            background: var(--priority-color);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            animation: tagSlideIn 0.3s ease;
+        }
+
+        .priority-tag .remove-tag {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            font-size: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s ease;
+        }
+
+        .priority-tag .remove-tag:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @keyframes tagSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .priority-stats {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            background: var(--priority-light);
+            border-radius: 12px;
+            border: 1px solid var(--priority-border);
+        }
+
+        .stat-item {
+            text-align: center;
+            flex: 1;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--priority-color);
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .common-patterns {
+            margin-top: 20px;
+        }
+
+        .pattern-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .pattern-buttons .btn {
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 12px;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pattern-buttons .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .pattern-buttons .btn:hover::before {
+            left: 100%;
+        }
+
+        .pattern-buttons .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            color: #6b7280;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-icon:hover {
+            background: rgba(107, 114, 128, 0.1);
+            color: var(--primary-blue);
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        @media (max-width: 768px) {
+            .priority-stats {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .pattern-buttons {
+                justify-content: center;
+            }
+        }
+
         /* Animations */
         @keyframes fadeInUp {
             from {
@@ -1678,6 +1892,82 @@ if (isset($_GET['api'])) {
             
             <div class="clients-grid" id="clientsGrid">
                 <!-- Clients will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Priority Files Section -->
+        <div class="modern-card mb-4">
+            <div class="card-header">
+                <h6 class="card-title">
+                    <i class="fas fa-search-plus me-2"></i>Priority Files Scanner
+                </h6>
+                <div class="card-actions">
+                    <button class="btn-icon" onclick="togglePriorityFiles()" id="priorityToggle">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body" id="priorityFilesContent" style="display: none;">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="form-group">
+                            <label class="form-label">
+                                <i class="fas fa-file-code me-1"></i>Priority File Patterns
+                            </label>
+                            <div class="priority-files-input-container">
+                                <input type="text" 
+                                       class="form-control priority-files-input" 
+                                       id="priorityFileInput"
+                                       placeholder="Nhập tên file hoặc pattern (vd: *.php, shell.php, config.*)">
+                                <div class="input-suggestions" id="patternSuggestions"></div>
+                            </div>
+                            <div class="priority-files-tags" id="priorityFilesTags"></div>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Các file này sẽ được ưu tiên quét trước. Hỗ trợ wildcard (*) và regex patterns.
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="priority-stats">
+                            <div class="stat-item">
+                                <div class="stat-value" id="priorityFilesCount">0</div>
+                                <div class="stat-label">Priority Files</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="priorityScore">0</div>
+                                <div class="stat-label">Priority Score</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Common Patterns Quick Add -->
+                <div class="common-patterns mt-3">
+                    <label class="form-label">
+                        <i class="fas fa-magic me-1"></i>Common Suspicious Patterns
+                    </label>
+                    <div class="pattern-buttons">
+                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('shell.php')">
+                            <i class="fas fa-bug me-1"></i>shell.php
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('*.php.txt')">
+                            <i class="fas fa-file-code me-1"></i>*.php.txt
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('config.php')">
+                            <i class="fas fa-cog me-1"></i>config.php
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('upload*.php')">
+                            <i class="fas fa-upload me-1"></i>upload*.php
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('admin*.php')">
+                            <i class="fas fa-user-shield me-1"></i>admin*.php
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="addCommonPattern('eval*.php')">
+                            <i class="fas fa-exclamation-triangle me-1"></i>eval*.php
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1942,8 +2232,16 @@ if (isset($_GET['api'])) {
                 }
             });
 
-            // Call real API
-            fetch(`?api=scan_client&id=${clientId}`)
+            // Call real API with priority files
+            fetch(`?api=scan_client&id=${clientId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    priority_files: priorityFiles
+                })
+            })
                 .then(response => response.json())
                 .then(data => {
                     Swal.close();
@@ -2529,6 +2827,211 @@ if (isset($_GET['api'])) {
         function deleteClient(clientId) {
             // Delete client
         }
+
+        // Priority Files Functions
+        let priorityFiles = JSON.parse(localStorage.getItem('priorityFiles')) || [];
+        
+        function togglePriorityFiles() {
+            const content = document.getElementById('priorityFilesContent');
+            const toggle = document.getElementById('priorityToggle');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                toggle.innerHTML = '<i class="fas fa-chevron-up"></i>';
+                toggle.classList.add('active');
+            } else {
+                content.style.display = 'none';
+                toggle.innerHTML = '<i class="fas fa-chevron-down"></i>';
+                toggle.classList.remove('active');
+            }
+        }
+
+        function addPriorityFile(pattern) {
+            if (!pattern || pattern.trim() === '') return;
+            
+            pattern = pattern.trim();
+            
+            // Check if pattern already exists
+            if (priorityFiles.includes(pattern)) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Pattern đã tồn tại',
+                    text: `Pattern "${pattern}" đã có trong danh sách.`
+                });
+                return;
+            }
+            
+            priorityFiles.push(pattern);
+            updatePriorityDisplay();
+            savePriorityFiles();
+            
+            // Clear input
+            document.getElementById('priorityFileInput').value = '';
+            
+            // Show success micro-interaction
+            showPatternAdded(pattern);
+        }
+
+        function removePriorityFile(pattern) {
+            priorityFiles = priorityFiles.filter(p => p !== pattern);
+            updatePriorityDisplay();
+            savePriorityFiles();
+        }
+
+        function updatePriorityDisplay() {
+            const tagsContainer = document.getElementById('priorityFilesTags');
+            const countElement = document.getElementById('priorityFilesCount');
+            const scoreElement = document.getElementById('priorityScore');
+            
+            // Update count
+            countElement.textContent = priorityFiles.length;
+            
+            // Calculate priority score
+            let score = 0;
+            priorityFiles.forEach(pattern => {
+                if (pattern.includes('*')) score += 3;
+                else if (pattern.includes('shell') || pattern.includes('eval')) score += 5;
+                else score += 2;
+            });
+            scoreElement.textContent = score;
+            
+            // Update tags display
+            tagsContainer.innerHTML = '';
+            priorityFiles.forEach(pattern => {
+                const tag = document.createElement('div');
+                tag.className = 'priority-tag';
+                tag.innerHTML = `
+                    <span>${pattern}</span>
+                    <button class="remove-tag" onclick="removePriorityFile('${pattern}')" title="Xóa pattern">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                tagsContainer.appendChild(tag);
+            });
+        }
+
+        function addCommonPattern(pattern) {
+            addPriorityFile(pattern);
+        }
+
+        function showPatternAdded(pattern) {
+            // Create temporary success indicator
+            const indicator = document.createElement('div');
+            indicator.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: var(--priority-color);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 8px;
+                font-size: 12px;
+                z-index: 9999;
+                animation: slideInRight 0.3s ease;
+            `;
+            indicator.innerHTML = `<i class="fas fa-check me-2"></i>Added: ${pattern}`;
+            document.body.appendChild(indicator);
+            
+            setTimeout(() => {
+                indicator.style.animation = 'slideOutRight 0.3s ease';
+                setTimeout(() => {
+                    document.body.removeChild(indicator);
+                }, 300);
+            }, 2000);
+        }
+
+        function savePriorityFiles() {
+            localStorage.setItem('priorityFiles', JSON.stringify(priorityFiles));
+        }
+
+        function showPatternSuggestions(input) {
+            const suggestions = [
+                'shell.php', '*.php.txt', 'config.php', 'upload*.php', 'admin*.php',
+                'eval*.php', 'backdoor*.php', 'wp-config.php', 'index.php.bak',
+                '*.php~', 'test*.php', 'debug*.php', 'error*.log', 'access*.log'
+            ];
+            
+            const suggestionsDiv = document.getElementById('patternSuggestions');
+            const value = input.value.toLowerCase();
+            
+            if (value.length < 2) {
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+            
+            const filtered = suggestions.filter(s => 
+                s.toLowerCase().includes(value) && !priorityFiles.includes(s)
+            );
+            
+            if (filtered.length === 0) {
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+            
+            suggestionsDiv.innerHTML = filtered.map(s => 
+                `<div class="suggestion-item" onclick="addPriorityFile('${s}')">${s}</div>`
+            ).join('');
+            
+            suggestionsDiv.style.display = 'block';
+        }
+
+        // Initialize Priority Files
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load saved priority files
+            updatePriorityDisplay();
+            
+            // Setup input events
+            const input = document.getElementById('priorityFileInput');
+            input.addEventListener('input', function() {
+                showPatternSuggestions(this);
+            });
+            
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addPriorityFile(this.value);
+                }
+            });
+            
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.priority-files-input-container')) {
+                    document.getElementById('patternSuggestions').style.display = 'none';
+                }
+            });
+        });
+
+        // Add CSS animations for micro-interactions
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideInRight {
+                from {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+            
+            @keyframes slideOutRight {
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+                to {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+            }
+            
+            .btn-icon.active {
+                color: var(--priority-color);
+                background: var(--priority-light);
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html> 
