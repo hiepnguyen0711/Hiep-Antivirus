@@ -312,6 +312,59 @@ class ScannerManager {
         ];
     }
     
+    public function getFileContent($client, $filePath) {
+        // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
+        $url = rtrim($client['url'], '/');
+        if (strpos($url, 'security_scan_client.php') === false) {
+            $url .= '/security_scan_client.php';
+        }
+        $url .= '?endpoint=get_file&api_key=' . urlencode($client['api_key']);
+        
+        $response = $this->makeApiRequest($url, 'POST', [], json_encode(['file_path' => $filePath]));
+        
+        if ($response['success'] && isset($response['data']['content'])) {
+            return [
+                'success' => true,
+                'content' => $response['data']['content'],
+                'size' => $response['data']['size'] ?? strlen($response['data']['content']),
+                'file_path' => $filePath
+            ];
+        } else {
+            return [
+                'success' => false,
+                'error' => $response['error'] ?? 'Failed to get file content'
+            ];
+        }
+    }
+    
+    public function saveFileContent($client, $filePath, $content) {
+        // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
+        $url = rtrim($client['url'], '/');
+        if (strpos($url, 'security_scan_client.php') === false) {
+            $url .= '/security_scan_client.php';
+        }
+        $url .= '?endpoint=save_file&api_key=' . urlencode($client['api_key']);
+        
+        $response = $this->makeApiRequest($url, 'POST', [], json_encode([
+            'file_path' => $filePath,
+            'content' => $content
+        ]));
+        
+        if ($response['success']) {
+            return [
+                'success' => true,
+                'message' => 'File saved successfully',
+                'file_path' => $filePath,
+                'size' => strlen($content)
+            ];
+        } else {
+            return [
+                'success' => false,
+                'error' => $response['error'] ?? 'Failed to save file'
+            ];
+        }
+    }
+    
     public function deleteFileOnClient($client, $filePath) {
         // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
         $url = rtrim($client['url'], '/');
@@ -557,6 +610,50 @@ class EmailManager {
         <div class="footer">
             <p><strong>' . SecurityServerConfig::SERVER_NAME . '</strong> - Automated Security Report</p>
             <p>Phát triển bởi <a href="https://www.facebook.com/G.N.S.L.7/">Hiệp Nguyễn</a></p>
+        </div>
+    </div>
+
+    <!-- Code Editor Modal -->
+    <div class="modal fade" id="codeEditorModal" tabindex="-1" aria-labelledby="codeEditorModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="codeEditorModalLabel">
+                        <i class="fas fa-code me-2"></i>Code Editor
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="code-editor-container">
+                        <div class="editor-toolbar">
+                            <div class="file-info">
+                                <span class="file-path" id="currentFilePath"></span>
+                                <span class="file-size" id="currentFileSize"></span>
+                            </div>
+                            <div class="editor-actions">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="formatCode()">
+                                    <i class="fas fa-align-left me-1"></i>Format
+                                </button>
+                                <button class="btn btn-sm btn-outline-info" onclick="findInCode()">
+                                    <i class="fas fa-search me-1"></i>Find
+                                </button>
+                                <button class="btn btn-sm btn-success" onclick="saveCode()">
+                                    <i class="fas fa-save me-1"></i>Save
+                                </button>
+                            </div>
+                        </div>
+                        <div id="monacoEditor" style="height: 500px; width: 100%;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="editor-status">
+                        <span id="cursorPosition">Line 1, Column 1</span>
+                        <span id="fileType">PHP</span>
+                    </div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="saveAndClose()">Save & Close</button>
+                </div>
+            </div>
         </div>
     </div>
 </body>
@@ -816,6 +913,46 @@ if (isset($_GET['api'])) {
             echo json_encode(['success' => true, 'data' => $stats]);
             break;
             
+        case 'get_file_content':
+            $clientId = $_GET['client_id'] ?? '';
+            $filePath = $_GET['file_path'] ?? '';
+            
+            if (empty($clientId) || empty($filePath)) {
+                echo json_encode(['success' => false, 'error' => 'Missing client_id or file_path']);
+                break;
+            }
+            
+            $client = $clientManager->getClient($clientId);
+            if (!$client) {
+                echo json_encode(['success' => false, 'error' => 'Client not found']);
+                break;
+            }
+            
+            $result = $scannerManager->getFileContent($client, $filePath);
+            echo json_encode($result);
+            break;
+            
+        case 'save_file_content':
+            $clientId = $_GET['client_id'] ?? '';
+            $requestData = json_decode(file_get_contents('php://input'), true);
+            $filePath = $requestData['file_path'] ?? '';
+            $content = $requestData['content'] ?? '';
+            
+            if (empty($clientId) || empty($filePath)) {
+                echo json_encode(['success' => false, 'error' => 'Missing client_id or file_path']);
+                break;
+            }
+            
+            $client = $clientManager->getClient($clientId);
+            if (!$client) {
+                echo json_encode(['success' => false, 'error' => 'Client not found']);
+                break;
+            }
+            
+            $result = $scannerManager->saveFileContent($client, $filePath, $content);
+            echo json_encode($result);
+            break;
+            
         default:
             echo json_encode(['success' => false, 'error' => 'Unknown action']);
     }
@@ -836,6 +973,7 @@ if (isset($_GET['api'])) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
     <style>
         :root {
             /* Modern Color Palette */
@@ -1712,6 +1850,128 @@ if (isset($_GET['api'])) {
             }
         }
 
+        /* Modern Card Style */
+        .modern-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border: 1px solid #E5E7EB;
+            margin-bottom: 24px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .modern-card:hover {
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+            transform: translateY(-2px);
+        }
+
+        .modern-card .card-header {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            border-bottom: 1px solid #e2e8f0;
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modern-card .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .modern-card .card-body {
+            padding: 24px;
+        }
+
+        .modern-card .form-group {
+            margin-bottom: 20px;
+        }
+
+        .modern-card .form-label {
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        /* Code Editor Modal Styles */
+        .code-editor-container {
+            background: #1e1e1e;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .editor-toolbar {
+            background: #2d2d30;
+            border-bottom: 1px solid #3e3e42;
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .file-path {
+            color: #cccccc;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .file-size {
+            color: #858585;
+            font-size: 11px;
+            background: #3e3e42;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .editor-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .editor-actions .btn {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .editor-status {
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        #monacoEditor {
+            border: none;
+            outline: none;
+        }
+
+        .modal-xl {
+            max-width: 90vw;
+        }
+
+        .modal-xl .modal-content {
+            height: 80vh;
+        }
+
+        .modal-xl .modal-body {
+            flex: 1;
+            overflow: hidden;
+        }
+
         /* Animations */
         @keyframes fadeInUp {
             from {
@@ -1873,6 +2133,82 @@ if (isset($_GET['api'])) {
 
     <!-- Main Container -->
     <div class="main-container">
+        <!-- Priority Files Section -->
+        <div class="modern-card mb-4">
+            <div class="card-header">
+                <h6 class="card-title">
+                    <i class="fas fa-search-plus me-2"></i>Priority Files Scanner
+                </h6>
+                <div class="card-actions">
+                    <button class="btn-icon" onclick="togglePriorityFiles()" id="priorityToggle">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body" id="priorityFilesContent" style="display: none;">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="form-group">
+                            <label class="form-label">
+                                <i class="fas fa-file-code me-1"></i>Priority File Patterns
+                            </label>
+                            <div class="priority-files-input-container">
+                                <input type="text" 
+                                       class="form-control priority-files-input" 
+                                       id="priorityFileInput"
+                                       placeholder="Nhập tên file hoặc pattern (vd: *.php, shell.php, config.*)">
+                                <div class="input-suggestions" id="patternSuggestions"></div>
+                            </div>
+                            <div class="priority-files-tags" id="priorityFilesTags"></div>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Các file này sẽ được ưu tiên quét trước. Hỗ trợ wildcard (*) và regex patterns.
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="priority-stats">
+                            <div class="stat-item">
+                                <div class="stat-value" id="priorityFilesCount">0</div>
+                                <div class="stat-label">Priority Files</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="priorityScore">0</div>
+                                <div class="stat-label">Priority Score</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Common Patterns Quick Add -->
+                <div class="common-patterns mt-3">
+                    <label class="form-label">
+                        <i class="fas fa-magic me-1"></i>Common Suspicious Patterns
+                    </label>
+                    <div class="pattern-buttons">
+                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('shell.php')">
+                            <i class="fas fa-bug me-1"></i>shell.php
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('*.php.txt')">
+                            <i class="fas fa-file-code me-1"></i>*.php.txt
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('config.php')">
+                            <i class="fas fa-cog me-1"></i>config.php
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('upload*.php')">
+                            <i class="fas fa-upload me-1"></i>upload*.php
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('admin*.php')">
+                            <i class="fas fa-user-shield me-1"></i>admin*.php
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="addCommonPattern('eval*.php')">
+                            <i class="fas fa-exclamation-triangle me-1"></i>eval*.php
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Client Management -->
         <div class="client-management">
             <div class="card-header-modern">
@@ -1895,8 +2231,7 @@ if (isset($_GET['api'])) {
             </div>
         </div>
 
-        <!-- Priority Files Section -->
-        <div class="modern-card mb-4">
+        <!-- Moved Priority Files Section Above -->
             <div class="card-header">
                 <h6 class="card-title">
                     <i class="fas fa-search-plus me-2"></i>Priority Files Scanner
@@ -3032,6 +3367,224 @@ if (isset($_GET['api'])) {
             }
         `;
         document.head.appendChild(style);
+
+        // Monaco Editor Setup
+        let monacoEditor = null;
+        let currentEditingFile = null;
+        let currentEditingClientId = null;
+
+        // Initialize Monaco Editor
+        function initMonacoEditor() {
+            require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } });
+            require(['vs/editor/editor.main'], function () {
+                monacoEditor = monaco.editor.create(document.getElementById('monacoEditor'), {
+                    value: '',
+                    language: 'php',
+                    theme: 'vs-dark',
+                    fontSize: 14,
+                    fontFamily: 'JetBrains Mono, Monaco, "Courier New", monospace',
+                    lineNumbers: 'on',
+                    roundedSelection: false,
+                    scrollBeyondLastLine: false,
+                    readOnly: false,
+                    automaticLayout: true,
+                    minimap: {
+                        enabled: true
+                    },
+                    folding: true,
+                    wordWrap: 'on',
+                    bracketMatching: 'always',
+                    autoIndent: 'full',
+                    formatOnPaste: true,
+                    formatOnType: true
+                });
+
+                // Update cursor position
+                monacoEditor.onDidChangeCursorPosition(function (e) {
+                    document.getElementById('cursorPosition').textContent = 
+                        `Line ${e.position.lineNumber}, Column ${e.position.column}`;
+                });
+
+                // Auto-save on Ctrl+S
+                monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function () {
+                    saveCode();
+                });
+
+                // Find with Ctrl+F
+                monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, function () {
+                    findInCode();
+                });
+            });
+        }
+
+        // Open file in editor
+        function openFileInEditor(clientId, filePath) {
+            currentEditingClientId = clientId;
+            currentEditingFile = filePath;
+            
+            // Show loading
+            Swal.fire({
+                title: 'Đang tải file...',
+                html: `Đang tải nội dung file: <strong>${filePath}</strong>`,
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                willOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            // Fetch file content
+            fetch(`?api=get_file_content&client_id=${clientId}&file_path=${encodeURIComponent(filePath)}`)
+                .then(response => response.json())
+                .then(data => {
+                    Swal.close();
+                    
+                    if (data.success) {
+                        // Update file info
+                        document.getElementById('currentFilePath').textContent = filePath;
+                        document.getElementById('currentFileSize').textContent = `${data.size} bytes`;
+                        
+                        // Set file type
+                        const extension = filePath.split('.').pop().toLowerCase();
+                        const language = getLanguageFromExtension(extension);
+                        document.getElementById('fileType').textContent = language.toUpperCase();
+                        
+                        // Set editor content
+                        if (monacoEditor) {
+                            monaco.editor.setModelLanguage(monacoEditor.getModel(), language);
+                            monacoEditor.setValue(data.content);
+                        }
+                        
+                        // Show modal
+                        const modal = new bootstrap.Modal(document.getElementById('codeEditorModal'));
+                        modal.show();
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Lỗi tải file!',
+                            text: data.error || 'Không thể tải nội dung file.'
+                        });
+                    }
+                })
+                .catch(error => {
+                    Swal.close();
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Lỗi kết nối!',
+                        text: 'Không thể kết nối với server để tải file.'
+                    });
+                    console.error('File load error:', error);
+                });
+        }
+
+        // Get language from file extension
+        function getLanguageFromExtension(extension) {
+            const languageMap = {
+                'php': 'php',
+                'js': 'javascript',
+                'html': 'html',
+                'htm': 'html',
+                'css': 'css',
+                'json': 'json',
+                'xml': 'xml',
+                'sql': 'sql',
+                'txt': 'plaintext',
+                'log': 'plaintext',
+                'conf': 'plaintext',
+                'htaccess': 'apache'
+            };
+            return languageMap[extension] || 'plaintext';
+        }
+
+        // Format code
+        function formatCode() {
+            if (monacoEditor) {
+                monacoEditor.trigger('', 'editor.action.formatDocument');
+            }
+        }
+
+        // Find in code
+        function findInCode() {
+            if (monacoEditor) {
+                monacoEditor.trigger('', 'actions.find');
+            }
+        }
+
+        // Save code
+        function saveCode() {
+            if (!monacoEditor || !currentEditingFile || !currentEditingClientId) {
+                return;
+            }
+
+            const content = monacoEditor.getValue();
+            
+            Swal.fire({
+                title: 'Đang lưu file...',
+                html: `Đang lưu: <strong>${currentEditingFile}</strong>`,
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                willOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch(`?api=save_file_content&client_id=${currentEditingClientId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    file_path: currentEditingFile,
+                    content: content
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                Swal.close();
+                
+                if (data.success) {
+                    // Update file size
+                    document.getElementById('currentFileSize').textContent = `${data.size} bytes`;
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Lưu thành công!',
+                        text: `File ${currentEditingFile} đã được lưu.`,
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Lỗi lưu file!',
+                        text: data.error || 'Không thể lưu file.'
+                    });
+                }
+            })
+            .catch(error => {
+                Swal.close();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Lỗi kết nối!',
+                    text: 'Không thể kết nối với server để lưu file.'
+                });
+                console.error('Save error:', error);
+            });
+        }
+
+        // Save and close
+        function saveAndClose() {
+            saveCode();
+            setTimeout(() => {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('codeEditorModal'));
+                modal.hide();
+            }, 1000);
+        }
+
+        // Initialize Monaco Editor when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            initMonacoEditor();
+        });
     </script>
 </body>
 </html> 
