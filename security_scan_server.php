@@ -320,7 +320,7 @@ class ScannerManager {
         }
         $url .= '?endpoint=get_file&api_key=' . urlencode($client['api_key']);
         
-        $response = $this->makeApiRequest($url, 'POST', [], json_encode(['file_path' => $filePath]));
+        $response = $this->makeApiRequest($url, 'POST', ['file_path' => $filePath], null);
         
         if ($response['success'] && isset($response['data']['content'])) {
             return [
@@ -345,10 +345,10 @@ class ScannerManager {
         }
         $url .= '?endpoint=save_file&api_key=' . urlencode($client['api_key']);
         
-        $response = $this->makeApiRequest($url, 'POST', [], json_encode([
+        $response = $this->makeApiRequest($url, 'POST', [
             'file_path' => $filePath,
             'content' => $content
-        ]));
+        ], null);
         
         if ($response['success']) {
             return [
@@ -621,7 +621,7 @@ class EmailManager {
                     <h5 class="modal-title" id="codeEditorModalLabel">
                         <i class="fas fa-code me-2"></i>Code Editor
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="closeCodeEditor()"></button>
                 </div>
                 <div class="modal-body p-0">
                     <div class="code-editor-container">
@@ -650,7 +650,7 @@ class EmailManager {
                         <span id="cursorPosition">Line 1, Column 1</span>
                         <span id="fileType">PHP</span>
                     </div>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="closeCodeEditor()">Close</button>
                     <button type="button" class="btn btn-primary" onclick="saveAndClose()">Save & Close</button>
                 </div>
             </div>
@@ -2927,36 +2927,18 @@ if (isset($_GET['api'])) {
             });
         }
 
-        // View threat details
+        // View threat details - Open in Monaco Editor
         function viewThreat(filePath) {
-            const threat = currentScanResults.suspicious_files?.find(f => f.path === filePath);
-            if (!threat) return;
+            if (!currentClientId) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Lỗi!',
+                    text: 'Không xác định được client ID.'
+                });
+                return;
+            }
             
-            const issuesHtml = (threat.issues || []).map(issue => `
-                <div class="mb-2">
-                    <strong>Dòng ${issue.line}:</strong> ${issue.pattern}<br>
-                    <small class="text-muted">${issue.description}</small><br>
-                    <code style="font-size: 0.8rem; background: #f8f9fa; padding: 2px 4px; border-radius: 3px;">
-                        ${issue.code_snippet?.substring(0, 100) || ''}...
-                    </code>
-                </div>
-            `).join('');
-            
-            Swal.fire({
-                title: 'Chi tiết Threat',
-                html: `
-                    <div class="text-start">
-                        <p><strong>File:</strong> ${filePath}</p>
-                        <p><strong>Kích thước:</strong> ${formatFileSize(threat.metadata?.size || 0)}</p>
-                        <p><strong>Thời gian:</strong> ${threat.metadata?.modified_time ? new Date(threat.metadata.modified_time * 1000).toLocaleString('vi-VN') : 'Không xác định'}</p>
-                        <hr>
-                        <h6>Các vấn đề phát hiện:</h6>
-                        ${issuesHtml}
-                    </div>
-                `,
-                width: '80%',
-                confirmButtonText: 'Đóng'
-            });
+            openFileInEditor(currentClientId, filePath);
         }
 
         // Other functions (addClient, updateStats, etc.)
@@ -3434,46 +3416,104 @@ if (isset($_GET['api'])) {
             });
 
             // Fetch file content
-            fetch(`?api=get_file_content&client_id=${clientId}&file_path=${encodeURIComponent(filePath)}`)
-                .then(response => response.json())
+                         fetch(`?api=get_file_content&client_id=${clientId}&file_path=${encodeURIComponent(filePath)}`)
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    console.log('Response headers:', response.headers);
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('Response data:', data);
                     Swal.close();
                     
-                    if (data.success) {
-                        // Update file info
-                        document.getElementById('currentFilePath').textContent = filePath;
-                        document.getElementById('currentFileSize').textContent = `${data.size} bytes`;
+                    if (data && data.success) {
+                        // Check if Bootstrap is loaded
+                        if (typeof bootstrap === 'undefined') {
+                            console.error('Bootstrap is not loaded');
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Lỗi!',
+                                text: 'Bootstrap chưa được load. Vui lòng tải lại trang.'
+                            });
+                            return;
+                        }
+                        
+                        // Check if modal element exists
+                        const modalElement = document.getElementById('codeEditorModal');
+                        if (!modalElement) {
+                            console.error('Modal element not found');
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Lỗi!',
+                                text: 'Không tìm thấy modal editor. Vui lòng tải lại trang.'
+                            });
+                            return;
+                        }
+                        
+                        // Update file info first
+                        const filePathElement = document.getElementById('currentFilePath');
+                        const fileSizeElement = document.getElementById('currentFileSize');
+                        const fileTypeElement = document.getElementById('fileType');
+                        
+                        if (filePathElement) filePathElement.textContent = filePath;
+                        if (fileSizeElement) fileSizeElement.textContent = `${data.size} bytes`;
                         
                         // Set file type
                         const extension = filePath.split('.').pop().toLowerCase();
                         const language = getLanguageFromExtension(extension);
-                        document.getElementById('fileType').textContent = language.toUpperCase();
+                        if (fileTypeElement) fileTypeElement.textContent = language.toUpperCase();
                         
                         // Set editor content
                         if (monacoEditor) {
-                            monaco.editor.setModelLanguage(monacoEditor.getModel(), language);
-                            monacoEditor.setValue(data.content);
+                            try {
+                                monaco.editor.setModelLanguage(monacoEditor.getModel(), language);
+                                monacoEditor.setValue(data.content);
+                            } catch (err) {
+                                console.error('Monaco editor error:', err);
+                            }
                         }
                         
-                        // Show modal
-                        const modal = new bootstrap.Modal(document.getElementById('codeEditorModal'));
-                        modal.show();
+                        // Show modal using jQuery as fallback
+                        try {
+                            const modal = new bootstrap.Modal(modalElement);
+                            modal.show();
+                        } catch (err) {
+                            console.error('Bootstrap Modal error:', err);
+                            // Fallback to jQuery if available
+                            if (typeof $ !== 'undefined') {
+                                $(modalElement).modal('show');
+                            } else {
+                                // Manual show
+                                modalElement.style.display = 'block';
+                                modalElement.classList.add('show');
+                                document.body.classList.add('modal-open');
+                                
+                                // Add backdrop
+                                const backdrop = document.createElement('div');
+                                backdrop.className = 'modal-backdrop fade show';
+                                backdrop.id = 'editorBackdrop';
+                                document.body.appendChild(backdrop);
+                            }
+                        }
                     } else {
+                        console.error('API returned error:', data);
                         Swal.fire({
                             icon: 'error',
                             title: 'Lỗi tải file!',
-                            text: data.error || 'Không thể tải nội dung file.'
+                            text: data?.error || 'Không thể tải nội dung file.',
+                            footer: `<small>Debug: ${JSON.stringify(data)}</small>`
                         });
                     }
                 })
                 .catch(error => {
+                    console.error('Fetch error:', error);
                     Swal.close();
                     Swal.fire({
                         icon: 'error',
                         title: 'Lỗi kết nối!',
-                        text: 'Không thể kết nối với server để tải file.'
+                        text: 'Không thể kết nối với server để tải file.',
+                        footer: `<small>Debug: ${error.message}</small>`
                     });
-                    console.error('File load error:', error);
                 });
         }
 
@@ -3576,9 +3616,41 @@ if (isset($_GET['api'])) {
         function saveAndClose() {
             saveCode();
             setTimeout(() => {
-                const modal = bootstrap.Modal.getInstance(document.getElementById('codeEditorModal'));
-                modal.hide();
+                closeCodeEditor();
             }, 1000);
+        }
+        
+        // Close code editor modal
+        function closeCodeEditor() {
+            const modalElement = document.getElementById('codeEditorModal');
+            if (!modalElement) return;
+            
+            try {
+                const modal = bootstrap.Modal.getInstance(modalElement);
+                if (modal) {
+                    modal.hide();
+                } else {
+                    const newModal = new bootstrap.Modal(modalElement);
+                    newModal.hide();
+                }
+            } catch (err) {
+                console.error('Bootstrap Modal close error:', err);
+                // Fallback to jQuery
+                if (typeof $ !== 'undefined') {
+                    $(modalElement).modal('hide');
+                } else {
+                    // Manual hide
+                    modalElement.style.display = 'none';
+                    modalElement.classList.remove('show');
+                    document.body.classList.remove('modal-open');
+                    
+                    // Remove backdrop
+                    const backdrop = document.getElementById('editorBackdrop');
+                    if (backdrop) {
+                        backdrop.remove();
+                    }
+                }
+            }
         }
 
         // Initialize Monaco Editor when DOM is ready

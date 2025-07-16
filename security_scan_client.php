@@ -826,6 +826,14 @@ function handleApiRequest() {
         case 'get_file_content':
             handleGetFileContentRequest();
             break;
+            
+        case 'get_file':
+            handleGetFileRequest();
+            break;
+            
+        case 'save_file':
+            handleSaveFileRequest();
+            break;
 
         case 'whitelist_file':
             handleWhitelistFileRequest();
@@ -1249,5 +1257,109 @@ try {
         'error' => 'Internal server error',
         'message' => $e->getMessage()
     ]);
+}
+
+function handleGetFileRequest() {
+    // Validate API request first
+    validateApiRequest();
+    
+    // Chỉ cho phép POST
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed - Got: ' . $_SERVER['REQUEST_METHOD']]);
+        exit;
+    }
+    
+    // Parse JSON data từ php://input
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
+    
+    if (!$data || !isset($data['file_path'])) {
+        echo json_encode(['success' => false, 'error' => 'Missing file_path']);
+        exit;
+    }
+    
+    $filePath = $data['file_path'];
+    
+    // Validate file path
+    if (!file_exists($filePath) || !is_readable($filePath)) {
+        echo json_encode(['success' => false, 'error' => 'File not found or not readable']);
+        exit;
+    }
+    
+    try {
+        $content = file_get_contents($filePath);
+        $fileSize = filesize($filePath);
+        
+        echo json_encode([
+            'success' => true,
+            'content' => $content,
+            'size' => $fileSize,
+            'file_path' => $filePath
+        ]);
+    } catch (Exception $e) {
+        echo json_encode([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]);
+    }
+}
+
+function handleSaveFileRequest() {
+    // Validate API request first
+    validateApiRequest();
+    
+    // Chỉ cho phép POST
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+        exit;
+    }
+    
+    // Parse JSON data từ php://input
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
+    
+    if (!$data || !isset($data['file_path']) || !isset($data['content'])) {
+        echo json_encode(['success' => false, 'error' => 'Missing file_path or content']);
+        exit;
+    }
+    
+    $filePath = $data['file_path'];
+    $content = $data['content'];
+    
+    // Validate file path
+    if (!file_exists($filePath) || !is_writable($filePath)) {
+        echo json_encode(['success' => false, 'error' => 'File not found or not writable']);
+        exit;
+    }
+    
+    try {
+        // Backup original file
+        $backupPath = $filePath . '.backup.' . date('Y-m-d_H-i-s');
+        if (file_exists($filePath)) {
+            copy($filePath, $backupPath);
+        }
+        
+        // Write new content
+        $bytesWritten = file_put_contents($filePath, $content);
+        
+        if ($bytesWritten === false) {
+            throw new Exception('Failed to write file');
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'File saved successfully',
+            'file_path' => $filePath,
+            'size' => $bytesWritten,
+            'backup_path' => $backupPath
+        ]);
+    } catch (Exception $e) {
+        echo json_encode([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]);
+    }
 }
 ?> 
