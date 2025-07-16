@@ -306,6 +306,49 @@ class ScannerManager {
             ];
         }
     }
+
+    public function quarantineFileOnClient($client, $filePath) {
+        // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
+        $url = rtrim($client['url'], '/');
+        if (strpos($url, 'security_scan_client.php') === false) {
+            $url .= '/security_scan_client.php';
+        }
+        $url .= '?endpoint=quarantine_file&api_key=' . urlencode($client['api_key']);
+
+        $response = $this->makeApiRequest($url, 'POST', [
+            'file_path' => $filePath
+        ], null);
+
+        if ($response['success']) {
+            return [
+                'success' => true,
+                'message' => 'File quarantined successfully',
+                'file_path' => $filePath
+            ];
+        }
+
+        return [
+            'success' => false,
+            'error' => $response['error'] ?? 'Failed to quarantine file'
+        ];
+    }
+
+    public function getScanHistory($client, $limit = 10) {
+        // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
+        $url = rtrim($client['url'], '/');
+        if (strpos($url, 'security_scan_client.php') === false) {
+            $url .= '/security_scan_client.php';
+        }
+        $url .= '?endpoint=scan_history&api_key=' . urlencode($client['api_key']) . '&limit=' . $limit;
+
+        $response = $this->makeApiRequest($url, 'GET', [], null);
+
+        if ($response['success']) {
+            return $response['data'];
+        }
+
+        return [];
+    }
 }
 
 // ==================== EMAIL MANAGER ====================
@@ -626,20 +669,105 @@ if (isset($_GET['api'])) {
         case 'delete_file':
             $clientId = $_POST['client_id'] ?? '';
             $filePath = $_POST['file_path'] ?? '';
-            
+
             if (empty($clientId) || empty($filePath)) {
                 echo json_encode(['success' => false, 'error' => 'Client ID and file path required']);
                 break;
             }
-            
+
             $client = $clientManager->getClient($clientId);
             if (!$client) {
                 echo json_encode(['success' => false, 'error' => 'Client not found']);
                 break;
             }
-            
+
             $result = $scannerManager->deleteFileOnClient($client, $filePath);
             echo json_encode($result);
+            break;
+
+        case 'quarantine_file':
+            $clientId = $_POST['client_id'] ?? '';
+            $filePath = $_POST['file_path'] ?? '';
+
+            if (empty($clientId) || empty($filePath)) {
+                echo json_encode(['success' => false, 'error' => 'Client ID and file path required']);
+                break;
+            }
+
+            $client = $clientManager->getClient($clientId);
+            if (!$client) {
+                echo json_encode(['success' => false, 'error' => 'Client not found']);
+                break;
+            }
+
+            $result = $scannerManager->quarantineFileOnClient($client, $filePath);
+            echo json_encode($result);
+            break;
+
+        case 'get_scan_history':
+            $clientId = $_GET['client_id'] ?? '';
+            $limit = $_GET['limit'] ?? 10;
+
+            if (empty($clientId)) {
+                echo json_encode(['success' => false, 'error' => 'Client ID required']);
+                break;
+            }
+
+            $client = $clientManager->getClient($clientId);
+            if (!$client) {
+                echo json_encode(['success' => false, 'error' => 'Client not found']);
+                break;
+            }
+
+            $history = $scannerManager->getScanHistory($client, $limit);
+            echo json_encode(['success' => true, 'data' => $history]);
+            break;
+
+        case 'bulk_scan':
+            $clientIds = $_POST['client_ids'] ?? [];
+
+            if (empty($clientIds)) {
+                echo json_encode(['success' => false, 'error' => 'No clients selected']);
+                break;
+            }
+
+            $results = [];
+            foreach ($clientIds as $clientId) {
+                $client = $clientManager->getClient($clientId);
+                if ($client) {
+                    $result = $scannerManager->scanClient($client);
+                    $results[] = [
+                        'client_id' => $clientId,
+                        'client_name' => $client['name'],
+                        'result' => $result
+                    ];
+                }
+            }
+
+            echo json_encode(['success' => true, 'results' => $results]);
+            break;
+
+        case 'get_dashboard_stats':
+            $clients = $clientManager->getClients();
+            $stats = [
+                'total_clients' => count($clients),
+                'online_clients' => 0,
+                'infected_clients' => 0,
+                'last_scan_summary' => []
+            ];
+
+            foreach ($clients as $client) {
+                $status = $scannerManager->getClientStatus($client);
+                if ($status) {
+                    $stats['online_clients']++;
+                    if (isset($status['last_scan']['status']) &&
+                        in_array($status['last_scan']['status'], ['critical', 'infected'])) {
+                        $stats['infected_clients']++;
+                    }
+                }
+            }
+
+            echo json_encode(['success' => true, 'data' => $stats]);
             break;
             
         default:
@@ -1010,7 +1138,7 @@ if (isset($_GET['api'])) {
                 <div class="stat-number online" id="onlineCount">0</div>
                 <div class="stat-label">Clients Online</div>
             </div>
-            
+
             <div class="stat-card">
                 <div class="stat-icon offline">
                     <i class="fas fa-times-circle"></i>
@@ -1018,7 +1146,7 @@ if (isset($_GET['api'])) {
                 <div class="stat-number offline" id="offlineCount">0</div>
                 <div class="stat-label">Clients Offline</div>
             </div>
-            
+
             <div class="stat-card">
                 <div class="stat-icon warning">
                     <i class="fas fa-exclamation-triangle"></i>
@@ -1026,13 +1154,29 @@ if (isset($_GET['api'])) {
                 <div class="stat-number warning" id="threatsCount">0</div>
                 <div class="stat-label">Active Threats</div>
             </div>
-            
+
+            <div class="stat-card">
+                <div class="stat-icon critical">
+                    <i class="fas fa-virus"></i>
+                </div>
+                <div class="stat-number critical" id="infectedCount">0</div>
+                <div class="stat-label">Infected Sites</div>
+            </div>
+
             <div class="stat-card">
                 <div class="stat-icon scanning">
                     <i class="fas fa-sync-alt"></i>
                 </div>
                 <div class="stat-number scanning" id="lastScanTime">Never</div>
                 <div class="stat-label">Last Scan</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon info">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="stat-number info" id="totalScans">0</div>
+                <div class="stat-label">Total Scans</div>
             </div>
         </div>
         
@@ -1152,15 +1296,40 @@ if (isset($_GET['api'])) {
         let clients = [];
         let lastScanResults = [];
         
+        // Load dashboard stats
+        function loadDashboardStats() {
+            fetch('?api=get_dashboard_stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const stats = data.data;
+                        document.getElementById('onlineCount').textContent = stats.online_clients;
+                        document.getElementById('offlineCount').textContent = stats.total_clients - stats.online_clients;
+                        document.getElementById('infectedCount').textContent = stats.infected_clients;
+                        document.getElementById('totalScans').textContent = stats.total_clients;
+
+                        // Update last scan time
+                        const lastScanElement = document.getElementById('lastScanTime');
+                        const now = new Date();
+                        lastScanElement.textContent = now.toLocaleTimeString('vi-VN');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading dashboard stats:', error);
+                });
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             loadClients();
             updateStats();
-            
+            loadDashboardStats();
+
             // Auto refresh every 30 seconds
             setInterval(function() {
                 loadClients();
                 updateStats();
+                loadDashboardStats();
             }, 30000);
         });
         
