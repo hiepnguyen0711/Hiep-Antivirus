@@ -379,7 +379,8 @@ class SecurityScanner {
                 'issues' => $issues,
                 'file_size' => filesize($filePath),
                 'modified_time' => filemtime($filePath),
-                'md5' => md5_file($filePath)
+                'md5' => md5_file($filePath),
+                'category' => $this->categorizeFile($filePath, $issues)
             ];
             
             $this->suspiciousFiles[] = $fileInfo;
@@ -397,6 +398,39 @@ class SecurityScanner {
                 $this->criticalFiles[] = $filePath;
             }
         }
+    }
+
+    private function categorizeFile($filePath, $issues) {
+        $fileName = basename($filePath);
+        
+        // Kiểm tra nếu là file manager
+        if (strpos($fileName, 'filemanager') !== false || 
+            strpos($fileName, 'file_manager') !== false ||
+            strpos($fileName, 'upload') !== false) {
+            return 'filemanager';
+        }
+        
+        // Kiểm tra nếu là suspicious file extension
+        if (strpos($fileName, '.php.') !== false || 
+            $this->isSuspiciousFileExtension($fileName)) {
+            return 'suspicious_file';
+        }
+        
+        // Kiểm tra nếu có webshell patterns
+        foreach ($issues as $issue) {
+            if (isset($issue['type']) && $issue['type'] === 'webshell') {
+                return 'webshell';
+            }
+        }
+        
+        // Kiểm tra nếu có critical issues
+        foreach ($issues as $issue) {
+            if ($issue['severity'] === 'critical') {
+                return 'critical';
+            }
+        }
+        
+        return 'warning';
     }
 
     private function getWebshellPatterns() {
@@ -504,22 +538,20 @@ class SecurityScanner {
         $criticalCount = count($this->criticalFiles);
         $suspiciousCount = count($this->suspiciousFiles);
 
-        // Phân loại threats theo severity
+        // Phân loại threats theo category
         $criticalThreats = [];
         $warningThreats = [];
         $webshellThreats = [];
 
         foreach ($this->suspiciousFiles as $threat) {
-            foreach ($threat['issues'] as $issue) {
-                if ($issue['severity'] === 'critical') {
-                    if (isset($issue['type']) && $issue['type'] === 'webshell') {
-                        $webshellThreats[] = $threat;
-                    } else {
-                        $criticalThreats[] = $threat;
-                    }
-                } else {
-                    $warningThreats[] = $threat;
-                }
+            $category = $threat['category'] ?? 'warning';
+            
+            if ($category === 'webshell') {
+                $webshellThreats[] = $threat;
+            } elseif ($category === 'critical') {
+                $criticalThreats[] = $threat;
+            } else {
+                $warningThreats[] = $threat;
             }
         }
 
@@ -769,6 +801,11 @@ function handleInfoRequest() {
 }
 
 function handleDeleteFileRequest() {
+    // Debug logging
+    if (!file_exists('./logs')) {
+        mkdir('./logs', 0755, true);
+    }
+    
     // Chỉ cho phép POST
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         http_response_code(405);
@@ -776,11 +813,47 @@ function handleDeleteFileRequest() {
         exit;
     }
     
-    $filePath = $_POST['file_path'] ?? '';
+    // Parse JSON data từ php://input
+    $input = file_get_contents('php://input');
+    $data = null;
+    
+    // Try to parse as JSON first
+    if (!empty($input)) {
+        $data = json_decode($input, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $data = null;
+        }
+    }
+    
+    // Fallback to $_POST if JSON decode fails
+    if (!$data && !empty($_POST)) {
+        $data = $_POST;
+    }
+    
+    // Final fallback - check if it's form data
+    if (!$data) {
+        parse_str($input, $data);
+    }
+    
+    $filePath = $data['file_path'] ?? '';
+    
+    // More debug info
+    $debugInfo = [
+        'timestamp' => date('Y-m-d H:i:s'),
+        'method' => $_SERVER['REQUEST_METHOD'],
+        'headers' => getallheaders(),
+        'post_data' => $_POST,
+        'php_input' => $input,
+        'parsed_data' => $data,
+        'file_path' => $filePath,
+        'json_error' => json_last_error_msg()
+    ];
+    
+    file_put_contents('./logs/delete_requests.log', json_encode($debugInfo) . "\n", FILE_APPEND);
     
     if (empty($filePath)) {
         http_response_code(400);
-        echo json_encode(['error' => 'File path required']);
+        echo json_encode(['error' => 'File path required', 'debug' => $debugInfo]);
         exit;
     }
     
@@ -810,25 +883,40 @@ function handleDeleteFileRequest() {
     // Thực hiện xóa file
     try {
         if (unlink($filePath)) {
-            echo json_encode([
+            $result = [
                 'success' => true,
                 'message' => 'File deleted successfully',
                 'file_path' => $filePath,
                 'timestamp' => date('Y-m-d H:i:s')
-            ]);
+            ];
+            
+            // Log successful deletion
+            file_put_contents('./logs/delete_success.log', json_encode($result) . "\n", FILE_APPEND);
+            
+            echo json_encode($result);
         } else {
-            echo json_encode([
+            $result = [
                 'success' => false,
                 'error' => 'Failed to delete file',
                 'file_path' => $filePath
-            ]);
+            ];
+            
+            // Log failure
+            file_put_contents('./logs/delete_failure.log', json_encode($result) . "\n", FILE_APPEND);
+            
+            echo json_encode($result);
         }
     } catch (Exception $e) {
-        echo json_encode([
+        $result = [
             'success' => false,
             'error' => 'Error deleting file: ' . $e->getMessage(),
             'file_path' => $filePath
-        ]);
+        ];
+        
+        // Log exception
+        file_put_contents('./logs/delete_exception.log', json_encode($result) . "\n", FILE_APPEND);
+        
+        echo json_encode($result);
     }
 }
 
@@ -839,7 +927,16 @@ function handleQuarantineFileRequest() {
         exit;
     }
 
-    $filePath = $_POST['file_path'] ?? '';
+    // Parse JSON data từ php://input
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
+    
+    // Fallback to $_POST if JSON decode fails
+    if (!$data) {
+        $data = $_POST;
+    }
+
+    $filePath = $data['file_path'] ?? '';
 
     if (empty($filePath)) {
         echo json_encode([
@@ -1029,8 +1126,9 @@ function handleWhitelistFileRequest() {
 // Set JSON header
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key');
+header('Access-Control-Max-Age: 86400');
 
 // Xử lý preflight request
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

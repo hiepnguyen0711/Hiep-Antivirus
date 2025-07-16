@@ -1,0 +1,1 @@
+{"timestamp":"2025-07-16 16:58:43","method":"POST","headers":{"Host":"localhost","Content-Type":"application\/json","Accept":"application\/json","Content-Length":"32"},"post_data":[],"php_input":"{\"file_path\":\".\\\/test_file.txt\"}","parsed_data":{"file_path":".\/test_file.txt"},"file_path":".\/test_file.txt","json_error":"No error"}

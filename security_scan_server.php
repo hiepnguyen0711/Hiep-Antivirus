@@ -241,16 +241,42 @@ class ScannerManager {
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         }
         
+        // Debug logging
+        if (!file_exists('./logs')) {
+            mkdir('./logs', 0755, true);
+        }
+        
+        $logData = [
+            'timestamp' => date('Y-m-d H:i:s'),
+            'url' => $url,
+            'method' => $method,
+            'data' => $data,
+            'headers' => $headers
+        ];
+        
+        file_put_contents('./logs/api_requests.log', json_encode($logData) . "\n", FILE_APPEND);
+        
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
         
         curl_close($ch);
         
+        // Debug response
+        $responseLog = [
+            'timestamp' => date('Y-m-d H:i:s'),
+            'url' => $url,
+            'http_code' => $httpCode,
+            'response' => $response,
+            'error' => $error
+        ];
+        
+        file_put_contents('./logs/api_responses.log', json_encode($responseLog) . "\n", FILE_APPEND);
+        
         if ($error) {
             return [
                 'success' => false,
-                'error' => $error,
+                'error' => 'cURL Error: ' . $error,
                 'http_code' => $httpCode
             ];
         }
@@ -259,7 +285,8 @@ class ScannerManager {
             return [
                 'success' => false,
                 'error' => 'HTTP Error: ' . $httpCode,
-                'http_code' => $httpCode
+                'http_code' => $httpCode,
+                'raw_response' => $response
             ];
         }
         
@@ -292,16 +319,21 @@ class ScannerManager {
             'file_path' => $filePath
         ], null);
         
-        if ($response['success']) {
+        if ($response['success'] && isset($response['data']['success']) && $response['data']['success']) {
             return [
                 'success' => true,
                 'message' => 'File deleted successfully',
                 'file_path' => $filePath
             ];
         } else {
+            $error = $response['error'] ?? 'Failed to delete file';
+            if (isset($response['data']['error'])) {
+                $error = $response['data']['error'];
+            }
+            
             return [
                 'success' => false,
-                'error' => $response['error'] ?? 'Failed to delete file',
+                'error' => $error,
                 'file_path' => $filePath
             ];
         }
@@ -319,18 +351,23 @@ class ScannerManager {
             'file_path' => $filePath
         ], null);
 
-        if ($response['success']) {
+        if ($response['success'] && isset($response['data']['success']) && $response['data']['success']) {
             return [
                 'success' => true,
                 'message' => 'File quarantined successfully',
                 'file_path' => $filePath
             ];
-        }
+        } else {
+            $error = $response['error'] ?? 'Failed to quarantine file';
+            if (isset($response['data']['error'])) {
+                $error = $response['data']['error'];
+            }
 
-        return [
-            'success' => false,
-            'error' => $response['error'] ?? 'Failed to quarantine file'
-        ];
+            return [
+                'success' => false,
+                'error' => $error
+            ];
+        }
     }
 
     public function getScanHistory($client, $limit = 10) {
