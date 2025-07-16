@@ -1642,194 +1642,364 @@ if (isset($_GET['api'])) {
         function displayScanResults(client, data) {
             const resultsContainer = document.getElementById('resultsContainer');
             const results = data.scan_results || data;
-            
-            if (!results || (!results.suspicious_files && !results.suspicious_count)) {
+
+            console.log('Display scan results:', { client, data, results });
+
+            // Show results section
+            document.getElementById('resultsSection').classList.add('active');
+
+            if (!results || results.suspicious_count === 0) {
                 resultsContainer.innerHTML = `
                     <div class="alert alert-success">
                         <i class="fas fa-shield-check"></i>
                         <strong>✅ Hệ thống ${client.name} an toàn!</strong><br>
                         Không phát hiện threat nào trong ${results.scanned_files || 0} files đã quét.
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                Thời gian quét: ${results.scan_time || 0}s |
+                                Memory: ${formatBytes(results.memory_used || 0)} |
+                                Risk Score: ${results.risk_score || 0}/100
+                            </small>
+                        </div>
                     </div>
                 `;
                 return;
             }
             
-            // Group files by severity
-            const groups = {
-                critical: { 
-                    title: '🚨 Files Virus/Malware Nguy Hiểm', 
-                    icon: 'fa-skull-crossbones', 
-                    files: [], 
-                    color: 'danger' 
-                },
-                suspicious_file: { 
-                    title: '⚠️ Files Đáng Ngờ (.php.jpg, Empty)', 
-                    icon: 'fa-exclamation-circle', 
-                    files: [], 
-                    color: 'warning' 
-                },
-                filemanager: { 
-                    title: '📁 Filemanager Functions', 
-                    icon: 'fa-folder-open', 
-                    files: [], 
-                    color: 'info' 
-                },
-                warning: { 
-                    title: '⚠️ Cảnh Báo Bảo Mật', 
-                    icon: 'fa-exclamation-triangle', 
-                    files: [], 
-                    color: 'warning' 
-                }
-            };
-            
-            const suspiciousFiles = results.suspicious_files || [];
-            suspiciousFiles.forEach((file, index) => {
-                file.index = index;
-                
-                const isCritical = file.severity === 'critical';
-                const isFilemanager = file.category === 'filemanager';
-                const isSuspiciousFile = file.category === 'suspicious_file';
-                
-                if (isSuspiciousFile) {
-                    groups.suspicious_file.files.push(file);
-                } else if (isCritical && !isFilemanager) {
-                    groups.critical.files.push(file);
-                } else if (isFilemanager) {
-                    groups.filemanager.files.push(file);
-                } else {
-                    groups.warning.files.push(file);
-                }
-            });
-            
-            let html = `
-                <div class="scan-results-header">
-                    <div class="alert alert-${results.critical_count > 0 ? 'danger' : 'warning'}">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <i class="fas fa-shield-alt"></i>
-                                <strong>Kết quả quét ${client.name}</strong><br>
-                                <small>
-                                    📊 Files quét: ${results.scanned_files || 0} | 
-                                    🔍 Threats: ${results.suspicious_count || 0} | 
-                                    🚨 Critical: ${results.critical_count || 0} | 
-                                    ⏱️ Thời gian: ${results.scan_time || 0}s
-                                </small>
+            // Create summary card
+            let summaryHtml = `
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5><i class="fas fa-chart-bar"></i> Kết Quả Quét - ${client.name}</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-primary">${results.scanned_files || 0}</h4>
+                                    <small>Files Đã Quét</small>
+                                </div>
                             </div>
-                            <div>
-                                <button class="btn btn-sm btn-outline-primary" onclick="scanClient('${client.id}')">
-                                    <i class="fas fa-redo"></i> Quét Lại
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-danger">${results.critical_count || 0}</h4>
+                                    <small>Critical Threats</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-warning">${results.webshell_count || 0}</h4>
+                                    <small>Webshells</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <h4 class="text-info">${results.suspicious_count || 0}</h4>
+                                    <small>Total Threats</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                <small class="text-muted">Thời gian quét: ${results.scan_time || 0}s</small>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">Memory: ${formatBytes(results.memory_used || 0)}</small>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">Risk Score: ${results.risk_score || 0}/100</small>
+                            </div>
+                        </div>
+                        ${results.recommendations ? `
+                            <div class="mt-3">
+                                <h6>📋 Khuyến nghị:</h6>
+                                <ul class="mb-0">
+                                    ${results.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+
+            // Process threats by category
+            let threatsHtml = '';
+
+            if (results.threats) {
+                // Critical threats
+                if (results.threats.critical && results.threats.critical.length > 0) {
+                    threatsHtml += generateThreatSection('🚨 Critical Threats', results.threats.critical, 'danger', client);
+                }
+
+                // Webshells
+                if (results.threats.webshells && results.threats.webshells.length > 0) {
+                    threatsHtml += generateThreatSection('🕷️ Webshells Detected', results.threats.webshells, 'danger', client);
+                }
+
+                // Warnings
+                if (results.threats.warnings && results.threats.warnings.length > 0) {
+                    threatsHtml += generateThreatSection('⚠️ Warnings', results.threats.warnings, 'warning', client);
+                }
+            } else if (results.threats && results.threats.all) {
+                // Fallback for old format
+                threatsHtml += generateThreatSection('🔍 All Threats', results.threats.all, 'warning', client);
+            }
+
+            resultsContainer.innerHTML = summaryHtml + threatsHtml;
+        }
+
+        // Generate threat section HTML
+        function generateThreatSection(title, threats, alertType, client) {
+            if (!threats || threats.length === 0) return '';
+
+            let html = `
+                <div class="card mb-3">
+                    <div class="card-header bg-${alertType} text-white">
+                        <h6 class="mb-0">${title} (${threats.length})</h6>
+                    </div>
+                    <div class="card-body">
+            `;
+
+            threats.forEach((threat, index) => {
+                html += `
+                    <div class="threat-item border-bottom pb-2 mb-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <strong>📁 ${threat.path}</strong>
+                                <div class="mt-1">
+                `;
+
+                if (threat.issues && Array.isArray(threat.issues)) {
+                    threat.issues.forEach(issue => {
+                        html += `
+                            <div class="badge bg-${issue.severity === 'critical' ? 'danger' : 'warning'} me-1 mb-1">
+                                ${issue.pattern} - ${issue.description}
+                                ${issue.line ? ` (Line: ${issue.line})` : ''}
+                            </div>
+                        `;
+                    });
+                }
+
+                html += `
+                                </div>
+                                ${threat.file_size ? `<small class="text-muted">Size: ${formatBytes(threat.file_size)}</small>` : ''}
+                                ${threat.modified_time ? `<small class="text-muted"> | Modified: ${new Date(threat.modified_time * 1000).toLocaleString()}</small>` : ''}
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-warning" onclick="quarantineFile('${client.id}', '${threat.path}')">
+                                    <i class="fas fa-shield-alt"></i> Cách ly
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="deleteFile('${client.id}', '${threat.path}')">
+                                    <i class="fas fa-trash"></i> Xóa
+                                </button>
+                                <button class="btn btn-outline-info" onclick="viewFileContent('${client.id}', '${threat.path}')">
+                                    <i class="fas fa-eye"></i> Xem
                                 </button>
                             </div>
                         </div>
                     </div>
+                `;
+            });
+
+            html += `
+                    </div>
                 </div>
-                <div class="scan-results-content">
             `;
-            
-            // Render groups
-            Object.keys(groups).forEach(groupKey => {
-                const group = groups[groupKey];
-                if (group.files.length > 0) {
-                    html += `
-                        <div class="threat-group mb-4">
-                            <div class="threat-group-header">
-                                <div class="alert alert-${group.color}">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <h6 class="mb-0">
-                                            <i class="fas ${group.icon}"></i> ${group.title} (${group.files.length})
-                                        </h6>
-                                        ${group.files.some(f => canDeleteFile(f)) ? `
-                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteAllGroupFiles('${groupKey}', '${client.id}')">
-                                                <i class="fas fa-trash-alt"></i> Xóa Tất Cả
-                                            </button>
-                                        ` : ''}
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="threat-files">
-                    `;
-                    
-                    group.files.forEach((file, idx) => {
-                        const canDelete = canDeleteFile(file);
-                        const firstIssue = file.issues && file.issues.length > 0 ? file.issues[0] : null;
-                        
-                        html += `
-                            <div class="threat-item mb-3 p-3 border rounded" data-file-index="${file.index}">
-                                <div class="row">
-                                    <div class="col-md-8">
-                                        <h6 class="mb-1">
-                                            <i class="fas fa-file-code text-${group.color}"></i> 
-                                            <code>${file.path}</code>
-                                            ${firstIssue ? `<small class="text-muted ms-2">(dòng ${firstIssue.line})</small>` : ''}
-                                        </h6>
-                                        <p class="mb-1 text-muted small">
-                                            <i class="fas fa-bug"></i> ${file.issues ? file.issues.length : 0} vấn đề phát hiện
-                                            ${firstIssue ? ` - <span class="text-danger fw-bold">${firstIssue.pattern}</span>` : ''}
-                                        </p>
-                                        ${file.issues && file.issues.length > 1 ? `
-                                            <div class="issues-list mt-2">
-                                                <small class="text-muted">Các vấn đề khác:</small>
-                                                <ul class="list-unstyled small">
-                                                    ${file.issues.slice(1, 3).map(issue => `
-                                                        <li><span class="text-warning">• ${issue.pattern}</span> (dòng ${issue.line})</li>
-                                                    `).join('')}
-                                                    ${file.issues.length > 3 ? `<li class="text-muted">... và ${file.issues.length - 3} vấn đề khác</li>` : ''}
-                                                </ul>
-                                            </div>
-                                        ` : ''}
-                                        ${file.metadata ? `
-                                            <div class="file-metadata mt-2">
-                                                <small class="text-muted">
-                                                    <i class="fas fa-clock"></i> ${file.metadata.modified_time ? new Date(file.metadata.modified_time * 1000).toLocaleString('vi-VN') : 'N/A'}
-                                                    <i class="fas fa-hdd ms-3"></i> ${file.metadata.size ? formatFileSize(file.metadata.size) : 'N/A'}
-                                                </small>
-                                            </div>
-                                        ` : ''}
-                                    </div>
-                                    <div class="col-md-4 text-end">
-                                        ${canDelete ? `
-                                            <button class="btn btn-sm btn-outline-danger" 
-                                                    onclick="deleteFileFromResults('${client.id}', '${file.path}', ${file.index})"
-                                                    title="Xóa file nguy hiểm">
-                                                <i class="fas fa-trash-alt"></i> Xóa File
-                                            </button>
-                                        ` : ''}
-                                        <button class="btn btn-sm btn-outline-secondary ms-2" 
-                                                onclick="viewFileDetails('${client.id}', '${file.path}')"
-                                                title="Xem chi tiết file">
-                                            <i class="fas fa-eye"></i> Chi Tiết
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
+
+            return html;
+        }
+
+        // Format bytes to human readable
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Quarantine file function
+        function quarantineFile(clientId, filePath) {
+            Swal.fire({
+                title: 'Cách ly file nguy hiểm',
+                html: `
+                    <div class="text-start">
+                        <p><strong>File:</strong> <code>${filePath}</code></p>
+                        <p class="text-info">
+                            <i class="fas fa-shield-alt"></i>
+                            File sẽ được di chuyển vào thư mục quarantine để cách ly an toàn.
+                        </p>
+                    </div>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#ffc107',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<i class="fas fa-shield-alt"></i> Cách ly',
+                cancelButtonText: 'Hủy'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('client_id', clientId);
+                    formData.append('file_path', filePath);
+
+                    fetch('?api=quarantine_file', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Cách ly thành công',
+                                text: 'File đã được cách ly an toàn!'
+                            });
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Lỗi cách ly',
+                                text: data.error || 'Không thể cách ly file!'
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Lỗi',
+                            text: 'Không thể kết nối đến server!'
+                        });
                     });
-                    
-                    html += `
-                            </div>
-                        </div>
-                    `;
                 }
             });
-            
-            html += '</div>';
-            
-            resultsContainer.innerHTML = html;
-            
-            // Store current scan data
-            window.currentScanData = {
-                client: client,
-                results: results,
-                files: suspiciousFiles
-            };
         }
-        
-        // Helper functions
-        function canDeleteFile(file) {
-            return (file.severity === 'critical' && file.category !== 'filemanager') || 
-                   file.category === 'suspicious_file';
+
+        // Delete file function
+        function deleteFile(clientId, filePath) {
+            Swal.fire({
+                title: 'Xác nhận xóa file',
+                html: `
+                    <div class="text-start">
+                        <p><strong>File:</strong> <code>${filePath}</code></p>
+                        <p class="text-danger">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Thao tác này sẽ xóa file vĩnh viễn và không thể hoàn tác!
+                        </p>
+                    </div>
+                `,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<i class="fas fa-trash"></i> Xóa vĩnh viễn',
+                cancelButtonText: 'Hủy'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('client_id', clientId);
+                    formData.append('file_path', filePath);
+
+                    fetch('?api=delete_file', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Xóa thành công',
+                                text: 'File đã được xóa!'
+                            });
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Lỗi xóa file',
+                                text: data.error || 'Không thể xóa file!'
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Lỗi',
+                            text: 'Không thể kết nối đến server!'
+                        });
+                    });
+                }
+            });
         }
-        
+
+        // View file content function
+        function viewFileContent(clientId, filePath) {
+            Swal.fire({
+                title: 'Đang tải nội dung file...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            const client = clients.find(c => c.id === clientId);
+            if (!client) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Lỗi',
+                    text: 'Không tìm thấy client!'
+                });
+                return;
+            }
+
+            const url = client.url + '/security_scan_client.php?endpoint=get_file_content&api_key=' +
+                       encodeURIComponent(client.api_key) + '&file_path=' + encodeURIComponent(filePath) + '&lines=100';
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    Swal.close();
+
+                    if (data.success) {
+                        const fileData = data.data;
+                        Swal.fire({
+                            title: `📄 ${filePath}`,
+                            html: `
+                                <div class="text-start">
+                                    <div class="mb-3">
+                                        <small class="text-muted">
+                                            Size: ${formatBytes(fileData.file_size)} |
+                                            Lines: ${fileData.total_lines} |
+                                            Modified: ${fileData.last_modified}
+                                            ${fileData.truncated ? ' | <span class="text-warning">Truncated</span>' : ''}
+                                        </small>
+                                    </div>
+                                    <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto; font-size: 12px;">${fileData.content}</pre>
+                                </div>
+                            `,
+                            width: '80%',
+                            showCloseButton: true,
+                            showConfirmButton: false
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Lỗi đọc file',
+                            text: data.error || 'Không thể đọc nội dung file!'
+                        });
+                    }
+                })
+                .catch(error => {
+                    Swal.close();
+                    console.error('Error:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Lỗi',
+                        text: 'Không thể kết nối đến client!'
+                    });
+                });
+        }
+
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 B';
             const k = 1024;
@@ -2055,7 +2225,7 @@ if (isset($_GET['api'])) {
                     
                     if (data.success) {
                         lastScanResults = data.results;
-                        displayScanResults(data.results);
+                        displayBulkScanResults(data.results);
                         loadClients(); // Refresh clients
                         
                         Swal.fire({
@@ -2082,14 +2252,15 @@ if (isset($_GET['api'])) {
                 });
         }
         
-        // Display scan results
-        function displayScanResults(results) {
+        // Display bulk scan results
+        function displayBulkScanResults(results) {
             const resultsSection = document.getElementById('resultsSection');
             const resultsContainer = document.getElementById('resultsContainer');
-            
+
             resultsContainer.innerHTML = '';
-            
-            results.forEach(result => {
+
+            if (Array.isArray(results)) {
+                results.forEach(result => {
                 const client = result.client;
                 const scanResult = result.scan_result;
                 
@@ -2185,7 +2356,7 @@ if (isset($_GET['api'])) {
                         
                         // Also display results
                         if (data.results) {
-                            displayScanResults(data.results);
+                            displayBulkScanResults(data.results);
                         }
                     } else {
                         Swal.fire({
