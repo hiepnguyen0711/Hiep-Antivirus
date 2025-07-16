@@ -609,7 +609,6 @@ if (isset($_GET['api'])) {
     $scannerManager = new ScannerManager();
     
     switch ($action) {
-        case 'clients':
         case 'get_clients':
             echo json_encode($clientManager->getClients());
             break;
@@ -652,9 +651,8 @@ if (isset($_GET['api'])) {
             echo json_encode(['success' => true, 'online' => $isOnline]);
             break;
             
-        case 'scan':
         case 'scan_client':
-            $id = $_GET['id'] ?? $_GET['client_id'] ?? '';
+            $id = $_GET['id'] ?? '';
             $client = $clientManager->getClient($id);
             
             if (!$client) {
@@ -1809,24 +1807,24 @@ if (isset($_GET['api'])) {
             const sampleClients = [
                 {
                     id: 'client_1',
-                    name: 'Main Website',
-                    url: 'https://example.com',
+                    name: 'Hiep Antivirus Local',
+                    url: 'https://hiepcodeweb.com',
                     api_key: 'hiep-security-client-2025-change-this-key',
                     status: 'online',
                     last_scan: new Date().toISOString()
                 },
                 {
                     id: 'client_2', 
-                    name: 'Blog Site',
-                    url: 'https://blog.example.com',
+                    name: 'Xemay365 Client',
+                    url: 'https://xemay365.com.vn',
                     api_key: 'hiep-security-client-2025-change-this-key',
                     status: 'online',
                     last_scan: new Date().toISOString()
                 },
                 {
                     id: 'client_3',
-                    name: 'Shop Website',
-                    url: 'https://shop.example.com', 
+                    name: 'Local Test Client',
+                    url: window.location.origin,
                     api_key: 'hiep-security-client-2025-change-this-key',
                     status: 'online',
                     last_scan: new Date().toISOString()
@@ -1857,7 +1855,7 @@ if (isset($_GET['api'])) {
 
         // Load clients
         function loadClients() {
-            fetch('?api=clients')
+            fetch('?api=get_clients')
                 .then(response => response.json())
                 .then(data => {
                     // Ensure data is an array
@@ -1927,109 +1925,7 @@ if (isset($_GET['api'])) {
             `).join('');
         }
 
-        // Mock scan results for testing
-        function getMockScanResults() {
-            const now = Date.now() / 1000;
-            const weekAgo = now - (7 * 24 * 3600);
-            const monthAgo = now - (30 * 24 * 3600);
-            const monthsAgo = now - (5 * 30 * 24 * 3600);
-            
-            return {
-                success: true,
-                scanned_files: 1250,
-                suspicious_count: 8,
-                critical_count: 3,
-                suspicious_files: [
-                    {
-                        path: './uploads/shell.php',
-                        severity: 'critical',
-                        category: 'webshell',
-                        metadata: {
-                            modified_time: now - 3600, // 1 hour ago
-                            size: 1024
-                        },
-                        issues: [
-                            {
-                                pattern: 'eval(',
-                                description: 'Code execution vulnerability',
-                                line: 15,
-                                code_snippet: '<?php eval($_POST["cmd"]); ?>'
-                            }
-                        ]
-                    },
-                    {
-                        path: './virus-files/backdoor.php',
-                        severity: 'critical',
-                        category: 'malware',
-                        metadata: {
-                            modified_time: weekAgo + 3600, // 6 days ago
-                            size: 2048
-                        },
-                        issues: [
-                            {
-                                pattern: 'base64_decode(',
-                                description: 'Encoded payload execution',
-                                line: 8,
-                                code_snippet: 'base64_decode("ZXZhbCgkX1BPU1RbImNtZCJdKTs=")'
-                            }
-                        ]
-                    },
-                    {
-                        path: './admin/config.php',
-                        severity: 'warning',
-                        category: 'suspicious',
-                        metadata: {
-                            modified_time: monthAgo,
-                            size: 512
-                        },
-                        issues: [
-                            {
-                                pattern: 'file_get_contents(',
-                                description: 'File read operation',
-                                line: 25,
-                                code_snippet: 'file_get_contents($_GET["file"])'
-                            }
-                        ]
-                    },
-                    {
-                        path: './sources/cache.php',
-                        severity: 'critical',
-                        category: 'hacker_planted',
-                        metadata: {
-                            modified_time: now - 7200, // 2 hours ago
-                            size: 64
-                        },
-                        issues: [
-                            {
-                                pattern: 'suspicious_empty_file',
-                                description: 'Empty PHP file - Definitely planted by hacker',
-                                line: 1,
-                                code_snippet: '<?php  ?>'
-                            }
-                        ]
-                    },
-                    {
-                        path: './admin/filemanager/upload.php',
-                        severity: 'warning',
-                        category: 'filemanager',
-                        metadata: {
-                            modified_time: monthsAgo,
-                            size: 8192
-                        },
-                        issues: [
-                            {
-                                pattern: 'move_uploaded_file(',
-                                description: 'File upload without validation',
-                                line: 42,
-                                code_snippet: 'move_uploaded_file($_FILES["file"]["tmp_name"], $target)'
-                            }
-                        ]
-                    }
-                ]
-            };
-        }
-
-        // Modified scanClient function to use mock data
+        // Modified scanClient function to use real API
         function scanClient(clientId) {
             currentClientId = clientId;
             const client = clients.find(c => c.id === clientId);
@@ -2046,28 +1942,118 @@ if (isset($_GET['api'])) {
                 }
             });
 
-            // Simulate API call delay
-            setTimeout(() => {
-                Swal.close();
-                
-                // Use mock data for demonstration
-                const mockResults = getMockScanResults();
-                currentScanResults = mockResults;
-                displayScanResults(mockResults);
-                
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Quét hoàn tất!',
-                    html: `
-                        <div class="text-start">
-                            <strong>Client:</strong> ${client.name}<br>
-                            <strong>Files quét:</strong> ${mockResults.scanned_files}<br>
-                            <strong>Threats:</strong> ${mockResults.suspicious_count}<br>
-                            <strong>Critical:</strong> ${mockResults.critical_count}
-                        </div>
-                    `
+            // Call real API
+            fetch(`?api=scan_client&id=${clientId}`)
+                .then(response => response.json())
+                .then(data => {
+                    Swal.close();
+                    
+                    if (data.success) {
+                        // Format the real data to match our display expectations
+                        const formattedResults = formatScanResults(data);
+                        currentScanResults = formattedResults;
+                        displayScanResults(formattedResults);
+                        
+                        Swal.fire({
+                            icon: data.scan_results && data.scan_results.critical_count > 0 ? 'warning' : 'success',
+                            title: 'Quét hoàn tất!',
+                            html: `
+                                <div class="text-start">
+                                    <strong>Client:</strong> ${client.name}<br>
+                                    <strong>Files quét:</strong> ${data.scan_results ? data.scan_results.scanned_files : 0}<br>
+                                    <strong>Threats:</strong> ${data.scan_results ? data.scan_results.suspicious_count : 0}<br>
+                                    <strong>Critical:</strong> ${data.scan_results ? data.scan_results.critical_count : 0}
+                                </div>
+                            `
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Lỗi quét!',
+                            html: `
+                                <div class="text-start">
+                                    <strong>Client:</strong> ${client.name}<br>
+                                    <strong>Lỗi:</strong> ${data.error || 'Unknown error'}<br>
+                                    <strong>Trạng thái:</strong> Client có thể offline hoặc không thể kết nối
+                                </div>
+                            `
+                        });
+                    }
+                })
+                .catch(error => {
+                    Swal.close();
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Lỗi kết nối!',
+                        text: 'Không thể kết nối với server để thực hiện quét.'
+                    });
+                    console.error('Scan error:', error);
                 });
-            }, 2000);
+        }
+
+        // Format scan results from API to match display format
+        function formatScanResults(apiData) {
+            if (!apiData || !apiData.success || !apiData.scan_results) {
+                return {
+                    success: false,
+                    scanned_files: 0,
+                    suspicious_count: 0,
+                    critical_count: 0,
+                    suspicious_files: []
+                };
+            }
+
+            const scanResults = apiData.scan_results;
+            const suspiciousFiles = [];
+
+            // Process threats from API response
+            if (scanResults.threats && scanResults.threats.all && Array.isArray(scanResults.threats.all)) {
+                scanResults.threats.all.forEach(threat => {
+                    // Determine severity based on time
+                    const now = Date.now() / 1000;
+                    const modifiedTime = threat.modified_time || threat.file_modified_time || now;
+                    const timeDiff = now - modifiedTime;
+                    
+                    let severity = 'info';
+                    if (timeDiff <= 7 * 24 * 3600) { // 1 week
+                        severity = 'critical';
+                    } else if (timeDiff <= 5 * 30 * 24 * 3600) { // 5 months
+                        severity = 'warning';
+                    }
+
+                    // Convert threat to display format
+                    const suspiciousFile = {
+                        path: threat.path || threat.file_path || 'Unknown',
+                        severity: severity,
+                        category: threat.category || 'suspicious',
+                        metadata: {
+                            modified_time: modifiedTime,
+                            size: threat.file_size || 0
+                        },
+                        issues: []
+                    };
+
+                    // Convert issues
+                    if (threat.issues && Array.isArray(threat.issues)) {
+                        suspiciousFile.issues = threat.issues.map(issue => ({
+                            pattern: issue.pattern || 'Unknown',
+                            description: issue.description || 'Unknown issue',
+                            line: issue.line || 1,
+                            code_snippet: issue.context || issue.code_snippet || 'No code snippet'
+                        }));
+                    }
+
+                    suspiciousFiles.push(suspiciousFile);
+                });
+            }
+
+            return {
+                success: true,
+                scanned_files: scanResults.scanned_files || 0,
+                suspicious_count: scanResults.suspicious_count || 0,
+                critical_count: scanResults.critical_count || 0,
+                suspicious_files: suspiciousFiles
+            };
         }
 
         // Display scan results with modern design
@@ -2459,7 +2445,77 @@ if (isset($_GET['api'])) {
         }
 
         function scanAllClients() {
-            // Scan all clients
+            if (!clients || clients.length === 0) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Không có clients',
+                    text: 'Vui lòng thêm clients trước khi quét.'
+                });
+                return;
+            }
+
+            Swal.fire({
+                title: 'Đang quét tất cả clients...',
+                html: `Đang quét ${clients.length} clients...`,
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                willOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            // Call real API
+            fetch('?api=scan_all')
+                .then(response => response.json())
+                .then(data => {
+                    Swal.close();
+                    
+                    if (data.success && data.results) {
+                        let totalScanned = 0;
+                        let totalThreats = 0;
+                        let totalCritical = 0;
+                        let errorCount = 0;
+                        
+                        data.results.forEach(result => {
+                            if (result.scan_result && result.scan_result.success && result.scan_result.scan_results) {
+                                totalScanned += result.scan_result.scan_results.scanned_files || 0;
+                                totalThreats += result.scan_result.scan_results.suspicious_count || 0;
+                                totalCritical += result.scan_result.scan_results.critical_count || 0;
+                            } else {
+                                errorCount++;
+                            }
+                        });
+                        
+                        Swal.fire({
+                            icon: totalCritical > 0 ? 'warning' : 'success',
+                            title: 'Quét tất cả clients hoàn tất!',
+                            html: `
+                                <div class="text-start">
+                                    <strong>Clients đã quét:</strong> ${clients.length}<br>
+                                    <strong>Clients lỗi:</strong> ${errorCount}<br>
+                                    <strong>Tổng files quét:</strong> ${totalScanned}<br>
+                                    <strong>Tổng threats:</strong> ${totalThreats}<br>
+                                    <strong>Tổng critical:</strong> ${totalCritical}
+                                </div>
+                            `
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Lỗi quét!',
+                            text: data.error || 'Không thể quét tất cả clients.'
+                        });
+                    }
+                })
+                .catch(error => {
+                    Swal.close();
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Lỗi kết nối!',
+                        text: 'Không thể kết nối với server để thực hiện quét tất cả.'
+                    });
+                    console.error('Scan all error:', error);
+                });
         }
 
         function checkHealth(clientId) {

@@ -1,0 +1,32 @@
+[
+    {
+        "id": "client_local_test",
+        "name": "Local Test Client",
+        "url": "http://localhost/2025/Hiep-Antivirus/security_scan_client.php",
+        "api_key": "hiep-security-client-2025-change-this-key",
+        "status": "unknown",
+        "last_scan": null,
+        "last_check": null,
+        "created_at": "2025-01-16 22:30:00"
+    },
+    {
+        "id": "client_hiep_server",
+        "name": "Hiep Code Server",
+        "url": "https://hiepcodeweb.com/security_scan_client.php",
+        "api_key": "hiep-security-client-2025-change-this-key",
+        "status": "unknown",
+        "last_scan": null,
+        "last_check": null,
+        "created_at": "2025-01-16 22:30:00"
+    },
+    {
+        "id": "client_xemay365",
+        "name": "Xemay365 Client",
+        "url": "https://xemay365.com.vn/security_scan_client.php",
+        "api_key": "hiep-security-client-2025-change-this-key",
+        "status": "unknown",
+        "last_scan": null,
+        "last_check": null,
+        "created_at": "2025-01-16 22:30:00"
+    }
+] 
