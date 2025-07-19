@@ -2657,6 +2657,7 @@ if (isset($_GET['api'])) {
             padding: 16px 20px;
             vertical-align: middle;
             border-bottom: 1px solid #f1f5f9;
+            max-width: 100vw;
         }
 
         .client-row {
@@ -2708,6 +2709,7 @@ if (isset($_GET['api'])) {
         .client-threats-container {
             padding: 20px;
             border-left: 4px solid var(--primary-blue);
+            max-width: 100vw;
         }
 
         .threats-header {
@@ -4659,7 +4661,7 @@ if (isset($_GET['api'])) {
                                                                     <button class="btn btn-sm btn-outline-info" onclick="findInCode()">
                                                                         <i class="fas fa-search me-1"></i>Find
                                                                     </button>
-                                                                    <button class="btn btn-sm btn-outline-dark" onclick="toggleFullscreen()" id="fullscreenBtn">
+                                                                    <button class="btn btn-sm btn-outline-light text-light" onclick="toggleFullscreen()" id="fullscreenBtn">
                                                                         <i class="fas fa-expand me-1"></i>Fullscreen
                                                                     </button>
                                                                     <button class="btn btn-sm btn-success" onclick="saveCode()">
