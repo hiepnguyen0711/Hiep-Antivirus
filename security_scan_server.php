@@ -1079,11 +1079,8 @@ if (isset($_GET['api'])) {
             z-index: 10;
         }
 
-        /* Bento Grid Layout */
+        /* Dashboard Grid Layout */
         .bento-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 20px;
             margin-bottom: 30px;
         }
 
@@ -1605,28 +1602,9 @@ if (isset($_GET['api'])) {
         }
 
         /* Responsive Design */
-        @media (max-width: 1200px) {
-            .bento-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-            
-            .bento-item.span-3 {
-                grid-column: span 2;
-            }
-        }
-
         @media (max-width: 768px) {
             .main-container {
                 padding: 0 15px;
-            }
-            
-            .bento-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .bento-item.span-2,
-            .bento-item.span-3 {
-                grid-column: span 1;
             }
             
             .clients-grid {
@@ -2238,7 +2216,294 @@ if (isset($_GET['api'])) {
             border-radius: 0 0 12px 12px;
         }
 
-        /* Tooltip styles removed */
+        /* Multi-Client Results Styles */
+        .multi-client-results {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+            margin: 24px 0;
+            overflow: hidden;
+        }
+
+                 .multi-client-header {
+             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+             color: white;
+             padding: 24px;
+         }
+
+         .multi-client-title {
+             display: flex;
+             justify-content: space-between;
+             align-items: center;
+             margin-bottom: 20px;
+         }
+
+         .multi-client-title h2 {
+             margin: 0;
+             font-size: 24px;
+             font-weight: 600;
+         }
+
+         .multi-client-stats {
+             display: flex;
+             gap: 24px;
+             justify-content: center;
+         }
+
+         .stat-item {
+             text-align: center;
+             padding: 12px 20px;
+             background: rgba(255, 255, 255, 0.1);
+             border-radius: 8px;
+             backdrop-filter: blur(10px);
+             transition: all 0.3s ease;
+         }
+
+         .stat-item:hover {
+             background: rgba(255, 255, 255, 0.2);
+             transform: translateY(-2px);
+         }
+
+         .stat-number {
+             display: block;
+             font-size: 24px;
+             font-weight: 700;
+             line-height: 1;
+         }
+
+         .stat-label {
+             font-size: 12px;
+             opacity: 0.8;
+             margin-top: 4px;
+             text-transform: uppercase;
+             letter-spacing: 0.5px;
+         }
+
+         .multi-client-content {
+             padding: 24px;
+         }
+
+         .client-pagination-header {
+             display: flex;
+             justify-content: space-between;
+             align-items: center;
+             margin-bottom: 16px;
+             padding: 12px 16px;
+             background: #f8f9fa;
+             border-radius: 8px;
+         }
+
+         .pagination-controls {
+             display: flex;
+             align-items: center;
+             gap: 12px;
+         }
+
+         .page-number {
+             display: inline-block;
+             padding: 4px 8px;
+             margin: 0 2px;
+             border-radius: 4px;
+             cursor: pointer;
+             transition: all 0.2s ease;
+             font-size: 14px;
+         }
+
+         .page-number:hover {
+             background: #e9ecef;
+         }
+
+         .page-number.current {
+             background: var(--primary-blue);
+             color: white;
+             font-weight: 600;
+         }
+
+                 .client-table {
+             background: white;
+             border-radius: 8px;
+             overflow: hidden;
+             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+         }
+
+         .client-table table {
+             margin: 0;
+         }
+
+         .client-table th {
+             background: #f8f9fa;
+             font-weight: 600;
+             font-size: 13px;
+             padding: 12px 16px;
+             border-bottom: 2px solid #dee2e6;
+         }
+
+         .client-table td {
+             padding: 12px 16px;
+             vertical-align: middle;
+         }
+
+         .client-row {
+             transition: all 0.2s ease;
+         }
+
+         .client-row:hover {
+             background: #f8f9fa;
+         }
+
+         .client-info-cell {
+             /* Client info styling */
+         }
+
+         .client-name {
+             font-size: 14px;
+             font-weight: 600;
+             color: #1f2937;
+             margin-bottom: 2px;
+         }
+
+         .client-url {
+             font-size: 11px;
+             color: #6b7280;
+             word-break: break-all;
+         }
+
+         .expand-btn {
+             border: none !important;
+             padding: 4px 8px !important;
+             transition: all 0.2s ease;
+         }
+
+         .expand-btn:hover {
+             background: #e9ecef !important;
+         }
+
+         .client-details-row {
+             background: #f8f9fa;
+         }
+
+         .client-threats-container {
+             padding: 20px;
+             border-left: 4px solid var(--primary-blue);
+         }
+
+         .threats-header {
+             margin-bottom: 16px;
+             padding-bottom: 8px;
+             border-bottom: 1px solid #dee2e6;
+         }
+
+         .threats-header h6 {
+             margin: 0;
+             color: #1f2937;
+             font-weight: 600;
+         }
+
+         .threats-list {
+             display: flex;
+             flex-direction: column;
+             gap: 12px;
+         }
+
+         .threat-item {
+             background: white;
+             border: 1px solid #e5e7eb;
+             border-radius: 8px;
+             padding: 16px;
+             transition: all 0.2s ease;
+         }
+
+         .threat-item:hover {
+             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+             border-color: #d1d5db;
+         }
+
+         .threat-item.critical {
+             border-left: 4px solid #ef4444;
+         }
+
+         .threat-item.warning {
+             border-left: 4px solid #f59e0b;
+         }
+
+         .threat-item.info {
+             border-left: 4px solid #3b82f6;
+         }
+
+         .threat-header {
+             display: flex;
+             justify-content: space-between;
+             align-items: center;
+             margin-bottom: 8px;
+         }
+
+         .threat-file-info {
+             flex: 1;
+             font-size: 14px;
+         }
+
+         .threat-actions {
+             display: flex;
+             gap: 8px;
+         }
+
+         .threat-actions .btn {
+             font-size: 12px;
+             padding: 4px 8px;
+         }
+
+         .threat-meta {
+             display: flex;
+             gap: 8px;
+             margin-bottom: 8px;
+         }
+
+         .threat-meta .badge {
+             font-size: 10px;
+             padding: 4px 8px;
+         }
+
+         .threat-details {
+             font-size: 12px;
+             color: #6b7280;
+         }
+
+        .client-details {
+            text-align: left;
+        }
+
+        .detail-row {
+            padding: 8px 0;
+            border-bottom: 1px solid #f3f4f6;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .multi-client-summary {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .client-results-grid {
+                grid-template-columns: 1fr;
+                padding: 16px;
+            }
+            
+            .summary-card {
+                padding: 16px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .multi-client-summary {
+                grid-template-columns: 1fr;
+            }
+        }
 
         /* Enhanced threat card with tooltip trigger */
         .threat-card:hover {
@@ -2629,59 +2894,65 @@ if (isset($_GET['api'])) {
             </div>
         </div>
 
-        <!-- Bento Grid Dashboard -->
-        <div class="bento-grid">
+        <!-- Dashboard Grid -->
+        <div class="row bento-grid">
             <!-- Statistics Overview -->
-            <div class="bento-item">
-                <div class="card-header-modern">
-                    <div class="card-icon">
-                        <i class="fas fa-chart-line"></i>
+            <div class="col-12 col-lg-4 mb-4">
+                <div class="bento-item">
+                    <div class="card-header-modern">
+                        <div class="card-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <h3 class="card-title-modern">Thống Kê Tổng Quan</h3>
                     </div>
-                    <h3 class="card-title-modern">Thống Kê Tổng Quan</h3>
-                </div>
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <span class="stat-number" id="totalClients">0</span>
-                        <div class="stat-label">Clients</div>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-number" id="totalThreats">0</span>
-                        <div class="stat-label">Threats</div>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-number" id="criticalThreats">0</span>
-                        <div class="stat-label">Critical</div>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-number" id="cleanClients">0</span>
-                        <div class="stat-label">Clean</div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <span class="stat-number" id="totalClients">0</span>
+                            <div class="stat-label">Clients</div>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-number" id="totalThreats">0</span>
+                            <div class="stat-label">Threats</div>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-number" id="criticalThreats">0</span>
+                            <div class="stat-label">Critical</div>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-number" id="cleanClients">0</span>
+                            <div class="stat-label">Clean</div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Recent Activity -->
-            <div class="bento-item">
-                <div class="card-header-modern">
-                    <div class="card-icon">
-                        <i class="fas fa-clock"></i>
+            <div class="col-12 col-lg-4 mb-4">
+                <div class="bento-item">
+                    <div class="card-header-modern">
+                        <div class="card-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <h3 class="card-title-modern">Hoạt Động Gần Đây</h3>
                     </div>
-                    <h3 class="card-title-modern">Hoạt Động Gần Đây</h3>
-                </div>
-                <div id="recentActivity">
-                    <!-- Recent activity will be loaded here -->
+                    <div id="recentActivity">
+                        <!-- Recent activity will be loaded here -->
+                    </div>
                 </div>
             </div>
 
             <!-- System Health -->
-            <div class="bento-item">
-                <div class="card-header-modern">
-                    <div class="card-icon">
-                        <i class="fas fa-heartbeat"></i>
+            <div class="col-12 col-lg-4 mb-4">
+                <div class="bento-item">
+                    <div class="card-header-modern">
+                        <div class="card-icon">
+                            <i class="fas fa-heartbeat"></i>
+                        </div>
+                        <h3 class="card-title-modern">Trạng Thái Hệ Thống</h3>
                     </div>
-                    <h3 class="card-title-modern">Trạng Thái Hệ Thống</h3>
-                </div>
-                <div id="systemHealth">
-                    <!-- System health will be loaded here -->
+                    <div id="systemHealth">
+                        <!-- System health will be loaded here -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -2786,6 +3057,7 @@ if (isset($_GET['api'])) {
     <script>
         let clients = [];
         let currentScanResults = [];
+        let currentMultiClientResults = [];
         let currentClientId = null;
 
         // Initialize with sample data if no clients exist
@@ -3516,6 +3788,12 @@ if (isset($_GET['api'])) {
                             }
                         });
                         
+                        // Store results for multi-client display
+                        currentMultiClientResults = data.results;
+                        
+                        // Show multi-client results interface
+                        displayMultiClientResults(data.results);
+                        
                         Swal.fire({
                             icon: totalCritical > 0 ? 'warning' : 'success',
                             title: 'Quét tất cả clients hoàn tất!',
@@ -4175,7 +4453,412 @@ if (isset($_GET['api'])) {
             }
         }
 
-        // Tooltip functions removed to avoid errors
+        // Multi-Client Results Display
+        function displayMultiClientResults(results) {
+            // Hide single client results
+            const singleResults = document.getElementById('scanResults');
+            if (singleResults) {
+                singleResults.style.display = 'none';
+            }
+            
+            // Show multi-client results
+            const multiResults = document.getElementById('multiClientResults');
+            if (!multiResults) {
+                createMultiClientResultsContainer();
+            }
+            
+            const container = document.getElementById('multiClientResults');
+            container.style.display = 'block';
+            
+            // Calculate summary stats
+            let totalClients = results.length;
+            let successfulScans = 0;
+            let totalThreats = 0;
+            let totalCritical = 0;
+            let totalFiles = 0;
+            
+            results.forEach(result => {
+                if (result.scan_result && result.scan_result.success) {
+                    successfulScans++;
+                    if (result.scan_result.scan_results) {
+                        totalFiles += result.scan_result.scan_results.scanned_files || 0;
+                        totalThreats += result.scan_result.scan_results.suspicious_count || 0;
+                        totalCritical += result.scan_result.scan_results.critical_count || 0;
+                    }
+                }
+            });
+            
+                         // Render multi-client interface with table layout
+             container.innerHTML = `
+                 <div class="multi-client-header">
+                     <div class="multi-client-title">
+                         <h2><i class="fas fa-network-wired me-2"></i>Kết Quả Quét Đa Client</h2>
+                         <button class="btn btn-outline-secondary btn-sm" onclick="hideMultiClientResults()">
+                             <i class="fas fa-times"></i> Đóng
+                         </button>
+                     </div>
+                     
+                     <div class="multi-client-stats">
+                         <div class="stat-item">
+                             <span class="stat-number">${totalClients}</span>
+                             <span class="stat-label">Clients</span>
+                         </div>
+                         <div class="stat-item">
+                             <span class="stat-number">${totalFiles.toLocaleString()}</span>
+                             <span class="stat-label">Files</span>
+                         </div>
+                         <div class="stat-item">
+                             <span class="stat-number">${totalThreats}</span>
+                             <span class="stat-label">Threats</span>
+                         </div>
+                         <div class="stat-item">
+                             <span class="stat-number">${totalCritical}</span>
+                             <span class="stat-label">Critical</span>
+                         </div>
+                     </div>
+                 </div>
+                 
+                 <div class="multi-client-content col-12">
+                     <div class="client-pagination-header">
+                         <div class="pagination-info">
+                             <span>Hiển thị <span id="paginationStart">1</span>-<span id="paginationEnd">10</span> của ${totalClients} clients</span>
+                         </div>
+                         <div class="pagination-controls">
+                             <button class="btn btn-sm btn-outline-primary" onclick="changePage(-1)" id="prevPage">
+                                 <i class="fas fa-chevron-left"></i> Trước
+                             </button>
+                             <span id="pageNumbers"></span>
+                             <button class="btn btn-sm btn-outline-primary" onclick="changePage(1)" id="nextPage">
+                                 Sau <i class="fas fa-chevron-right"></i>
+                             </button>
+                         </div>
+                     </div>
+                     
+                     <div class="client-table">
+                         ${renderClientTable(results)}
+                     </div>
+                 </div>
+             `;
+            
+            // Add interactions
+            addClientCardInteractions();
+        }
+        
+        function createMultiClientResultsContainer() {
+            const container = document.createElement('div');
+            container.id = 'multiClientResults';
+            container.className = 'multi-client-results';
+            container.style.display = 'none';
+            
+                         // Insert after bento-grid, not inside it
+             const bentoGrid = document.querySelector('.bento-grid');
+             if (bentoGrid && bentoGrid.parentNode) {
+                 bentoGrid.parentNode.insertBefore(container, bentoGrid.nextSibling);
+             } else {
+                 document.querySelector('.container-fluid').appendChild(container);
+             }
+        }
+        
+                 // Pagination variables
+         let currentPage = 1;
+         let itemsPerPage = 10;
+         let allClientResults = [];
+         
+         function renderClientTable(results) {
+             allClientResults = results;
+             const startIndex = (currentPage - 1) * itemsPerPage;
+             const endIndex = startIndex + itemsPerPage;
+             const paginatedResults = results.slice(startIndex, endIndex);
+             
+             return `
+                 <table class="table table-hover">
+                     <thead>
+                         <tr>
+                             <th width="5%"><i class="fas fa-expand-arrows-alt"></i></th>
+                             <th width="25%">Client</th>
+                             <th width="15%">Status</th>
+                             <th width="15%">Files</th>
+                             <th width="15%">Threats</th>
+                             <th width="15%">Critical</th>
+                             <th width="10%">Actions</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         ${paginatedResults.map((result, index) => {
+                             const realIndex = startIndex + index;
+                             return renderClientRow(result, realIndex);
+                         }).join('')}
+                     </tbody>
+                 </table>
+             `;
+         }
+         
+         function renderClientRow(result, index) {
+             const client = result.client_info || {};
+             const scanResult = result.scan_result || {};
+             const scanData = scanResult.scan_results || {};
+             
+             const success = scanResult.success || false;
+             const threats = scanData.suspicious_count || 0;
+             const critical = scanData.critical_count || 0;
+             const files = scanData.scanned_files || 0;
+             
+             const statusClass = success ? (critical > 0 ? 'danger' : threats > 0 ? 'warning' : 'success') : 'secondary';
+             const statusText = success ? (critical > 0 ? 'Critical' : threats > 0 ? 'Warning' : 'Clean') : 'Error';
+             const statusIcon = success ? (critical > 0 ? 'skull-crossbones' : threats > 0 ? 'exclamation-triangle' : 'check-circle') : 'times-circle';
+             
+             return `
+                 <tr class="client-row" data-client-index="${index}">
+                     <td>
+                         <button class="btn btn-sm btn-outline-secondary expand-btn" onclick="toggleClientDetails(${index})" title="Expand details">
+                             <i class="fas fa-chevron-right" id="expand-icon-${index}"></i>
+                         </button>
+                     </td>
+                     <td>
+                         <div class="client-info-cell">
+                             <div class="client-name">${client.name || 'Unknown Client'}</div>
+                             <div class="client-url">${client.domain || client.url || 'N/A'}</div>
+                         </div>
+                     </td>
+                     <td>
+                         <span class="badge bg-${statusClass}">
+                             <i class="fas fa-${statusIcon} me-1"></i>${statusText}
+                         </span>
+                     </td>
+                     <td><strong>${files.toLocaleString()}</strong></td>
+                     <td><strong class="${threats > 0 ? 'text-warning' : ''}">${threats}</strong></td>
+                     <td><strong class="${critical > 0 ? 'text-danger' : ''}">${critical}</strong></td>
+                     <td>
+                         ${success && threats > 0 ? `
+                             <button class="btn btn-sm btn-outline-danger" onclick="viewClientThreats(${index})" title="View threats">
+                                 <i class="fas fa-bug"></i>
+                             </button>
+                         ` : ''}
+                     </td>
+                 </tr>
+                 <tr class="client-details-row" id="client-details-${index}" style="display: none;">
+                     <td colspan="7">
+                         <div class="client-threats-container" id="threats-container-${index}">
+                             <!-- Threats will be loaded here -->
+                         </div>
+                     </td>
+                 </tr>
+             `;
+         }
+         
+         function toggleClientDetails(index) {
+             const detailsRow = document.getElementById(`client-details-${index}`);
+             const expandIcon = document.getElementById(`expand-icon-${index}`);
+             const threatsContainer = document.getElementById(`threats-container-${index}`);
+             
+             if (detailsRow.style.display === 'none') {
+                 // Expand
+                 detailsRow.style.display = 'table-row';
+                 expandIcon.className = 'fas fa-chevron-down';
+                 
+                 // Load client threats
+                 loadClientThreats(index, threatsContainer);
+             } else {
+                 // Collapse
+                 detailsRow.style.display = 'none';
+                 expandIcon.className = 'fas fa-chevron-right';
+             }
+         }
+         
+         function loadClientThreats(index, container) {
+             const result = allClientResults[index];
+             if (!result || !result.scan_result?.scan_results?.suspicious_files) {
+                 container.innerHTML = '<div class="p-3 text-muted">Không có threats nào được phát hiện.</div>';
+                 return;
+             }
+             
+             const threats = result.scan_result.scan_results.suspicious_files;
+             const client = result.client_info || {};
+             
+             container.innerHTML = `
+                 <div class="threats-header">
+                     <h6><i class="fas fa-bug me-2"></i>Threats trong ${client.name || 'Client'} (${threats.length} files)</h6>
+                 </div>
+                 <div class="threats-list">
+                     ${threats.map(threat => renderThreatItem(threat, index)).join('')}
+                 </div>
+             `;
+         }
+         
+         function renderThreatItem(threat, clientIndex) {
+             const severity = getSeverityLevel(threat);
+             const ageInfo = getAgeInfo(threat.metadata?.modified_time);
+             const fileSize = formatFileSize(threat.metadata?.size || 0);
+             
+             return `
+                 <div class="threat-item ${severity}">
+                     <div class="threat-header">
+                         <div class="threat-file-info">
+                             <i class="fas fa-file-code me-2"></i>
+                             <strong>${threat.path}</strong>
+                         </div>
+                         <div class="threat-actions">
+                             <button class="btn btn-sm btn-outline-primary" onclick="viewThreatInClient(${clientIndex}, '${threat.path}')">
+                                 <i class="fas fa-edit"></i> Sửa
+                             </button>
+                             <button class="btn btn-sm btn-outline-danger" onclick="deleteThreatInClient(${clientIndex}, '${threat.path}')">
+                                 <i class="fas fa-trash"></i> Xóa
+                             </button>
+                         </div>
+                     </div>
+                     <div class="threat-meta">
+                         <span class="badge bg-${severity === 'critical' ? 'danger' : severity === 'warning' ? 'warning' : 'info'}">${getSeverityLabel(severity)}</span>
+                         <span class="badge bg-secondary">${ageInfo.label}</span>
+                         <span class="badge bg-light text-dark">${fileSize}</span>
+                     </div>
+                     <div class="threat-details mt-2">
+                         <small><strong>${threat.issues?.length || 0} vấn đề:</strong> 
+                         ${(threat.issues || []).slice(0, 3).map(issue => issue.pattern).join(', ')}
+                         ${(threat.issues || []).length > 3 ? '...' : ''}</small>
+                     </div>
+                 </div>
+             `;
+         }
+         
+         function viewThreatInClient(clientIndex, filePath) {
+             const client = allClientResults[clientIndex]?.client_info;
+             if (!client) return;
+             
+             // Use the same logic as single client threat viewing
+             viewThreat(filePath);
+         }
+         
+         function deleteThreatInClient(clientIndex, filePath) {
+             const client = allClientResults[clientIndex]?.client_info;
+             if (!client) return;
+             
+             // Use the same logic as single client threat deletion
+             deleteFile(filePath);
+         }
+         
+         function changePage(direction) {
+             const totalPages = Math.ceil(allClientResults.length / itemsPerPage);
+             
+             if (direction === -1 && currentPage > 1) {
+                 currentPage--;
+             } else if (direction === 1 && currentPage < totalPages) {
+                 currentPage++;
+             }
+             
+             updatePagination();
+         }
+         
+         function updatePagination() {
+             const totalPages = Math.ceil(allClientResults.length / itemsPerPage);
+             const startIndex = (currentPage - 1) * itemsPerPage;
+             const endIndex = Math.min(startIndex + itemsPerPage, allClientResults.length);
+             
+             // Update table
+             const clientTable = document.querySelector('.client-table');
+             if (clientTable) {
+                 clientTable.innerHTML = renderClientTable(allClientResults);
+             }
+             
+             // Update pagination info
+             document.getElementById('paginationStart').textContent = startIndex + 1;
+             document.getElementById('paginationEnd').textContent = endIndex;
+             
+             // Update buttons
+             document.getElementById('prevPage').disabled = currentPage === 1;
+             document.getElementById('nextPage').disabled = currentPage === totalPages;
+             
+             // Update page numbers
+             const pageNumbers = document.getElementById('pageNumbers');
+             if (pageNumbers) {
+                 let pagesHtml = '';
+                 for (let i = 1; i <= totalPages; i++) {
+                     if (i === currentPage) {
+                         pagesHtml += `<span class="page-number current">${i}</span>`;
+                     } else {
+                         pagesHtml += `<span class="page-number" onclick="goToPage(${i})">${i}</span>`;
+                     }
+                 }
+                 pageNumbers.innerHTML = pagesHtml;
+             }
+         }
+         
+         function goToPage(page) {
+             currentPage = page;
+             updatePagination();
+         }
+        
+        function addClientCardInteractions() {
+            // Add hover effects and click handlers
+            document.querySelectorAll('.client-card').forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-4px)';
+                    this.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.15)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                    this.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.1)';
+                });
+            });
+        }
+        
+        function viewClientDetails(index) {
+            const result = currentMultiClientResults[index];
+            if (!result) return;
+            
+            // Show detailed view in modal or switch to single client view
+            const client = result.client_info || {};
+            const scanData = result.scan_result?.scan_results || {};
+            
+            Swal.fire({
+                title: `Chi Tiết Client: ${client.name || 'Unknown'}`,
+                html: `
+                    <div class="client-details">
+                        <div class="detail-row">
+                            <strong>Domain:</strong> ${client.domain || 'N/A'}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Files Scanned:</strong> ${scanData.scanned_files || 0}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Suspicious Files:</strong> ${scanData.suspicious_count || 0}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Critical Threats:</strong> ${scanData.critical_count || 0}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Scan Time:</strong> ${client.scan_time || 'N/A'}s
+                        </div>
+                    </div>
+                `,
+                width: 600,
+                showConfirmButton: false,
+                showCloseButton: true
+            });
+        }
+        
+        function viewClientThreats(index) {
+            const result = currentMultiClientResults[index];
+            if (!result || !result.scan_result?.scan_results?.suspicious_files) return;
+            
+            // Switch to single client view with this client's results
+            currentScanResults = {
+                suspicious_files: result.scan_result.scan_results.suspicious_files,
+                scanned_files: result.scan_result.scan_results.scanned_files,
+                suspicious_count: result.scan_result.scan_results.suspicious_count,
+                critical_count: result.scan_result.scan_results.critical_count
+            };
+            
+            hideMultiClientResults();
+            displayScanResults(currentScanResults);
+        }
+        
+        function hideMultiClientResults() {
+            const container = document.getElementById('multiClientResults');
+            if (container) {
+                container.style.display = 'none';
+            }
+        }
         
         // Time ago function
         function getTimeAgo(timestamp) {
