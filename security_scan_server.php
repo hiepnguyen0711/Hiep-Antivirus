@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Security Scanner Server - Central Dashboard
  * Đặt file này trên website trung tâm để quản lý tất cả clients
@@ -7,19 +8,20 @@
  */
 
 // ==================== CẤU HÌNH SERVER ====================
-class SecurityServerConfig {
+class SecurityServerConfig
+{
     // Email cảnh báo
     const ADMIN_EMAIL = 'nguyenvanhiep0711@gmail.com';
     const EMAIL_FROM = 'security-server@yourdomain.com';
     const EMAIL_FROM_NAME = 'Hiệp Security Server';
-    
+
     // SMTP Settings
     const SMTP_HOST = 'smtp.gmail.com';
     const SMTP_PORT = 587;
     const SMTP_USERNAME = 'nguyenvanhiep0711@gmail.com';
     const SMTP_PASSWORD = 'flnd neoz lhqw yzmd';
     const SMTP_SECURE = 'tls';
-    
+
     // Server Settings
     const SERVER_NAME = 'Hiệp Security Center';
     const SERVER_VERSION = '1.0';
@@ -29,35 +31,40 @@ class SecurityServerConfig {
 }
 
 // ==================== CLIENT MANAGER ====================
-class ClientManager {
+class ClientManager
+{
     private $clientsFile = './data/clients.json';
-    
-    public function __construct() {
+
+    public function __construct()
+    {
         if (!file_exists('./data')) {
             mkdir('./data', 0755, true);
         }
-        
+
         if (!file_exists($this->clientsFile)) {
             $this->saveClients([]);
         }
     }
-    
-    public function getClients() {
+
+    public function getClients()
+    {
         if (!file_exists($this->clientsFile)) {
             return [];
         }
-        
+
         $content = file_get_contents($this->clientsFile);
         return json_decode($content, true) ?: [];
     }
-    
-    public function saveClients($clients) {
+
+    public function saveClients($clients)
+    {
         file_put_contents($this->clientsFile, json_encode($clients, JSON_PRETTY_PRINT));
     }
-    
-    public function addClient($name, $url, $apiKey) {
+
+    public function addClient($name, $url, $apiKey)
+    {
         $clients = $this->getClients();
-        
+
         $client = [
             'id' => uniqid(),
             'name' => $name,
@@ -68,66 +75,72 @@ class ClientManager {
             'last_check' => null,
             'created_at' => date('Y-m-d H:i:s')
         ];
-        
+
         $clients[] = $client;
         $this->saveClients($clients);
-        
+
         return $client;
     }
-    
-    public function updateClient($id, $data) {
+
+    public function updateClient($id, $data)
+    {
         $clients = $this->getClients();
-        
+
         foreach ($clients as &$client) {
             if ($client['id'] === $id) {
                 $client = array_merge($client, $data);
                 break;
             }
         }
-        
+
         $this->saveClients($clients);
     }
-    
-    public function deleteClient($id) {
+
+    public function deleteClient($id)
+    {
         $clients = $this->getClients();
-        $clients = array_filter($clients, function($client) use ($id) {
+        $clients = array_filter($clients, function ($client) use ($id) {
             return $client['id'] !== $id;
         });
-        
+
         $this->saveClients(array_values($clients));
     }
-    
-    public function getClient($id) {
+
+    public function getClient($id)
+    {
         $clients = $this->getClients();
-        
+
         foreach ($clients as $client) {
             if ($client['id'] === $id) {
                 return $client;
             }
         }
-        
+
         return null;
     }
 }
 
 // ==================== SCANNER MANAGER ====================
-class ScannerManager {
+class ScannerManager
+{
     private $clientManager;
-    
-    public function __construct() {
+
+    public function __construct()
+    {
         $this->clientManager = new ClientManager();
     }
-    
-    public function checkClientHealth($client) {
+
+    public function checkClientHealth($client)
+    {
         // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
         $url = rtrim($client['url'], '/');
         if (strpos($url, 'security_scan_client.php') === false) {
             $url .= '/security_scan_client.php';
         }
         $url .= '?endpoint=health&api_key=' . urlencode($client['api_key']);
-        
+
         $response = $this->makeApiRequest($url, 'GET', [], null);
-        
+
         if ($response['success']) {
             $this->clientManager->updateClient($client['id'], [
                 'status' => 'online',
@@ -143,29 +156,30 @@ class ScannerManager {
             return false;
         }
     }
-    
-    public function scanClient($client, $priorityFiles = []) {
+
+    public function scanClient($client, $priorityFiles = [])
+    {
         // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
         $url = rtrim($client['url'], '/');
         if (strpos($url, 'security_scan_client.php') === false) {
             $url .= '/security_scan_client.php';
         }
         $url .= '?endpoint=scan&api_key=' . urlencode($client['api_key']);
-        
+
         // Gửi priority files sang client
         $scanData = [
             'priority_files' => $priorityFiles
         ];
-        
+
         $response = $this->makeApiRequest($url, 'POST', [], json_encode($scanData));
-        
+
         if ($response['success']) {
             $this->clientManager->updateClient($client['id'], [
                 'status' => 'online',
                 'last_scan' => date('Y-m-d H:i:s'),
                 'last_check' => date('Y-m-d H:i:s')
             ]);
-            
+
             return $response['data'];
         } else {
             $this->clientManager->updateClient($client['id'], [
@@ -173,7 +187,7 @@ class ScannerManager {
                 'last_check' => date('Y-m-d H:i:s'),
                 'error' => $response['error'] ?? 'Unknown error'
             ]);
-            
+
             return [
                 'success' => false,
                 'error' => $response['error'],
@@ -184,11 +198,12 @@ class ScannerManager {
             ];
         }
     }
-    
-    public function scanAllClients() {
+
+    public function scanAllClients()
+    {
         $clients = $this->clientManager->getClients();
         $results = [];
-        
+
         foreach ($clients as $client) {
             $result = $this->scanClient($client);
             $results[] = [
@@ -196,30 +211,32 @@ class ScannerManager {
                 'scan_result' => $result
             ];
         }
-        
+
         return $results;
     }
-    
-    public function getClientStatus($client) {
+
+    public function getClientStatus($client)
+    {
         // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
         $url = rtrim($client['url'], '/');
         if (strpos($url, 'security_scan_client.php') === false) {
             $url .= '/security_scan_client.php';
         }
         $url .= '?endpoint=status&api_key=' . urlencode($client['api_key']);
-        
+
         $response = $this->makeApiRequest($url, 'GET', [], null);
-        
+
         if ($response['success']) {
             return $response['data'];
         }
-        
+
         return null;
     }
-    
-    private function makeApiRequest($url, $method = 'GET', $data = [], $apiKey = null) {
+
+    private function makeApiRequest($url, $method = 'GET', $data = [], $apiKey = null)
+    {
         $ch = curl_init();
-        
+
         // Cấu hình cURL
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -227,30 +244,30 @@ class ScannerManager {
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_USERAGENT, 'Hiep Security Server/1.0');
-        
+
         // Headers
         $headers = [
             'Content-Type: application/json',
             'Accept: application/json'
         ];
-        
+
         if ($apiKey) {
             $headers[] = 'X-API-Key: ' . $apiKey;
         }
-        
+
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        
+
         // Method và data
         if ($method === 'POST' && !empty($data)) {
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         }
-        
+
         // Debug logging
         if (!file_exists('./logs')) {
             mkdir('./logs', 0755, true);
         }
-        
+
         $logData = [
             'timestamp' => date('Y-m-d H:i:s'),
             'url' => $url,
@@ -258,15 +275,15 @@ class ScannerManager {
             'data' => $data,
             'headers' => $headers
         ];
-        
+
         file_put_contents('./logs/api_requests.log', json_encode($logData) . "\n", FILE_APPEND);
-        
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        
+
         curl_close($ch);
-        
+
         // Debug response
         $responseLog = [
             'timestamp' => date('Y-m-d H:i:s'),
@@ -275,9 +292,9 @@ class ScannerManager {
             'response' => $response,
             'error' => $error
         ];
-        
+
         file_put_contents('./logs/api_responses.log', json_encode($responseLog) . "\n", FILE_APPEND);
-        
+
         if ($error) {
             return [
                 'success' => false,
@@ -285,7 +302,7 @@ class ScannerManager {
                 'http_code' => $httpCode
             ];
         }
-        
+
         if ($httpCode !== 200) {
             return [
                 'success' => false,
@@ -294,9 +311,9 @@ class ScannerManager {
                 'raw_response' => $response
             ];
         }
-        
+
         $decodedResponse = json_decode($response, true);
-        
+
         if (json_last_error() !== JSON_ERROR_NONE) {
             return [
                 'success' => false,
@@ -304,24 +321,25 @@ class ScannerManager {
                 'raw_response' => $response
             ];
         }
-        
+
         return [
             'success' => true,
             'data' => $decodedResponse,
             'http_code' => $httpCode
         ];
     }
-    
-    public function getFileContent($client, $filePath) {
+
+    public function getFileContent($client, $filePath)
+    {
         // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
         $url = rtrim($client['url'], '/');
         if (strpos($url, 'security_scan_client.php') === false) {
             $url .= '/security_scan_client.php';
         }
         $url .= '?endpoint=get_file&api_key=' . urlencode($client['api_key']);
-        
+
         $response = $this->makeApiRequest($url, 'POST', ['file_path' => $filePath], null);
-        
+
         if ($response['success'] && isset($response['data']['content'])) {
             return [
                 'success' => true,
@@ -336,20 +354,21 @@ class ScannerManager {
             ];
         }
     }
-    
-    public function saveFileContent($client, $filePath, $content) {
+
+    public function saveFileContent($client, $filePath, $content)
+    {
         // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
         $url = rtrim($client['url'], '/');
         if (strpos($url, 'security_scan_client.php') === false) {
             $url .= '/security_scan_client.php';
         }
         $url .= '?endpoint=save_file&api_key=' . urlencode($client['api_key']);
-        
+
         $response = $this->makeApiRequest($url, 'POST', [
             'file_path' => $filePath,
             'content' => $content
         ], null);
-        
+
         if ($response['success']) {
             return [
                 'success' => true,
@@ -364,19 +383,20 @@ class ScannerManager {
             ];
         }
     }
-    
-    public function deleteFileOnClient($client, $filePath) {
+
+    public function deleteFileOnClient($client, $filePath)
+    {
         // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
         $url = rtrim($client['url'], '/');
         if (strpos($url, 'security_scan_client.php') === false) {
             $url .= '/security_scan_client.php';
         }
         $url .= '?endpoint=delete_file&api_key=' . urlencode($client['api_key']);
-        
+
         $response = $this->makeApiRequest($url, 'POST', [
             'file_path' => $filePath
         ], null);
-        
+
         if ($response['success'] && isset($response['data']['success']) && $response['data']['success']) {
             return [
                 'success' => true,
@@ -388,7 +408,7 @@ class ScannerManager {
             if (isset($response['data']['error'])) {
                 $error = $response['data']['error'];
             }
-            
+
             return [
                 'success' => false,
                 'error' => $error,
@@ -397,7 +417,8 @@ class ScannerManager {
         }
     }
 
-    public function quarantineFileOnClient($client, $filePath) {
+    public function quarantineFileOnClient($client, $filePath)
+    {
         // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
         $url = rtrim($client['url'], '/');
         if (strpos($url, 'security_scan_client.php') === false) {
@@ -428,7 +449,8 @@ class ScannerManager {
         }
     }
 
-    public function getScanHistory($client, $limit = 10) {
+    public function getScanHistory($client, $limit = 10)
+    {
         // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
         $url = rtrim($client['url'], '/');
         if (strpos($url, 'security_scan_client.php') === false) {
@@ -447,28 +469,30 @@ class ScannerManager {
 }
 
 // ==================== EMAIL MANAGER ====================
-class EmailManager {
-    public function sendDailyReport($scanResults) {
+class EmailManager
+{
+    public function sendDailyReport($scanResults)
+    {
         $totalClients = count($scanResults);
         $criticalClients = 0;
         $warningClients = 0;
         $cleanClients = 0;
         $offlineClients = 0;
-        
+
         $criticalDetails = [];
         $warningDetails = [];
-        
+
         foreach ($scanResults as $result) {
             $client = $result['client'];
             $scanResult = $result['scan_result'];
-            
+
             if (!$scanResult['success']) {
                 $offlineClients++;
                 continue;
             }
-            
+
             $status = $scanResult['scan_results']['status'] ?? 'unknown';
-            
+
             switch ($status) {
                 case 'critical':
                     $criticalClients++;
@@ -489,19 +513,20 @@ class EmailManager {
                     break;
             }
         }
-        
+
         // Tạo email
         $subject = "🔒 Báo Cáo Bảo Mật Hàng Ngày - " . date('d/m/Y');
         if ($criticalClients > 0) {
             $subject = "🚨 CẢNH BÁO: " . $criticalClients . " Website Có Threats Nghiêm Trọng - " . date('d/m/Y');
         }
-        
+
         $htmlBody = $this->generateReportEmail($totalClients, $criticalClients, $warningClients, $cleanClients, $offlineClients, $criticalDetails, $warningDetails);
-        
+
         return $this->sendEmail($subject, $htmlBody);
     }
-    
-    private function generateReportEmail($total, $critical, $warning, $clean, $offline, $criticalDetails, $warningDetails) {
+
+    private function generateReportEmail($total, $critical, $warning, $clean, $offline, $criticalDetails, $warningDetails)
+    {
         $html = '<!DOCTYPE html>
 <html>
 <head>
@@ -559,16 +584,16 @@ class EmailManager {
                     <div class="stat-label">Offline</div>
                 </div>
             </div>';
-        
+
         if ($critical > 0) {
             $html .= '<div class="section">
                 <h2>🚨 Websites Có Threats Nghiêm Trọng</h2>';
-            
+
             foreach ($criticalDetails as $detail) {
                 $client = $detail['client'];
                 $scanResult = $detail['scan_result'];
                 $results = $scanResult['scan_results'];
-                
+
                 $html .= '<div class="client-item critical">
                     <div class="client-name">' . htmlspecialchars($client['name']) . '</div>
                     <div class="client-url">' . htmlspecialchars($client['url']) . '</div>
@@ -579,19 +604,19 @@ class EmailManager {
                     </div>
                 </div>';
             }
-            
+
             $html .= '</div>';
         }
-        
+
         if ($warning > 0) {
             $html .= '<div class="section">
                 <h2>⚠️ Websites Có Cảnh Báo</h2>';
-            
+
             foreach ($warningDetails as $detail) {
                 $client = $detail['client'];
                 $scanResult = $detail['scan_result'];
                 $results = $scanResult['scan_results'];
-                
+
                 $html .= '<div class="client-item warning">
                     <div class="client-name">' . htmlspecialchars($client['name']) . '</div>
                     <div class="client-url">' . htmlspecialchars($client['url']) . '</div>
@@ -601,10 +626,10 @@ class EmailManager {
                     </div>
                 </div>';
             }
-            
+
             $html .= '</div>';
         }
-        
+
         $html .= '</div>
         
         <div class="footer">
@@ -658,18 +683,19 @@ class EmailManager {
     </div>
 </body>
 </html>';
-        
+
         return $html;
     }
-    
-    private function sendEmail($subject, $htmlBody) {
+
+    private function sendEmail($subject, $htmlBody)
+    {
         // Sử dụng PHPMailer nếu có
         if (file_exists('./smtp/class.phpmailer.php')) {
             require_once('./smtp/class.phpmailer.php');
             require_once('./smtp/class.smtp.php');
-            
+
             $mail = new PHPMailer();
-            
+
             try {
                 $mail->isSMTP();
                 $mail->Host = SecurityServerConfig::SMTP_HOST;
@@ -679,15 +705,14 @@ class EmailManager {
                 $mail->SMTPSecure = SecurityServerConfig::SMTP_SECURE;
                 $mail->Port = SecurityServerConfig::SMTP_PORT;
                 $mail->CharSet = 'UTF-8';
-                
+
                 $mail->setFrom(SecurityServerConfig::EMAIL_FROM, SecurityServerConfig::EMAIL_FROM_NAME);
                 $mail->addAddress(SecurityServerConfig::ADMIN_EMAIL);
                 $mail->isHTML(true);
                 $mail->Subject = $subject;
                 $mail->Body = $htmlBody;
-                
+
                 return $mail->send();
-                
             } catch (Exception $e) {
                 error_log("Email error: " . $e->getMessage());
                 return false;
@@ -696,7 +721,7 @@ class EmailManager {
             // Fallback to mail() function
             $headers = "From: " . SecurityServerConfig::EMAIL_FROM . "\r\n";
             $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-            
+
             return mail(SecurityServerConfig::ADMIN_EMAIL, $subject, $htmlBody, $headers);
         }
     }
@@ -705,110 +730,110 @@ class EmailManager {
 // ==================== API HANDLERS ====================
 if (isset($_GET['api'])) {
     header('Content-Type: application/json; charset=utf-8');
-    
+
     $action = $_GET['api'];
     $clientManager = new ClientManager();
     $scannerManager = new ScannerManager();
-    
+
     switch ($action) {
         case 'get_clients':
             echo json_encode($clientManager->getClients());
             break;
-            
+
         case 'add_client':
             $name = $_POST['name'] ?? '';
             $url = $_POST['url'] ?? '';
             $apiKey = $_POST['api_key'] ?? SecurityServerConfig::DEFAULT_API_KEY;
-            
+
             if (empty($name) || empty($url)) {
                 echo json_encode(['success' => false, 'error' => 'Name and URL required']);
                 break;
             }
-            
+
             $client = $clientManager->addClient($name, $url, $apiKey);
             echo json_encode(['success' => true, 'client' => $client]);
             break;
-            
+
         case 'delete_client':
             $id = $_POST['id'] ?? '';
             if (empty($id)) {
                 echo json_encode(['success' => false, 'error' => 'ID required']);
                 break;
             }
-            
+
             $clientManager->deleteClient($id);
             echo json_encode(['success' => true]);
             break;
-            
+
         case 'check_client':
             $id = $_GET['id'] ?? '';
             $client = $clientManager->getClient($id);
-            
+
             if (!$client) {
                 echo json_encode(['success' => false, 'error' => 'Client not found']);
                 break;
             }
-            
+
             $isOnline = $scannerManager->checkClientHealth($client);
             echo json_encode(['success' => true, 'online' => $isOnline]);
             break;
-            
+
         case 'scan_client':
             $id = $_GET['id'] ?? '';
             $client = $clientManager->getClient($id);
-            
+
             if (!$client) {
                 echo json_encode(['success' => false, 'error' => 'Client not found']);
                 break;
             }
-            
+
             // Get priority files from request
             $requestData = json_decode(file_get_contents('php://input'), true);
             $priorityFiles = $requestData['priority_files'] ?? [];
-            
+
             $result = $scannerManager->scanClient($client, $priorityFiles);
             echo json_encode($result);
             break;
-            
+
         case 'scan_all':
             $results = $scannerManager->scanAllClients();
             echo json_encode(['success' => true, 'results' => $results]);
             break;
-            
+
         case 'send_report':
             $results = $scannerManager->scanAllClients();
             $emailManager = new EmailManager();
             $sent = $emailManager->sendDailyReport($results);
-            
+
             echo json_encode(['success' => $sent, 'results' => $results]);
             break;
-            
+
         case 'get_client_status':
             $id = $_GET['id'] ?? '';
             $client = $clientManager->getClient($id);
-            
+
             if (!$client) {
                 echo json_encode(['success' => false, 'error' => 'Client not found']);
                 break;
             }
-            
+
             $status = $scannerManager->getClientStatus($client);
             echo json_encode(['success' => true, 'data' => $status]);
             break;
-            
+
         case 'get_client_scan_results':
             $id = $_GET['id'] ?? '';
             $client = $clientManager->getClient($id);
-            
+
             if (!$client) {
                 echo json_encode(['success' => false, 'error' => 'Client not found']);
                 break;
             }
-            
+
             $result = $scannerManager->scanClient($client);
             echo json_encode(['success' => true, 'data' => $result]);
             break;
-            
+
         case 'delete_file':
             $clientId = $_POST['client_id'] ?? '';
             $filePath = $_POST['file_path'] ?? '';
@@ -903,8 +928,10 @@ if (isset($_GET['api'])) {
                 $status = $scannerManager->getClientStatus($client);
                 if ($status) {
                     $stats['online_clients']++;
-                    if (isset($status['last_scan']['status']) &&
-                        in_array($status['last_scan']['status'], ['critical', 'infected'])) {
+                    if (
+                        isset($status['last_scan']['status']) &&
+                        in_array($status['last_scan']['status'], ['critical', 'infected'])
+                    ) {
                         $stats['infected_clients']++;
                     }
                 }
@@ -912,51 +939,51 @@ if (isset($_GET['api'])) {
 
             echo json_encode(['success' => true, 'data' => $stats]);
             break;
-            
+
         case 'get_file_content':
             $clientId = $_GET['client_id'] ?? '';
             $filePath = $_GET['file_path'] ?? '';
-            
+
             if (empty($clientId) || empty($filePath)) {
                 echo json_encode(['success' => false, 'error' => 'Missing client_id or file_path']);
                 break;
             }
-            
+
             $client = $clientManager->getClient($clientId);
             if (!$client) {
                 echo json_encode(['success' => false, 'error' => 'Client not found']);
                 break;
             }
-            
+
             $result = $scannerManager->getFileContent($client, $filePath);
             echo json_encode($result);
             break;
-            
+
         case 'save_file_content':
             $clientId = $_GET['client_id'] ?? '';
             $requestData = json_decode(file_get_contents('php://input'), true);
             $filePath = $requestData['file_path'] ?? '';
             $content = $requestData['content'] ?? '';
-            
+
             if (empty($clientId) || empty($filePath)) {
                 echo json_encode(['success' => false, 'error' => 'Missing client_id or file_path']);
                 break;
             }
-            
+
             $client = $clientManager->getClient($clientId);
             if (!$client) {
                 echo json_encode(['success' => false, 'error' => 'Client not found']);
                 break;
             }
-            
+
             $result = $scannerManager->saveFileContent($client, $filePath, $content);
             echo json_encode($result);
             break;
-            
+
         default:
             echo json_encode(['success' => false, 'error' => 'Unknown action']);
     }
-    
+
     exit;
 }
 
@@ -964,6 +991,7 @@ if (isset($_GET['api'])) {
 ?>
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -982,7 +1010,7 @@ if (isset($_GET['api'])) {
             --soft-blue: #B8DCF2;
             --dark-blue: #2C5282;
             --accent-blue: #63B3ED;
-            
+
             /* Severity Colors */
             --critical-red: #DC3545;
             --priority-color: #9333ea;
@@ -990,26 +1018,26 @@ if (isset($_GET['api'])) {
             --priority-border: #e9d5ff;
             --critical-bg: #FEF2F2;
             --critical-border: #FECACA;
-            
+
             --warning-yellow: #F59E0B;
             --warning-bg: #FFFBEB;
             --warning-border: #FED7AA;
-            
+
             --info-blue: #3B82F6;
             --info-bg: #EFF6FF;
             --info-border: #DBEAFE;
-            
+
             /* Neutral Colors */
             --bg-primary: #FAFBFC;
             --bg-secondary: #F7F9FB;
             --bg-card: #FFFFFF;
             --border-light: #E2E8F0;
             --border-medium: #CBD5E0;
-            
+
             --text-primary: #1F2937;
             --text-secondary: #6B7280;
             --text-muted: #9CA3AF;
-            
+
             /* Shadows */
             --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
             --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
@@ -1061,7 +1089,7 @@ if (isset($_GET['api'])) {
             font-size: 2.5rem;
             font-weight: 700;
             margin-bottom: 1rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
         }
 
         .hero-subtitle {
@@ -1430,6 +1458,8 @@ if (isset($_GET['api'])) {
         .threat-card.critical {
             border-color: var(--critical-border);
             background: var(--critical-bg);
+            position: relative;
+            z-index: 1;
         }
 
         .threat-card.warning {
@@ -1523,10 +1553,12 @@ if (isset($_GET['api'])) {
 
         .meta-severity.warning {
             background: var(--warning-yellow);
+            display: none;
         }
 
         .meta-severity.info {
             background: var(--info-blue);
+            display: none;
         }
 
         .meta-age {
@@ -1619,8 +1651,13 @@ if (isset($_GET['api'])) {
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         /* Animation Keyframes */
@@ -1629,6 +1666,7 @@ if (isset($_GET['api'])) {
                 opacity: 0;
                 transform: translateY(30px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -1639,15 +1677,19 @@ if (isset($_GET['api'])) {
             0% {
                 background-position: -1000px 0;
             }
+
             100% {
                 background-position: 1000px 0;
             }
         }
 
         @keyframes pulse {
-            0%, 100% {
+
+            0%,
+            100% {
                 transform: scale(1);
             }
+
             50% {
                 transform: scale(1.05);
             }
@@ -1660,9 +1702,17 @@ if (isset($_GET['api'])) {
             animation: fadeInUp 0.6s ease-out;
         }
 
-        .bento-item:nth-child(1) { animation-delay: 0.1s; }
-        .bento-item:nth-child(2) { animation-delay: 0.2s; }
-        .bento-item:nth-child(3) { animation-delay: 0.3s; }
+        .bento-item:nth-child(1) {
+            animation-delay: 0.1s;
+        }
+
+        .bento-item:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .bento-item:nth-child(3) {
+            animation-delay: 0.3s;
+        }
 
         /* Loading shimmer effect */
         .loading-shimmer {
@@ -1676,28 +1726,28 @@ if (isset($_GET['api'])) {
             .main-container {
                 padding: 0 15px;
             }
-            
+
             .bento-item {
                 padding: 24px;
             }
-            
+
             .multi-client-header,
             .scan-results {
                 padding: 24px;
             }
-            
+
             .clients-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .threats-container {
                 grid-template-columns: 1fr;
             }
-            
+
             .hero-title {
                 font-size: 2rem;
             }
-            
+
             .results-header {
                 flex-direction: column;
                 gap: 15px;
@@ -1801,6 +1851,7 @@ if (isset($_GET['api'])) {
                 opacity: 0;
                 transform: translateY(-10px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -1901,7 +1952,7 @@ if (isset($_GET['api'])) {
                 flex-direction: column;
                 gap: 15px;
             }
-            
+
             .pattern-buttons {
                 justify-content: center;
             }
@@ -2071,7 +2122,6 @@ if (isset($_GET['api'])) {
 
         /* Original threat card styles */
         .threats-main-container .threat-card {
-            background: white;
             border: 1px solid #e5e7eb;
             border-radius: 12px;
             padding: 20px;
@@ -2121,9 +2171,11 @@ if (isset($_GET['api'])) {
             margin: 0;
             display: flex;
             align-items: center;
+            flex-wrap: wrap;
             gap: 8px;
             cursor: help;
-            flex: 1;
+            /* flex: 1; */
+            max-width: 230px;
         }
 
         .threats-main-container .threat-actions {
@@ -2295,7 +2347,7 @@ if (isset($_GET['api'])) {
             border-radius: 0 0 12px 12px;
         }
 
-                /* Multi-Client Results Styles */
+        /* Multi-Client Results Styles */
         .multi-client-results {
             background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
             border-radius: 24px;
@@ -2324,95 +2376,95 @@ if (isset($_GET['api'])) {
             pointer-events: none;
         }
 
-         .multi-client-title {
-             display: flex;
-             justify-content: space-between;
-             align-items: center;
-             margin-bottom: 20px;
-         }
+        .multi-client-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
 
-         .multi-client-title h2 {
-             margin: 0;
-             font-size: 24px;
-             font-weight: 600;
-         }
+        .multi-client-title h2 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
 
-         .multi-client-stats {
-             display: flex;
-             gap: 24px;
-             justify-content: center;
-         }
+        .multi-client-stats {
+            display: flex;
+            gap: 24px;
+            justify-content: center;
+        }
 
-         .stat-item {
-             text-align: center;
-             padding: 12px 20px;
-             background: rgba(255, 255, 255, 0.1);
-             border-radius: 8px;
-             backdrop-filter: blur(10px);
-             transition: all 0.3s ease;
-         }
+        .stat-item {
+            text-align: center;
+            padding: 12px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
 
-         .stat-item:hover {
-             background: rgba(255, 255, 255, 0.2);
-             transform: translateY(-2px);
-         }
+        .stat-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
 
-         .stat-number {
-             display: block;
-             font-size: 24px;
-             font-weight: 700;
-             line-height: 1;
-         }
+        .stat-number {
+            display: block;
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1;
+        }
 
-         .stat-label {
-             font-size: 12px;
-             opacity: 0.8;
-             margin-top: 4px;
-             text-transform: uppercase;
-             letter-spacing: 0.5px;
-         }
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
 
-         .multi-client-content {
-             padding: 24px;
-         }
+        .multi-client-content {
+            padding: 24px;
+        }
 
-         .client-pagination-header {
-             display: flex;
-             justify-content: space-between;
-             align-items: center;
-             margin-bottom: 16px;
-             padding: 12px 16px;
-             background: #f8f9fa;
-             border-radius: 8px;
-         }
+        .client-pagination-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
 
-         .pagination-controls {
-             display: flex;
-             align-items: center;
-             gap: 12px;
-         }
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
 
-         .page-number {
-             display: inline-block;
-             padding: 4px 8px;
-             margin: 0 2px;
-             border-radius: 4px;
-             cursor: pointer;
-             transition: all 0.2s ease;
-             font-size: 14px;
-         }
+        .page-number {
+            display: inline-block;
+            padding: 4px 8px;
+            margin: 0 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
 
-         .page-number:hover {
-             background: #e9ecef;
-         }
+        .page-number:hover {
+            background: #e9ecef;
+        }
 
-         .page-number.current {
-             background: var(--primary-blue);
-             color: white;
-             font-weight: 600;
-         }
+        .page-number.current {
+            background: var(--primary-blue);
+            color: white;
+            font-weight: 600;
+        }
 
-                         .client-table {
+        .client-table {
             background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
             border-radius: 16px;
             overflow: hidden;
@@ -2464,24 +2516,24 @@ if (isset($_GET['api'])) {
             transform: scale(1.005);
         }
 
-         .client-info-cell {
-             /* Client info styling */
-         }
+        .client-info-cell {
+            /* Client info styling */
+        }
 
-         .client-name {
-             font-size: 14px;
-             font-weight: 600;
-             color: #1f2937;
-             margin-bottom: 2px;
-         }
+        .client-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 2px;
+        }
 
-         .client-url {
-             font-size: 11px;
-             color: #6b7280;
-             word-break: break-all;
-         }
+        .client-url {
+            font-size: 11px;
+            color: #6b7280;
+            word-break: break-all;
+        }
 
-                 .expand-btn {
+        .expand-btn {
             border: none !important;
             padding: 8px 12px !important;
             transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -2497,97 +2549,97 @@ if (isset($_GET['api'])) {
             box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
         }
 
-         .client-details-row {
-             background: #f8f9fa;
-         }
+        .client-details-row {
+            background: #f8f9fa;
+        }
 
-         .client-threats-container {
-             padding: 20px;
-             border-left: 4px solid var(--primary-blue);
-         }
+        .client-threats-container {
+            padding: 20px;
+            border-left: 4px solid var(--primary-blue);
+        }
 
-         .threats-header {
-             margin-bottom: 16px;
-             padding-bottom: 8px;
-             border-bottom: 1px solid #dee2e6;
-         }
+        .threats-header {
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #dee2e6;
+        }
 
-         .threats-header h6 {
-             margin: 0;
-             color: #1f2937;
-             font-weight: 600;
-         }
+        .threats-header h6 {
+            margin: 0;
+            color: #1f2937;
+            font-weight: 600;
+        }
 
-         .threats-list {
-             display: flex;
-             flex-direction: column;
-             gap: 12px;
-         }
+        .threats-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
 
-         .threat-item {
-             background: white;
-             border: 1px solid #e5e7eb;
-             border-radius: 8px;
-             padding: 16px;
-             transition: all 0.2s ease;
-         }
+        .threat-item {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            transition: all 0.2s ease;
+        }
 
-         .threat-item:hover {
-             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-             border-color: #d1d5db;
-         }
+        .threat-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-color: #d1d5db;
+        }
 
-         .threat-item.critical {
-             border-left: 4px solid #ef4444;
-         }
+        .threat-item.critical {
+            border-left: 4px solid #ef4444;
+        }
 
-         .threat-item.warning {
-             border-left: 4px solid #f59e0b;
-         }
+        .threat-item.warning {
+            border-left: 4px solid #f59e0b;
+        }
 
-         .threat-item.info {
-             border-left: 4px solid #3b82f6;
-         }
+        .threat-item.info {
+            border-left: 4px solid #3b82f6;
+        }
 
-         .threat-header {
-             display: flex;
-             justify-content: space-between;
-             align-items: center;
-             margin-bottom: 8px;
-         }
+        .threat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
 
-         .threat-file-info {
-             flex: 1;
-             font-size: 14px;
-         }
+        .threat-file-info {
+            flex: 1;
+            font-size: 14px;
+        }
 
-         .threat-actions {
-             display: flex;
-             gap: 8px;
-         }
+        .threat-actions {
+            display: flex;
+            gap: 8px;
+        }
 
-         .threat-actions .btn {
-             font-size: 12px;
-             padding: 4px 8px;
-         }
+        .threat-actions .btn {
+            font-size: 12px;
+            padding: 4px 8px;
+        }
 
-         .threat-meta {
-             display: flex;
-             gap: 8px;
-             margin-bottom: 8px;
-         }
+        .threat-meta {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
 
-         .threat-meta .badge {
-             font-size: 10px;
-             padding: 4px 8px;
-         }
+        .threat-meta .badge {
+            font-size: 10px;
+            padding: 4px 8px;
+        }
 
-         .threat-details {
-             font-size: 12px;
-             color: #6b7280;
-         }
+        .threat-details {
+            font-size: 12px;
+            color: #6b7280;
+        }
 
-                 .back-to-multi-client {
+        .back-to-multi-client {
             margin-left: 16px;
             font-size: 12px !important;
             padding: 8px 16px !important;
@@ -2671,12 +2723,12 @@ if (isset($_GET['api'])) {
             .multi-client-summary {
                 grid-template-columns: repeat(2, 1fr);
             }
-            
+
             .client-results-grid {
                 grid-template-columns: 1fr;
                 padding: 16px;
             }
-            
+
             .summary-card {
                 padding: 16px;
             }
@@ -2731,12 +2783,13 @@ if (isset($_GET['api'])) {
             .row {
                 flex-direction: column;
             }
-            
-            .col-md-8, .col-md-4 {
+
+            .col-md-8,
+            .col-md-4 {
                 max-width: 100%;
                 flex: 0 0 100%;
             }
-            
+
             .recent-threats-sidebar {
                 margin-top: 20px;
                 position: static;
@@ -2749,6 +2802,7 @@ if (isset($_GET['api'])) {
                 opacity: 0;
                 transform: translateY(30px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -2769,8 +2823,15 @@ if (isset($_GET['api'])) {
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
         }
 
         /* System Health */
@@ -2889,6 +2950,7 @@ if (isset($_GET['api'])) {
         }
     </style>
 </head>
+
 <body>
     <!-- Hero Section -->
     <div class="hero-section">
@@ -2924,10 +2986,10 @@ if (isset($_GET['api'])) {
                                 <i class="fas fa-file-code me-1"></i>Priority File Patterns
                             </label>
                             <div class="priority-files-input-container">
-                                <input type="text" 
-                                       class="form-control priority-files-input" 
-                                       id="priorityFileInput"
-                                       placeholder="Nhập tên file hoặc pattern (vd: *.php, shell.php, config.*)">
+                                <input type="text"
+                                    class="form-control priority-files-input"
+                                    id="priorityFileInput"
+                                    placeholder="Nhập tên file hoặc pattern (vd: *.php, shell.php, config.*)">
                                 <div class="input-suggestions" id="patternSuggestions"></div>
                             </div>
                             <div class="priority-files-tags" id="priorityFilesTags"></div>
@@ -2950,7 +3012,7 @@ if (isset($_GET['api'])) {
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Common Patterns Quick Add -->
                 <div class="common-patterns mt-3">
                     <label class="form-label">
@@ -2996,92 +3058,83 @@ if (isset($_GET['api'])) {
                     </button>
                 </div>
             </div>
-            
+
             <div class="clients-grid" id="clientsGrid">
                 <!-- Clients will be loaded here -->
             </div>
         </div>
 
-        <!-- Moved Priority Files Section Above -->
-            <div class="card-header">
-                <h6 class="card-title">
-                    <i class="fas fa-search-plus me-2"></i>Priority Files Scanner
-                </h6>
-                <div class="card-actions">
-                    <button class="btn-icon" onclick="togglePriorityFiles()" id="priorityToggle">
-                        <i class="fas fa-chevron-down"></i>
+
+        <div class="card-body" id="priorityFilesContent" style="display: none;">
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-file-code me-1"></i>Priority File Patterns
+                        </label>
+                        <div class="priority-files-input-container">
+                            <input type="text"
+                                class="form-control priority-files-input"
+                                id="priorityFileInput"
+                                placeholder="Nhập tên file hoặc pattern (vd: *.php, shell.php, config.*)">
+                            <div class="input-suggestions" id="patternSuggestions"></div>
+                        </div>
+                        <div class="priority-files-tags" id="priorityFilesTags"></div>
+                        <small class="form-text text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Các file này sẽ được ưu tiên quét trước. Hỗ trợ wildcard (*) và regex patterns.
+                        </small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="priority-stats">
+                        <div class="stat-item">
+                            <div class="stat-value" id="priorityFilesCount">0</div>
+                            <div class="stat-label">Priority Files</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="priorityScore">0</div>
+                            <div class="stat-label">Priority Score</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Common Patterns Quick Add -->
+            <div class="common-patterns mt-3">
+                <label class="form-label">
+                    <i class="fas fa-magic me-1"></i>Common Suspicious Patterns
+                </label>
+                <div class="pattern-buttons">
+                    <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('shell.php')">
+                        <i class="fas fa-bug me-1"></i>shell.php
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('*.php.txt')">
+                        <i class="fas fa-file-code me-1"></i>*.php.txt
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('config.php')">
+                        <i class="fas fa-cog me-1"></i>config.php
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('upload*.php')">
+                        <i class="fas fa-upload me-1"></i>upload*.php
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('admin*.php')">
+                        <i class="fas fa-user-shield me-1"></i>admin*.php
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="addCommonPattern('eval*.php')">
+                        <i class="fas fa-exclamation-triangle me-1"></i>eval*.php
                     </button>
                 </div>
             </div>
-            <div class="card-body" id="priorityFilesContent" style="display: none;">
-                <div class="row">
-                    <div class="col-md-8">
-                        <div class="form-group">
-                            <label class="form-label">
-                                <i class="fas fa-file-code me-1"></i>Priority File Patterns
-                            </label>
-                            <div class="priority-files-input-container">
-                                <input type="text" 
-                                       class="form-control priority-files-input" 
-                                       id="priorityFileInput"
-                                       placeholder="Nhập tên file hoặc pattern (vd: *.php, shell.php, config.*)">
-                                <div class="input-suggestions" id="patternSuggestions"></div>
-                            </div>
-                            <div class="priority-files-tags" id="priorityFilesTags"></div>
-                            <small class="form-text text-muted">
-                                <i class="fas fa-info-circle me-1"></i>
-                                Các file này sẽ được ưu tiên quét trước. Hỗ trợ wildcard (*) và regex patterns.
-                            </small>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="priority-stats">
-                            <div class="stat-item">
-                                <div class="stat-value" id="priorityFilesCount">0</div>
-                                <div class="stat-label">Priority Files</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-value" id="priorityScore">0</div>
-                                <div class="stat-label">Priority Score</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Common Patterns Quick Add -->
-                <div class="common-patterns mt-3">
-                    <label class="form-label">
-                        <i class="fas fa-magic me-1"></i>Common Suspicious Patterns
-                    </label>
-                    <div class="pattern-buttons">
-                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('shell.php')">
-                            <i class="fas fa-bug me-1"></i>shell.php
-                        </button>
-                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('*.php.txt')">
-                            <i class="fas fa-file-code me-1"></i>*.php.txt
-                        </button>
-                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('config.php')">
-                            <i class="fas fa-cog me-1"></i>config.php
-                        </button>
-                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('upload*.php')">
-                            <i class="fas fa-upload me-1"></i>upload*.php
-                        </button>
-                        <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('admin*.php')">
-                            <i class="fas fa-user-shield me-1"></i>admin*.php
-                        </button>
-                        <button class="btn btn-outline-danger btn-sm" onclick="addCommonPattern('eval*.php')">
-                            <i class="fas fa-exclamation-triangle me-1"></i>eval*.php
-                        </button>
-                    </div>
-                </div>
-            </div>
         </div>
+    </div>
 
-        <!-- Dashboard Grid -->
+    <!-- Dashboard Grid -->
+    <div class="main-container mt-0">
         <div class="row bento-grid">
             <!-- Statistics Overview -->
             <div class="col-12 col-lg-4 mb-4">
-                <div class="bento-item">
+                <div class="bento-item h-100">
                     <div class="card-header-modern">
                         <div class="card-icon">
                             <i class="fas fa-chart-line"></i>
@@ -3111,7 +3164,7 @@ if (isset($_GET['api'])) {
 
             <!-- Recent Activity -->
             <div class="col-12 col-lg-4 mb-4">
-                <div class="bento-item">
+                <div class="bento-item h-100">
                     <div class="card-header-modern">
                         <div class="card-icon">
                             <i class="fas fa-clock"></i>
@@ -3126,7 +3179,7 @@ if (isset($_GET['api'])) {
 
             <!-- System Health -->
             <div class="col-12 col-lg-4 mb-4">
-                <div class="bento-item">
+                <div class="bento-item h-100">
                     <div class="card-header-modern">
                         <div class="card-icon">
                             <i class="fas fa-heartbeat"></i>
@@ -3139,6 +3192,7 @@ if (isset($_GET['api'])) {
                 </div>
             </div>
         </div>
+
 
         <!-- Scan Results -->
         <div class="scan-results" id="scanResults" style="display: none;">
@@ -3161,7 +3215,7 @@ if (isset($_GET['api'])) {
                     </select>
                 </div>
             </div>
-            
+
             <!-- Two Column Layout -->
             <div class="row mt-4">
                 <!-- Left Column - Main Threats List (Large) -->
@@ -3178,7 +3232,7 @@ if (isset($_GET['api'])) {
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Right Column - Recent Threats Sidebar -->
                 <div class="col-md-4">
                     <div class="recent-threats-sidebar">
@@ -3203,6 +3257,7 @@ if (isset($_GET['api'])) {
                 </div>
             </div>
         </div>
+    </div>
     </div>
 
     <!-- Add Client Modal -->
@@ -3245,8 +3300,7 @@ if (isset($_GET['api'])) {
 
         // Initialize with sample data if no clients exist
         function initializeSampleData() {
-            const sampleClients = [
-                {
+            const sampleClients = [{
                     id: 'client_1',
                     name: 'Hiep Antivirus Local',
                     url: 'https://hiepcodeweb.com',
@@ -3255,7 +3309,7 @@ if (isset($_GET['api'])) {
                     last_scan: new Date().toISOString()
                 },
                 {
-                    id: 'client_2', 
+                    id: 'client_2',
                     name: 'Xemay365 Client',
                     url: 'https://xemay365.com.vn',
                     api_key: 'hiep-security-client-2025-change-this-key',
@@ -3271,7 +3325,7 @@ if (isset($_GET['api'])) {
                     last_scan: new Date().toISOString()
                 }
             ];
-            
+
             if (clients.length === 0) {
                 clients = sampleClients;
                 renderClients();
@@ -3285,7 +3339,7 @@ if (isset($_GET['api'])) {
             updateStats();
             loadRecentActivity();
             checkSystemHealth();
-            
+
             // Initialize sample data after 1 second if no clients loaded
             setTimeout(() => {
                 if (clients.length === 0) {
@@ -3321,12 +3375,12 @@ if (isset($_GET['api'])) {
         // Render clients with modern design
         function renderClients() {
             const grid = document.getElementById('clientsGrid');
-            
+
             // Ensure clients is an array
             if (!Array.isArray(clients)) {
                 clients = [];
             }
-            
+
             if (clients.length === 0) {
                 grid.innerHTML = `
                     <div class="loading-card">
@@ -3370,7 +3424,7 @@ if (isset($_GET['api'])) {
         function scanClient(clientId) {
             currentClientId = clientId;
             const client = clients.find(c => c.id === clientId);
-            
+
             if (!client) return;
 
             Swal.fire({
@@ -3385,24 +3439,24 @@ if (isset($_GET['api'])) {
 
             // Call real API with priority files
             fetch(`?api=scan_client&id=${clientId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    priority_files: priorityFiles
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        priority_files: priorityFiles
+                    })
                 })
-            })
                 .then(response => response.json())
                 .then(data => {
                     Swal.close();
-                    
+
                     if (data.success) {
                         // Format the real data to match our display expectations
                         const formattedResults = formatScanResults(data);
                         currentScanResults = formattedResults;
                         displayScanResults(formattedResults);
-                        
+
                         Swal.fire({
                             icon: data.scan_results && data.scan_results.critical_count > 0 ? 'warning' : 'success',
                             title: 'Quét hoàn tất!',
@@ -3462,7 +3516,7 @@ if (isset($_GET['api'])) {
                     const now = Date.now() / 1000;
                     const modifiedTime = threat.modified_time || threat.file_modified_time || now;
                     const timeDiff = now - modifiedTime;
-                    
+
                     let severity = 'info';
                     if (timeDiff <= 7 * 24 * 3600) { // 1 week
                         severity = 'critical';
@@ -3511,7 +3565,7 @@ if (isset($_GET['api'])) {
             const threatsContainer = document.getElementById('threatsContainer');
             const recentThreatsContainer = document.getElementById('recentThreatsContainer');
             const mainThreatCount = document.getElementById('mainThreatCount');
-            
+
             if (!results || !results.suspicious_files || results.suspicious_files.length === 0) {
                 scanResultsDiv.style.display = 'block';
                 threatsContainer.innerHTML = `
@@ -3530,12 +3584,16 @@ if (isset($_GET['api'])) {
             const sortedFiles = results.suspicious_files.sort((a, b) => {
                 const aTime = a.metadata?.modified_time || 0;
                 const bTime = b.metadata?.modified_time || 0;
-                
+
                 // First sort by time (newest first)
                 if (bTime !== aTime) return bTime - aTime;
-                
+
                 // Then by severity
-                const severityOrder = { critical: 3, warning: 2, info: 1 };
+                const severityOrder = {
+                    critical: 3,
+                    warning: 2,
+                    info: 1
+                };
                 return (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0);
             });
 
@@ -3548,18 +3606,18 @@ if (isset($_GET['api'])) {
             }).slice(0, 10); // Limit to 10 most recent
 
             scanResultsDiv.style.display = 'block';
-            
+
             // Update main threat count
             mainThreatCount.textContent = `${sortedFiles.length} files`;
-            
+
             // Populate main threats container
             threatsContainer.innerHTML = sortedFiles.map(file => {
                 const severity = getSeverityLevel(file);
                 const ageInfo = getAgeInfo(file.metadata?.modified_time);
                 const fileSize = formatFileSize(file.metadata?.size || 0);
-                
+
                 // Issues data not needed since tooltip removed
-                
+
                 return `
                     <div class="threat-card ${severity} fade-in-up" 
                          data-file-path="${file.path}"
@@ -3599,13 +3657,13 @@ if (isset($_GET['api'])) {
                     </div>
                 `;
             }).join('');
-            
+
             // Populate recent threats sidebar
             if (recentThreats.length > 0) {
                 recentThreatsContainer.innerHTML = recentThreats.map(file => {
                     const severity = getSeverityLevel(file);
                     const timeAgo = getTimeAgo(file.metadata?.modified_time);
-                    
+
                     return `
                         <div class="recent-threat-item">
                             <div class="recent-threat-header">
@@ -3637,38 +3695,50 @@ if (isset($_GET['api'])) {
         // Get severity level based on file characteristics
         function getSeverityLevel(file) {
             if (!file.metadata) return 'info';
-            
+
             const now = Date.now() / 1000;
             const fileTime = file.metadata.modified_time || 0;
             const age = now - fileTime;
-            
+
             // Critical: Files modified within last week with suspicious patterns
             if (age < 7 * 24 * 3600) { // 1 week
                 return 'critical';
             }
-            
+
             // Warning: Files modified within last 5 months
             if (age < 5 * 30 * 24 * 3600) { // 5 months
                 return 'warning';
             }
-            
+
             // Info: Older files
             return 'info';
         }
 
         // Get age info for display
         function getAgeInfo(timestamp) {
-            if (!timestamp) return { class: 'old', label: 'Cũ' };
-            
+            if (!timestamp) return {
+                class: 'old',
+                label: 'Cũ'
+            };
+
             const now = Date.now() / 1000;
             const age = now - timestamp;
-            
+
             if (age < 7 * 24 * 3600) { // 1 week
-                return { class: 'new', label: 'Mới' };
+                return {
+                    class: 'new',
+                    label: 'Mới'
+                };
             } else if (age < 5 * 30 * 24 * 3600) { // 5 months
-                return { class: 'recent', label: 'Gần đây' };
+                return {
+                    class: 'recent',
+                    label: 'Gần đây'
+                };
             } else {
-                return { class: 'old', label: 'Cũ' };
+                return {
+                    class: 'old',
+                    label: 'Cũ'
+                };
             }
         }
 
@@ -3696,15 +3766,15 @@ if (isset($_GET['api'])) {
             const severityFilter = document.getElementById('severityFilter').value;
             const ageFilter = document.getElementById('ageFilter').value;
             const cards = document.querySelectorAll('.threat-card');
-            
+
             cards.forEach(card => {
                 let showCard = true;
-                
+
                 // Filter by severity
                 if (severityFilter !== 'all') {
                     showCard = showCard && card.classList.contains(severityFilter);
                 }
-                
+
                 // Filter by age
                 if (ageFilter !== 'all') {
                     const ageElement = card.querySelector('.meta-age');
@@ -3712,7 +3782,7 @@ if (isset($_GET['api'])) {
                         showCard = showCard && ageElement.classList.contains(ageFilter);
                     }
                 }
-                
+
                 card.style.display = showCard ? 'block' : 'none';
             });
         }
@@ -3720,7 +3790,7 @@ if (isset($_GET['api'])) {
         // Delete file
         function deleteFile(filePath) {
             if (!currentClientId) return;
-            
+
             Swal.fire({
                 title: 'Xác nhận xóa file',
                 text: `Bạn có chắc muốn xóa file: ${filePath}?`,
@@ -3733,29 +3803,29 @@ if (isset($_GET['api'])) {
             }).then((result) => {
                 if (result.isConfirmed) {
                     fetch(`?api=delete_file`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        body: `client_id=${currentClientId}&file_path=${encodeURIComponent(filePath)}`
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            Swal.fire('Đã xóa!', 'File đã được xóa thành công.', 'success');
-                            // Remove card from display
-                            document.querySelectorAll('.threat-card').forEach(card => {
-                                if (card.querySelector('.threat-path').textContent === filePath) {
-                                    card.remove();
-                                }
-                            });
-                        } else {
-                            Swal.fire('Lỗi!', data.error || 'Không thể xóa file.', 'error');
-                        }
-                    })
-                    .catch(error => {
-                        Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
-                    });
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: `client_id=${currentClientId}&file_path=${encodeURIComponent(filePath)}`
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire('Đã xóa!', 'File đã được xóa thành công.', 'success');
+                                // Remove card from display
+                                document.querySelectorAll('.threat-card').forEach(card => {
+                                    if (card.querySelector('.threat-path').textContent === filePath) {
+                                        card.remove();
+                                    }
+                                });
+                            } else {
+                                Swal.fire('Lỗi!', data.error || 'Không thể xóa file.', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
+                        });
                 }
             });
         }
@@ -3763,7 +3833,7 @@ if (isset($_GET['api'])) {
         // Quarantine file
         function quarantineFile(filePath) {
             if (!currentClientId) return;
-            
+
             Swal.fire({
                 title: 'Cách ly file',
                 text: `Cách ly file: ${filePath}?`,
@@ -3776,23 +3846,23 @@ if (isset($_GET['api'])) {
             }).then((result) => {
                 if (result.isConfirmed) {
                     fetch(`?api=quarantine_file`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        body: `client_id=${currentClientId}&file_path=${encodeURIComponent(filePath)}`
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            Swal.fire('Đã cách ly!', 'File đã được cách ly thành công.', 'success');
-                        } else {
-                            Swal.fire('Lỗi!', data.error || 'Không thể cách ly file.', 'error');
-                        }
-                    })
-                    .catch(error => {
-                        Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
-                    });
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: `client_id=${currentClientId}&file_path=${encodeURIComponent(filePath)}`
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire('Đã cách ly!', 'File đã được cách ly thành công.', 'success');
+                            } else {
+                                Swal.fire('Lỗi!', data.error || 'Không thể cách ly file.', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
+                        });
                 }
             });
         }
@@ -3807,7 +3877,7 @@ if (isset($_GET['api'])) {
                 });
                 return;
             }
-            
+
             openFileInEditor(currentClientId, filePath);
         }
 
@@ -3816,51 +3886,51 @@ if (isset($_GET['api'])) {
             const name = document.getElementById('clientName').value;
             const url = document.getElementById('clientUrl').value;
             const apiKey = document.getElementById('clientApiKey').value;
-            
+
             if (!name || !url || !apiKey) {
                 Swal.fire('Lỗi!', 'Vui lòng điền đầy đủ thông tin.', 'error');
                 return;
             }
-            
+
             fetch('?api=add_client', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: `name=${encodeURIComponent(name)}&url=${encodeURIComponent(url)}&api_key=${encodeURIComponent(apiKey)}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    Swal.fire('Thành công!', 'Client đã được thêm.', 'success');
-                    loadClients();
-                    bootstrap.Modal.getInstance(document.getElementById('addClientModal')).hide();
-                    document.getElementById('addClientForm').reset();
-                } else {
-                    Swal.fire('Lỗi!', data.error || 'Không thể thêm client.', 'error');
-                }
-            })
-            .catch(error => {
-                Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
-            });
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: `name=${encodeURIComponent(name)}&url=${encodeURIComponent(url)}&api_key=${encodeURIComponent(apiKey)}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire('Thành công!', 'Client đã được thêm.', 'success');
+                        loadClients();
+                        bootstrap.Modal.getInstance(document.getElementById('addClientModal')).hide();
+                        document.getElementById('addClientForm').reset();
+                    } else {
+                        Swal.fire('Lỗi!', data.error || 'Không thể thêm client.', 'error');
+                    }
+                })
+                .catch(error => {
+                    Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
+                });
         }
 
         function updateStats() {
             document.getElementById('totalClients').textContent = clients.length;
-            
+
             // Mock statistics
             let totalThreats = 0;
             let criticalThreats = 0;
             let cleanClients = 0;
-            
+
             if (currentScanResults && currentScanResults.suspicious_files) {
                 totalThreats = currentScanResults.suspicious_count || 0;
                 criticalThreats = currentScanResults.critical_count || 0;
             }
-            
+
             // Calculate clean clients (assume most are clean)
             cleanClients = Math.max(0, clients.length - 1); // Assume 1 client has threats
-            
+
             document.getElementById('totalThreats').textContent = totalThreats;
             document.getElementById('criticalThreats').textContent = criticalThreats;
             document.getElementById('cleanClients').textContent = cleanClients;
@@ -3954,13 +4024,13 @@ if (isset($_GET['api'])) {
                 .then(response => response.json())
                 .then(data => {
                     Swal.close();
-                    
+
                     if (data.success && data.results) {
                         let totalScanned = 0;
                         let totalThreats = 0;
                         let totalCritical = 0;
                         let errorCount = 0;
-                        
+
                         data.results.forEach(result => {
                             if (result.scan_result && result.scan_result.success && result.scan_result.scan_results) {
                                 totalScanned += result.scan_result.scan_results.scanned_files || 0;
@@ -3970,15 +4040,15 @@ if (isset($_GET['api'])) {
                                 errorCount++;
                             }
                         });
-                        
-                        
-                
-                // Store results for multi-client display
-                currentMultiClientResults = data.results;
-                
-                // Show multi-client results interface
-                displayMultiClientResults(data.results);
-                        
+
+
+
+                        // Store results for multi-client display
+                        currentMultiClientResults = data.results;
+
+                        // Show multi-client results interface
+                        displayMultiClientResults(data.results);
+
                         Swal.fire({
                             icon: totalCritical > 0 ? 'warning' : 'success',
                             title: 'Quét tất cả clients hoàn tất!',
@@ -4025,11 +4095,11 @@ if (isset($_GET['api'])) {
 
         // Priority Files Functions
         let priorityFiles = JSON.parse(localStorage.getItem('priorityFiles')) || [];
-        
+
         function togglePriorityFiles() {
             const content = document.getElementById('priorityFilesContent');
             const toggle = document.getElementById('priorityToggle');
-            
+
             if (content.style.display === 'none') {
                 content.style.display = 'block';
                 toggle.innerHTML = '<i class="fas fa-chevron-up"></i>';
@@ -4043,9 +4113,9 @@ if (isset($_GET['api'])) {
 
         function addPriorityFile(pattern) {
             if (!pattern || pattern.trim() === '') return;
-            
+
             pattern = pattern.trim();
-            
+
             // Check if pattern already exists
             if (priorityFiles.includes(pattern)) {
                 Swal.fire({
@@ -4055,14 +4125,14 @@ if (isset($_GET['api'])) {
                 });
                 return;
             }
-            
+
             priorityFiles.push(pattern);
             updatePriorityDisplay();
             savePriorityFiles();
-            
+
             // Clear input
             document.getElementById('priorityFileInput').value = '';
-            
+
             // Show success micro-interaction
             showPatternAdded(pattern);
         }
@@ -4077,10 +4147,10 @@ if (isset($_GET['api'])) {
             const tagsContainer = document.getElementById('priorityFilesTags');
             const countElement = document.getElementById('priorityFilesCount');
             const scoreElement = document.getElementById('priorityScore');
-            
+
             // Update count
             countElement.textContent = priorityFiles.length;
-            
+
             // Calculate priority score
             let score = 0;
             priorityFiles.forEach(pattern => {
@@ -4089,7 +4159,7 @@ if (isset($_GET['api'])) {
                 else score += 2;
             });
             scoreElement.textContent = score;
-            
+
             // Update tags display
             tagsContainer.innerHTML = '';
             priorityFiles.forEach(pattern => {
@@ -4126,7 +4196,7 @@ if (isset($_GET['api'])) {
             `;
             indicator.innerHTML = `<i class="fas fa-check me-2"></i>Added: ${pattern}`;
             document.body.appendChild(indicator);
-            
+
             setTimeout(() => {
                 indicator.style.animation = 'slideOutRight 0.3s ease';
                 setTimeout(() => {
@@ -4145,28 +4215,28 @@ if (isset($_GET['api'])) {
                 'eval*.php', 'backdoor*.php', 'wp-config.php', 'index.php.bak',
                 '*.php~', 'test*.php', 'debug*.php', 'error*.log', 'access*.log'
             ];
-            
+
             const suggestionsDiv = document.getElementById('patternSuggestions');
             const value = input.value.toLowerCase();
-            
+
             if (value.length < 2) {
                 suggestionsDiv.style.display = 'none';
                 return;
             }
-            
-            const filtered = suggestions.filter(s => 
+
+            const filtered = suggestions.filter(s =>
                 s.toLowerCase().includes(value) && !priorityFiles.includes(s)
             );
-            
+
             if (filtered.length === 0) {
                 suggestionsDiv.style.display = 'none';
                 return;
             }
-            
-            suggestionsDiv.innerHTML = filtered.map(s => 
+
+            suggestionsDiv.innerHTML = filtered.map(s =>
                 `<div class="suggestion-item" onclick="addPriorityFile('${s}')">${s}</div>`
             ).join('');
-            
+
             suggestionsDiv.style.display = 'block';
         }
 
@@ -4174,20 +4244,20 @@ if (isset($_GET['api'])) {
         document.addEventListener('DOMContentLoaded', function() {
             // Load saved priority files
             updatePriorityDisplay();
-            
+
             // Setup input events
             const input = document.getElementById('priorityFileInput');
             input.addEventListener('input', function() {
                 showPatternSuggestions(this);
             });
-            
+
             input.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     addPriorityFile(this.value);
                 }
             });
-            
+
             // Hide suggestions when clicking outside
             document.addEventListener('click', function(e) {
                 if (!e.target.closest('.priority-files-input-container')) {
@@ -4235,8 +4305,12 @@ if (isset($_GET['api'])) {
 
         // Initialize Monaco Editor
         function initMonacoEditor() {
-            require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } });
-            require(['vs/editor/editor.main'], function () {
+            require.config({
+                paths: {
+                    vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs'
+                }
+            });
+            require(['vs/editor/editor.main'], function() {
                 monacoEditor = monaco.editor.create(document.getElementById('monacoEditor'), {
                     value: '',
                     language: 'php',
@@ -4260,28 +4334,28 @@ if (isset($_GET['api'])) {
                 });
 
                 // Update cursor position
-                monacoEditor.onDidChangeCursorPosition(function (e) {
-                    document.getElementById('cursorPosition').textContent = 
+                monacoEditor.onDidChangeCursorPosition(function(e) {
+                    document.getElementById('cursorPosition').textContent =
                         `Line ${e.position.lineNumber}, Column ${e.position.column}`;
                 });
 
                 // Auto-save on Ctrl+S
-                monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function () {
+                monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
                     saveCode();
                 });
 
                 // Find with Ctrl+F
-                monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, function () {
+                monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, function() {
                     findInCode();
                 });
             });
         }
 
-                // Open file in editor
+        // Open file in editor
         function openFileInEditor(clientId, filePath) {
             currentEditingClientId = clientId;
             currentEditingFile = filePath;
-            
+
             // Check if DOM is ready
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', function() {
@@ -4289,7 +4363,7 @@ if (isset($_GET['api'])) {
                 });
                 return;
             }
-            
+
             // Show loading
             Swal.fire({
                 title: 'Đang tải file...',
@@ -4311,7 +4385,7 @@ if (isset($_GET['api'])) {
                 .then(data => {
                     console.log('Response data:', data);
                     Swal.close();
-                    
+
                     if (data && data.success) {
                         // Check if Bootstrap is loaded
                         if (typeof bootstrap === 'undefined') {
@@ -4323,7 +4397,7 @@ if (isset($_GET['api'])) {
                             });
                             return;
                         }
-                        
+
                         // Check if modal element exists
                         let modalElement = document.getElementById('codeEditorModal');
                         if (!modalElement) {
@@ -4331,14 +4405,14 @@ if (isset($_GET['api'])) {
                             console.log('All elements with modal in ID:', document.querySelectorAll('[id*="modal"]'));
                             console.log('Body innerHTML length:', document.body.innerHTML.length);
                             console.log('Contains codeEditorModal:', document.body.innerHTML.includes('codeEditorModal'));
-                            
+
                             // Try to wait and check again
                             setTimeout(() => {
                                 modalElement = document.getElementById('codeEditorModal');
                                 if (!modalElement) {
                                     console.error('Modal element still not found after waiting');
                                     console.log('All divs:', document.querySelectorAll('div').length);
-                                    
+
                                     // Create modal dynamically
                                     const modalHTML = `
                                         <div class="modal fade" id="codeEditorModal" tabindex="-1" aria-labelledby="codeEditorModalLabel" aria-hidden="true">
@@ -4384,10 +4458,10 @@ if (isset($_GET['api'])) {
                                             </div>
                                         </div>
                                     `;
-                                    
+
                                     document.body.insertAdjacentHTML('beforeend', modalHTML);
                                     modalElement = document.getElementById('codeEditorModal');
-                                    
+
                                     if (modalElement) {
                                         console.log('Modal created successfully');
                                         proceedWithModal(modalElement, data, filePath);
@@ -4405,8 +4479,8 @@ if (isset($_GET['api'])) {
                             }, 500);
                             return;
                         }
-                        
-                                                proceedWithModal(modalElement, data, filePath);
+
+                        proceedWithModal(modalElement, data, filePath);
                     } else {
                         console.error('API returned error:', data);
                         Swal.fire({
@@ -4435,15 +4509,15 @@ if (isset($_GET['api'])) {
             const filePathElement = document.getElementById('currentFilePath');
             const fileSizeElement = document.getElementById('currentFileSize');
             const fileTypeElement = document.getElementById('fileType');
-            
+
             if (filePathElement) filePathElement.textContent = filePath;
             if (fileSizeElement) fileSizeElement.textContent = `${data.size} bytes`;
-            
+
             // Set file type
             const extension = filePath.split('.').pop().toLowerCase();
             const language = getLanguageFromExtension(extension);
             if (fileTypeElement) fileTypeElement.textContent = language.toUpperCase();
-            
+
             // Set editor content
             if (monacoEditor) {
                 try {
@@ -4477,7 +4551,7 @@ if (isset($_GET['api'])) {
                     }, 1000);
                 }, 100);
             }
-            
+
             // Show modal using jQuery as fallback
             try {
                 const modal = new bootstrap.Modal(modalElement);
@@ -4492,7 +4566,7 @@ if (isset($_GET['api'])) {
                     modalElement.style.display = 'block';
                     modalElement.classList.add('show');
                     document.body.classList.add('modal-open');
-                    
+
                     // Add backdrop
                     const backdrop = document.createElement('div');
                     backdrop.className = 'modal-backdrop fade show';
@@ -4542,7 +4616,7 @@ if (isset($_GET['api'])) {
             }
 
             const content = monacoEditor.getValue();
-            
+
             Swal.fire({
                 title: 'Đang lưu file...',
                 html: `Đang lưu: <strong>${currentEditingFile}</strong>`,
@@ -4554,47 +4628,47 @@ if (isset($_GET['api'])) {
             });
 
             fetch(`?api=save_file_content&client_id=${currentEditingClientId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    file_path: currentEditingFile,
-                    content: content
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        file_path: currentEditingFile,
+                        content: content
+                    })
                 })
-            })
-            .then(response => response.json())
-            .then(data => {
-                Swal.close();
-                
-                if (data.success) {
-                    // Update file size
-                    document.getElementById('currentFileSize').textContent = `${data.size} bytes`;
-                    
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Lưu thành công!',
-                        text: `File ${currentEditingFile} đã được lưu.`,
-                        timer: 2000,
-                        showConfirmButton: false
-                    });
-                } else {
+                .then(response => response.json())
+                .then(data => {
+                    Swal.close();
+
+                    if (data.success) {
+                        // Update file size
+                        document.getElementById('currentFileSize').textContent = `${data.size} bytes`;
+
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Lưu thành công!',
+                            text: `File ${currentEditingFile} đã được lưu.`,
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Lỗi lưu file!',
+                            text: data.error || 'Không thể lưu file.'
+                        });
+                    }
+                })
+                .catch(error => {
+                    Swal.close();
                     Swal.fire({
                         icon: 'error',
-                        title: 'Lỗi lưu file!',
-                        text: data.error || 'Không thể lưu file.'
+                        title: 'Lỗi kết nối!',
+                        text: 'Không thể kết nối với server để lưu file.'
                     });
-                }
-            })
-            .catch(error => {
-                Swal.close();
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Lỗi kết nối!',
-                    text: 'Không thể kết nối với server để lưu file.'
+                    console.error('Save error:', error);
                 });
-                console.error('Save error:', error);
-            });
         }
 
         // Save and close
@@ -4604,12 +4678,12 @@ if (isset($_GET['api'])) {
                 closeCodeEditor();
             }, 1000);
         }
-        
+
         // Close code editor modal
         function closeCodeEditor() {
             const modalElement = document.getElementById('codeEditorModal');
             if (!modalElement) return;
-            
+
             try {
                 const modal = bootstrap.Modal.getInstance(modalElement);
                 if (modal) {
@@ -4628,7 +4702,7 @@ if (isset($_GET['api'])) {
                     modalElement.style.display = 'none';
                     modalElement.classList.remove('show');
                     document.body.classList.remove('modal-open');
-                    
+
                     // Remove backdrop
                     const backdrop = document.getElementById('editorBackdrop');
                     if (backdrop) {
@@ -4645,23 +4719,23 @@ if (isset($_GET['api'])) {
             if (singleResults) {
                 singleResults.style.display = 'none';
             }
-            
+
             // Show multi-client results
             const multiResults = document.getElementById('multiClientResults');
             if (!multiResults) {
                 createMultiClientResultsContainer();
             }
-            
+
             const container = document.getElementById('multiClientResults');
             container.style.display = 'block';
-            
+
             // Calculate summary stats
             let totalClients = results.length;
             let successfulScans = 0;
             let totalThreats = 0;
             let totalCritical = 0;
             let totalFiles = 0;
-            
+
             results.forEach(result => {
                 if (result.scan_result && result.scan_result.success) {
                     successfulScans++;
@@ -4672,9 +4746,9 @@ if (isset($_GET['api'])) {
                     }
                 }
             });
-            
-                         // Render multi-client interface with table layout
-             container.innerHTML = `
+
+            // Render multi-client interface with table layout
+            container.innerHTML = `
                  <div class="multi-client-header">
                      <div class="multi-client-title">
                          <h2><i class="fas fa-network-wired me-2"></i>Kết Quả Quét Đa Client</h2>
@@ -4724,38 +4798,38 @@ if (isset($_GET['api'])) {
                      </div>
                  </div>
              `;
-            
+
             // Add interactions
             addClientCardInteractions();
         }
-        
+
         function createMultiClientResultsContainer() {
             const container = document.createElement('div');
             container.id = 'multiClientResults';
             container.className = 'multi-client-results';
             container.style.display = 'none';
-            
-                         // Insert after bento-grid, not inside it
-             const bentoGrid = document.querySelector('.bento-grid');
-             if (bentoGrid && bentoGrid.parentNode) {
-                 bentoGrid.parentNode.insertBefore(container, bentoGrid.nextSibling);
-             } else {
-                 document.querySelector('.container-fluid').appendChild(container);
-             }
+
+            // Insert after bento-grid, not inside it
+            const bentoGrid = document.querySelector('.bento-grid');
+            if (bentoGrid && bentoGrid.parentNode) {
+                bentoGrid.parentNode.insertBefore(container, bentoGrid.nextSibling);
+            } else {
+                document.querySelector('.container-fluid').appendChild(container);
+            }
         }
-        
-                 // Pagination variables
-         let currentPage = 1;
-         let itemsPerPage = 10;
-         let allClientResults = [];
-         
-         function renderClientTable(results) {
-             allClientResults = results;
-             const startIndex = (currentPage - 1) * itemsPerPage;
-             const endIndex = startIndex + itemsPerPage;
-             const paginatedResults = results.slice(startIndex, endIndex);
-             
-             return `
+
+        // Pagination variables
+        let currentPage = 1;
+        let itemsPerPage = 10;
+        let allClientResults = [];
+
+        function renderClientTable(results) {
+            allClientResults = results;
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const paginatedResults = results.slice(startIndex, endIndex);
+
+            return `
                  <table class="table table-hover">
                      <thead>
                          <tr>
@@ -4776,42 +4850,42 @@ if (isset($_GET['api'])) {
                      </tbody>
                  </table>
              `;
-         }
-         
-         function renderClientRow(result, index) {
-             
-             const client = result.client_info || result.client || {};
-             
-             // Handle different possible data structures
-             let scanData = {};
-             let success = false;
-             
-             if (result.scan_result) {
-                 if (result.scan_result.scan_results) {
-                     scanData = result.scan_result.scan_results;
-                 } else {
-                     scanData = result.scan_result;
-                 }
-                 success = result.scan_result.success || false;
-             } else if (result.scan_results) {
-                 scanData = result.scan_results;
-                 success = result.success || false;
-             } else {
-                 scanData = result;
-                 success = result.success || false;
-             }
-             
-             const threats = scanData.suspicious_count || scanData.threats || 0;
-             const critical = scanData.critical_count || scanData.critical || 0;
-             const files = scanData.scanned_files || scanData.files || 0;
-             
+        }
 
-             
-             const statusClass = success ? (critical > 0 ? 'danger' : threats > 0 ? 'warning' : 'success') : 'secondary';
-             const statusText = success ? (critical > 0 ? 'Critical' : threats > 0 ? 'Warning' : 'Clean') : 'Error';
-             const statusIcon = success ? (critical > 0 ? 'skull-crossbones' : threats > 0 ? 'exclamation-triangle' : 'check-circle') : 'times-circle';
-             
-             return `
+        function renderClientRow(result, index) {
+
+            const client = result.client_info || result.client || {};
+
+            // Handle different possible data structures
+            let scanData = {};
+            let success = false;
+
+            if (result.scan_result) {
+                if (result.scan_result.scan_results) {
+                    scanData = result.scan_result.scan_results;
+                } else {
+                    scanData = result.scan_result;
+                }
+                success = result.scan_result.success || false;
+            } else if (result.scan_results) {
+                scanData = result.scan_results;
+                success = result.success || false;
+            } else {
+                scanData = result;
+                success = result.success || false;
+            }
+
+            const threats = scanData.suspicious_count || scanData.threats || 0;
+            const critical = scanData.critical_count || scanData.critical || 0;
+            const files = scanData.scanned_files || scanData.files || 0;
+
+
+
+            const statusClass = success ? (critical > 0 ? 'danger' : threats > 0 ? 'warning' : 'success') : 'secondary';
+            const statusText = success ? (critical > 0 ? 'Critical' : threats > 0 ? 'Warning' : 'Clean') : 'Error';
+            const statusIcon = success ? (critical > 0 ? 'skull-crossbones' : threats > 0 ? 'exclamation-triangle' : 'check-circle') : 'times-circle';
+
+            return `
                  <tr class="client-row" data-client-index="${index}">
                      <td>
                          <button class="btn btn-sm btn-outline-secondary expand-btn" onclick="toggleClientDetails(${index})" title="Expand details">
@@ -4846,92 +4920,92 @@ if (isset($_GET['api'])) {
                      </td>
                  </tr>
              `;
-         }
-         
-         function toggleClientDetails(index) {
-             const detailsRow = document.getElementById(`client-details-${index}`);
-             const expandIcon = document.getElementById(`expand-icon-${index}`);
-             const threatsContainer = document.getElementById(`threats-container-${index}`);
-             
-             if (detailsRow.style.display === 'none') {
-                 // Expand
-                 detailsRow.style.display = 'table-row';
-                 expandIcon.className = 'fas fa-chevron-down';
-                 
-                 // Load client threats
-                 loadClientThreats(index, threatsContainer);
-             } else {
-                 // Collapse
-                 detailsRow.style.display = 'none';
-                 expandIcon.className = 'fas fa-chevron-right';
-             }
-         }
-         
-         function loadClientThreats(index, container) {
-             const result = allClientResults[index];
-             
-             if (!result) {
-                 container.innerHTML = '<div class="p-3 text-muted">Không tìm thấy thông tin client.</div>';
-                 return;
-             }
-             
-             // Extract threats from real scan data (same logic as viewClientThreats)
-             let threats = [];
-             
-             const scanResults = result.scan_result?.scan_results || result.scan_result || {};
-             
-             // Check if threats data exists in the response
-             if (scanResults.threats) {
-                 
-                 // Combine all threat categories
-                 const allCategories = ['critical', 'webshells', 'warnings'];
-                 
-                 allCategories.forEach(category => {
-                     if (scanResults.threats[category] && Array.isArray(scanResults.threats[category])) {
-                         scanResults.threats[category].forEach(threat => {
-                             // Only add if not already exists
-                             if (!threats.find(f => f.path === threat.path)) {
-                                 threats.push({
-                                     path: threat.path,
-                                     issues: threat.issues || [],
-                                     metadata: {
-                                         size: threat.file_size || 0,
-                                         modified_time: threat.modified_time || 0,
-                                         md5: threat.md5 || '',
-                                     },
-                                     category: threat.category || category,
-                                     is_priority: threat.is_priority || false
-                                 });
-                             }
-                         });
-                     }
-                 });
-             }
-             
-             // Fallback: try suspicious_files directly
-             if (threats.length === 0) {
-                 if (scanResults.suspicious_files && Array.isArray(scanResults.suspicious_files)) {
-                     threats = scanResults.suspicious_files;
-                 } else if (result.suspicious_files && Array.isArray(result.suspicious_files)) {
-                     threats = result.suspicious_files;
-                 }
-             }
-             
+        }
 
-             
-             if (!threats || threats.length === 0) {
-                 container.innerHTML = `
+        function toggleClientDetails(index) {
+            const detailsRow = document.getElementById(`client-details-${index}`);
+            const expandIcon = document.getElementById(`expand-icon-${index}`);
+            const threatsContainer = document.getElementById(`threats-container-${index}`);
+
+            if (detailsRow.style.display === 'none') {
+                // Expand
+                detailsRow.style.display = 'table-row';
+                expandIcon.className = 'fas fa-chevron-down';
+
+                // Load client threats
+                loadClientThreats(index, threatsContainer);
+            } else {
+                // Collapse
+                detailsRow.style.display = 'none';
+                expandIcon.className = 'fas fa-chevron-right';
+            }
+        }
+
+        function loadClientThreats(index, container) {
+            const result = allClientResults[index];
+
+            if (!result) {
+                container.innerHTML = '<div class="p-3 text-muted">Không tìm thấy thông tin client.</div>';
+                return;
+            }
+
+            // Extract threats from real scan data (same logic as viewClientThreats)
+            let threats = [];
+
+            const scanResults = result.scan_result?.scan_results || result.scan_result || {};
+
+            // Check if threats data exists in the response
+            if (scanResults.threats) {
+
+                // Combine all threat categories
+                const allCategories = ['critical', 'webshells', 'warnings'];
+
+                allCategories.forEach(category => {
+                    if (scanResults.threats[category] && Array.isArray(scanResults.threats[category])) {
+                        scanResults.threats[category].forEach(threat => {
+                            // Only add if not already exists
+                            if (!threats.find(f => f.path === threat.path)) {
+                                threats.push({
+                                    path: threat.path,
+                                    issues: threat.issues || [],
+                                    metadata: {
+                                        size: threat.file_size || 0,
+                                        modified_time: threat.modified_time || 0,
+                                        md5: threat.md5 || '',
+                                    },
+                                    category: threat.category || category,
+                                    is_priority: threat.is_priority || false
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Fallback: try suspicious_files directly
+            if (threats.length === 0) {
+                if (scanResults.suspicious_files && Array.isArray(scanResults.suspicious_files)) {
+                    threats = scanResults.suspicious_files;
+                } else if (result.suspicious_files && Array.isArray(result.suspicious_files)) {
+                    threats = result.suspicious_files;
+                }
+            }
+
+
+
+            if (!threats || threats.length === 0) {
+                container.innerHTML = `
                      <div class="p-3 text-muted">
                          <div>Không có threats nào được phát hiện.</div>
                          <small class="text-secondary">Suspicious Count: ${scanResults.suspicious_count || 0}</small>
                      </div>
                  `;
-                 return;
-             }
-             
-             const client = result.client_info || result.client || {};
-             
-             container.innerHTML = `
+                return;
+            }
+
+            const client = result.client_info || result.client || {};
+
+            container.innerHTML = `
                  <div class="threats-header">
                      <h6><i class="fas fa-bug me-2"></i>Threats trong ${client.name || 'Client'} (${threats.length} files)</h6>
                  </div>
@@ -4939,47 +5013,47 @@ if (isset($_GET['api'])) {
                      ${threats.map(threat => renderThreatItem(threat, index)).join('')}
                  </div>
              `;
-         }
-         
-         function renderThreatItem(threat, clientIndex) {
-             const getSeverityBadge = (severity) => {
-                 const badges = {
-                     'critical': '<span class="badge bg-danger">Critical</span>',
-                     'high': '<span class="badge bg-warning">High</span>', 
-                     'medium': '<span class="badge bg-info">Medium</span>',
-                     'low': '<span class="badge bg-secondary">Low</span>',
-                     'warning': '<span class="badge bg-warning">Warning</span>'
-                 };
-                 return badges[severity] || '<span class="badge bg-secondary">Unknown</span>';
-             };
-             
-             const getCategoryBadge = (category) => {
-                 const badges = {
-                     'critical': '<span class="badge bg-danger">Critical</span>',
-                     'webshell': '<span class="badge bg-dark">Webshell</span>',
-                     'warnings': '<span class="badge bg-warning">Warning</span>',
-                     'filemanager': '<span class="badge bg-info">File Manager</span>'
-                 };
-                 return badges[category] || '<span class="badge bg-secondary">' + (category || 'Unknown') + '</span>';
-             };
-             
-             const formatFileSize = (bytes) => {
-                 if (!bytes || bytes === 0) return '0 Bytes';
-                 const k = 1024;
-                 const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-                 const i = Math.floor(Math.log(bytes) / Math.log(k));
-                 return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-             };
-             
-             const formatDate = (timestamp) => {
-                 if (!timestamp) return 'Unknown';
-                 return new Date(timestamp * 1000).toLocaleString('vi-VN');
-             };
-             
-             const fileSize = formatFileSize(threat.metadata?.size || threat.file_size || 0);
-             const modifiedDate = formatDate(threat.metadata?.modified_time || threat.modified_time);
-             
-             return `
+        }
+
+        function renderThreatItem(threat, clientIndex) {
+            const getSeverityBadge = (severity) => {
+                const badges = {
+                    'critical': '<span class="badge bg-danger">Critical</span>',
+                    'high': '<span class="badge bg-warning">High</span>',
+                    'medium': '<span class="badge bg-info">Medium</span>',
+                    'low': '<span class="badge bg-secondary">Low</span>',
+                    'warning': '<span class="badge bg-warning">Warning</span>'
+                };
+                return badges[severity] || '<span class="badge bg-secondary">Unknown</span>';
+            };
+
+            const getCategoryBadge = (category) => {
+                const badges = {
+                    'critical': '<span class="badge bg-danger">Critical</span>',
+                    'webshell': '<span class="badge bg-dark">Webshell</span>',
+                    'warnings': '<span class="badge bg-warning">Warning</span>',
+                    'filemanager': '<span class="badge bg-info">File Manager</span>'
+                };
+                return badges[category] || '<span class="badge bg-secondary">' + (category || 'Unknown') + '</span>';
+            };
+
+            const formatFileSize = (bytes) => {
+                if (!bytes || bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            };
+
+            const formatDate = (timestamp) => {
+                if (!timestamp) return 'Unknown';
+                return new Date(timestamp * 1000).toLocaleString('vi-VN');
+            };
+
+            const fileSize = formatFileSize(threat.metadata?.size || threat.file_size || 0);
+            const modifiedDate = formatDate(threat.metadata?.modified_time || threat.modified_time);
+
+            return `
                  <div class="threat-item border rounded p-3 mb-3" style="background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%); border-left: 4px solid ${threat.category === 'critical' ? '#ef4444' : threat.category === 'webshell' ? '#1f2937' : '#f59e0b'} !important;">
                      <div class="d-flex justify-content-between align-items-start">
                          <div class="flex-grow-1">
@@ -5043,153 +5117,153 @@ if (isset($_GET['api'])) {
                      </div>
                  </div>
              `;
-         }
-         
-         function viewThreatInClient(clientIndex, filePath) {
-             const result = allClientResults[clientIndex];
-             if (!result) return;
-             
-             const client = result.client_info || {};
-             const tempClientId = client.id || `client_${clientIndex}`;
-             
-             // Store current client context
-             const previousClientId = currentClientId;
-             currentClientId = tempClientId;
-             
-             // Ensure client exists in clients array
-             if (!clients.find(c => c.id === tempClientId)) {
-                 clients.push({
-                     id: tempClientId,
-                     name: client.name || `Client ${clientIndex + 1}`,
-                     url: client.url || client.domain || '',
-                     api_key: client.api_key || '',
-                     domain: client.domain || client.url || ''
-                 });
-             }
-             
-             // Use the same logic as single client threat viewing
-             openFileInEditor(tempClientId, filePath);
-         }
-         
-         function deleteThreatInClient(clientIndex, filePath) {
-             const result = allClientResults[clientIndex];
-             if (!result) return;
-             
-             const client = result.client_info || {};
-             const tempClientId = client.id || `client_${clientIndex}`;
-             
-             // Store current client context
-             const previousClientId = currentClientId;
-             currentClientId = tempClientId;
-             
-             // Ensure client exists in clients array
-             if (!clients.find(c => c.id === tempClientId)) {
-                 clients.push({
-                     id: tempClientId,
-                     name: client.name || `Client ${clientIndex + 1}`,
-                     url: client.url || client.domain || '',
-                     api_key: client.api_key || '',
-                     domain: client.domain || client.url || ''
-                 });
-             }
-             
-             // Use the same logic as single client threat deletion  
-             Swal.fire({
-                 title: 'Xác Nhận Xóa File',
-                 html: `Bạn có chắc muốn xóa file này?<br><strong>${filePath}</strong>`,
-                 icon: 'warning',
-                 showCancelButton: true,
-                 confirmButtonColor: '#d33',
-                 cancelButtonColor: '#3085d6',
-                 confirmButtonText: 'Xóa',
-                 cancelButtonText: 'Hủy'
-             }).then((result) => {
-                 if (result.isConfirmed) {
-                     // Call delete API with specific client
-                     fetch(`?api=delete_file&client_id=${tempClientId}`, {
-                         method: 'POST',
-                         headers: {
-                             'Content-Type': 'application/json',
-                         },
-                         body: JSON.stringify({
-                             file_path: filePath
-                         })
-                     })
-                     .then(response => response.json())
-                     .then(data => {
-                         if (data.success) {
-                             Swal.fire('Đã Xóa!', 'File đã được xóa thành công.', 'success');
-                             
-                             // Remove from current view
-                             const threatItem = document.querySelector(`[onclick*="${filePath}"]`);
-                             if (threatItem && threatItem.closest('.threat-item')) {
-                                 threatItem.closest('.threat-item').remove();
-                             }
-                         } else {
-                             Swal.fire('Lỗi!', data.error || 'Không thể xóa file.', 'error');
-                         }
-                     })
-                     .catch(error => {
-                         console.error('Delete error:', error);
-                         Swal.fire('Lỗi!', 'Có lỗi xảy ra khi xóa file.', 'error');
-                     });
-                 }
-             });
-         }
-         
-         function changePage(direction) {
-             const totalPages = Math.ceil(allClientResults.length / itemsPerPage);
-             
-             if (direction === -1 && currentPage > 1) {
-                 currentPage--;
-             } else if (direction === 1 && currentPage < totalPages) {
-                 currentPage++;
-             }
-             
-             updatePagination();
-         }
-         
-         function updatePagination() {
-             const totalPages = Math.ceil(allClientResults.length / itemsPerPage);
-             const startIndex = (currentPage - 1) * itemsPerPage;
-             const endIndex = Math.min(startIndex + itemsPerPage, allClientResults.length);
-             
-             // Update table
-             const clientTable = document.querySelector('.client-table');
-             if (clientTable) {
-                 clientTable.innerHTML = renderClientTable(allClientResults);
-             }
-             
-             // Update pagination info
-             document.getElementById('paginationStart').textContent = startIndex + 1;
-             document.getElementById('paginationEnd').textContent = endIndex;
-             
-             // Update buttons
-             document.getElementById('prevPage').disabled = currentPage === 1;
-             document.getElementById('nextPage').disabled = currentPage === totalPages;
-             
-             // Update page numbers
-             const pageNumbers = document.getElementById('pageNumbers');
-             if (pageNumbers) {
-                 let pagesHtml = '';
-                 for (let i = 1; i <= totalPages; i++) {
-                     if (i === currentPage) {
-                         pagesHtml += `<span class="page-number current">${i}</span>`;
-                     } else {
-                         pagesHtml += `<span class="page-number" onclick="goToPage(${i})">${i}</span>`;
-                     }
-                 }
-                 pageNumbers.innerHTML = pagesHtml;
-             }
-         }
-         
-         function goToPage(page) {
-             currentPage = page;
-             updatePagination();
-         }
-         
+        }
 
-        
+        function viewThreatInClient(clientIndex, filePath) {
+            const result = allClientResults[clientIndex];
+            if (!result) return;
+
+            const client = result.client_info || {};
+            const tempClientId = client.id || `client_${clientIndex}`;
+
+            // Store current client context
+            const previousClientId = currentClientId;
+            currentClientId = tempClientId;
+
+            // Ensure client exists in clients array
+            if (!clients.find(c => c.id === tempClientId)) {
+                clients.push({
+                    id: tempClientId,
+                    name: client.name || `Client ${clientIndex + 1}`,
+                    url: client.url || client.domain || '',
+                    api_key: client.api_key || '',
+                    domain: client.domain || client.url || ''
+                });
+            }
+
+            // Use the same logic as single client threat viewing
+            openFileInEditor(tempClientId, filePath);
+        }
+
+        function deleteThreatInClient(clientIndex, filePath) {
+            const result = allClientResults[clientIndex];
+            if (!result) return;
+
+            const client = result.client_info || {};
+            const tempClientId = client.id || `client_${clientIndex}`;
+
+            // Store current client context
+            const previousClientId = currentClientId;
+            currentClientId = tempClientId;
+
+            // Ensure client exists in clients array
+            if (!clients.find(c => c.id === tempClientId)) {
+                clients.push({
+                    id: tempClientId,
+                    name: client.name || `Client ${clientIndex + 1}`,
+                    url: client.url || client.domain || '',
+                    api_key: client.api_key || '',
+                    domain: client.domain || client.url || ''
+                });
+            }
+
+            // Use the same logic as single client threat deletion  
+            Swal.fire({
+                title: 'Xác Nhận Xóa File',
+                html: `Bạn có chắc muốn xóa file này?<br><strong>${filePath}</strong>`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Xóa',
+                cancelButtonText: 'Hủy'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Call delete API with specific client
+                    fetch(`?api=delete_file&client_id=${tempClientId}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                file_path: filePath
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire('Đã Xóa!', 'File đã được xóa thành công.', 'success');
+
+                                // Remove from current view
+                                const threatItem = document.querySelector(`[onclick*="${filePath}"]`);
+                                if (threatItem && threatItem.closest('.threat-item')) {
+                                    threatItem.closest('.threat-item').remove();
+                                }
+                            } else {
+                                Swal.fire('Lỗi!', data.error || 'Không thể xóa file.', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Delete error:', error);
+                            Swal.fire('Lỗi!', 'Có lỗi xảy ra khi xóa file.', 'error');
+                        });
+                }
+            });
+        }
+
+        function changePage(direction) {
+            const totalPages = Math.ceil(allClientResults.length / itemsPerPage);
+
+            if (direction === -1 && currentPage > 1) {
+                currentPage--;
+            } else if (direction === 1 && currentPage < totalPages) {
+                currentPage++;
+            }
+
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(allClientResults.length / itemsPerPage);
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = Math.min(startIndex + itemsPerPage, allClientResults.length);
+
+            // Update table
+            const clientTable = document.querySelector('.client-table');
+            if (clientTable) {
+                clientTable.innerHTML = renderClientTable(allClientResults);
+            }
+
+            // Update pagination info
+            document.getElementById('paginationStart').textContent = startIndex + 1;
+            document.getElementById('paginationEnd').textContent = endIndex;
+
+            // Update buttons
+            document.getElementById('prevPage').disabled = currentPage === 1;
+            document.getElementById('nextPage').disabled = currentPage === totalPages;
+
+            // Update page numbers
+            const pageNumbers = document.getElementById('pageNumbers');
+            if (pageNumbers) {
+                let pagesHtml = '';
+                for (let i = 1; i <= totalPages; i++) {
+                    if (i === currentPage) {
+                        pagesHtml += `<span class="page-number current">${i}</span>`;
+                    } else {
+                        pagesHtml += `<span class="page-number" onclick="goToPage(${i})">${i}</span>`;
+                    }
+                }
+                pageNumbers.innerHTML = pagesHtml;
+            }
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            updatePagination();
+        }
+
+
+
         function addClientCardInteractions() {
             // Add hover effects and click handlers
             document.querySelectorAll('.client-card').forEach(card => {
@@ -5197,22 +5271,22 @@ if (isset($_GET['api'])) {
                     this.style.transform = 'translateY(-4px)';
                     this.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.15)';
                 });
-                
+
                 card.addEventListener('mouseleave', function() {
                     this.style.transform = 'translateY(0)';
                     this.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.1)';
                 });
             });
         }
-        
+
         function viewClientDetails(index) {
             const result = currentMultiClientResults[index];
             if (!result) return;
-            
+
             // Show detailed view in modal or switch to single client view
             const client = result.client_info || {};
             const scanData = result.scan_result?.scan_results || {};
-            
+
             Swal.fire({
                 title: `Chi Tiết Client: ${client.name || 'Unknown'}`,
                 html: `
@@ -5239,72 +5313,72 @@ if (isset($_GET['api'])) {
                 showCloseButton: true
             });
         }
-        
-                 function viewClientThreats(index) {
-             const result = currentMultiClientResults[index];
-             
-             if (!result) {
-                 Swal.fire({
-                     icon: 'error',
-                     title: 'Lỗi',
-                     text: 'Không tìm thấy thông tin client.'
-                 });
-                 return;
-             }
-             
-             // Extract threats from real scan data 
-             let suspiciousFiles = [];
-             
-             // Try to parse threats from different data structures
-             const scanResults = result.scan_result?.scan_results || result.scan_result || {};
-             
-             // Check if threats data exists in the response
-             if (scanResults.threats) {
-                 
-                 // Combine all threat categories
-                 const allCategories = ['critical', 'webshells', 'warnings', 'all'];
-                 
-                 allCategories.forEach(category => {
-                     if (scanResults.threats[category] && Array.isArray(scanResults.threats[category])) {
-                         scanResults.threats[category].forEach(threat => {
-                             // Only add if not already exists (avoid duplicates from 'all' category)
-                             if (!suspiciousFiles.find(f => f.path === threat.path)) {
-                                 suspiciousFiles.push({
-                                     path: threat.path,
-                                     issues: threat.issues || [],
-                                     metadata: {
-                                         size: threat.file_size || 0,
-                                         modified_time: threat.modified_time || 0,
-                                         md5: threat.md5 || '',
-                                     },
-                                     category: threat.category || category,
-                                     is_priority: threat.is_priority || false
-                                 });
-                             }
-                         });
-                     }
-                 });
-             }
-             
-             // Fallback: try suspicious_files directly
-             if (suspiciousFiles.length === 0) {
-                 if (scanResults.suspicious_files && Array.isArray(scanResults.suspicious_files)) {
-                     suspiciousFiles = scanResults.suspicious_files;
-                 } else if (result.suspicious_files && Array.isArray(result.suspicious_files)) {
-                     suspiciousFiles = result.suspicious_files;
-                 }
-             }
-             
 
-             
-             if (!suspiciousFiles || suspiciousFiles.length === 0) {
-                 const suspiciousCount = scanResults.suspicious_count || 0;
-                 
-                 Swal.fire({
-                     icon: 'info',
-                     title: 'Không có threats',
-                     text: 'Client này không có file nguy hiểm nào.',
-                     html: `
+        function viewClientThreats(index) {
+            const result = currentMultiClientResults[index];
+
+            if (!result) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Lỗi',
+                    text: 'Không tìm thấy thông tin client.'
+                });
+                return;
+            }
+
+            // Extract threats from real scan data 
+            let suspiciousFiles = [];
+
+            // Try to parse threats from different data structures
+            const scanResults = result.scan_result?.scan_results || result.scan_result || {};
+
+            // Check if threats data exists in the response
+            if (scanResults.threats) {
+
+                // Combine all threat categories
+                const allCategories = ['critical', 'webshells', 'warnings', 'all'];
+
+                allCategories.forEach(category => {
+                    if (scanResults.threats[category] && Array.isArray(scanResults.threats[category])) {
+                        scanResults.threats[category].forEach(threat => {
+                            // Only add if not already exists (avoid duplicates from 'all' category)
+                            if (!suspiciousFiles.find(f => f.path === threat.path)) {
+                                suspiciousFiles.push({
+                                    path: threat.path,
+                                    issues: threat.issues || [],
+                                    metadata: {
+                                        size: threat.file_size || 0,
+                                        modified_time: threat.modified_time || 0,
+                                        md5: threat.md5 || '',
+                                    },
+                                    category: threat.category || category,
+                                    is_priority: threat.is_priority || false
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Fallback: try suspicious_files directly
+            if (suspiciousFiles.length === 0) {
+                if (scanResults.suspicious_files && Array.isArray(scanResults.suspicious_files)) {
+                    suspiciousFiles = scanResults.suspicious_files;
+                } else if (result.suspicious_files && Array.isArray(result.suspicious_files)) {
+                    suspiciousFiles = result.suspicious_files;
+                }
+            }
+
+
+
+            if (!suspiciousFiles || suspiciousFiles.length === 0) {
+                const suspiciousCount = scanResults.suspicious_count || 0;
+
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Không có threats',
+                    text: 'Client này không có file nguy hiểm nào.',
+                    html: `
                          <div style="text-align: left; font-size: 12px; margin-top: 10px;">
                              <strong>Debug Info:</strong><br>
                              - Index: ${index}<br>
@@ -5314,84 +5388,84 @@ if (isset($_GET['api'])) {
                              - Has Suspicious Files: ${scanResults.suspicious_files ? 'Yes' : 'No'}
                          </div>
                      `
-                 });
-                 return;
-             }
-             
-             // Set current client for file operations
-             const client = result.client_info || {};
-             currentClientId = client.id || `client_${index}`;
-             
-             // Switch to single client view with this client's results
-             currentScanResults = {
-                 suspicious_files: suspiciousFiles,
-                 scanned_files: result.scan_result?.scan_results?.scanned_files || result.scan_result?.scanned_files || 0,
-                 suspicious_count: result.scan_result?.scan_results?.suspicious_count || result.scan_result?.suspicious_count || suspiciousFiles.length,
-                 critical_count: result.scan_result?.scan_results?.critical_count || result.scan_result?.critical_count || 0
-             };
-             
-             // Store client info for file operations
-             if (!clients.find(c => c.id === currentClientId)) {
-                 clients.push({
-                     id: currentClientId,
-                     name: client.name || `Client ${index + 1}`,
-                     url: client.url || client.domain || '',
-                     api_key: client.api_key || '',
-                     domain: client.domain || client.url || ''
-                 });
-             }
-             
-             // Hide multi-client results
-             hideMultiClientResults();
-             
-             // Show single client results with back button
-             const scanResultsDiv = document.getElementById('scanResults');
-             if (scanResultsDiv) {
-                 scanResultsDiv.style.display = 'block';
-                 
-                 // Add back button to return to multi-client view
-                 const resultsHeader = scanResultsDiv.querySelector('.results-header');
-                 if (resultsHeader) {
-                     // Remove existing back button if any
-                     const existingBackBtn = resultsHeader.querySelector('.back-to-multi-client');
-                     if (existingBackBtn) {
-                         existingBackBtn.remove();
-                     }
-                     
-                     // Add new back button
-                     const backButton = document.createElement('button');
-                     backButton.className = 'btn btn-outline-secondary btn-sm back-to-multi-client';
-                     backButton.innerHTML = '<i class="fas fa-arrow-left me-1"></i>Quay lại tổng quan';
-                     backButton.onclick = function() {
-                         document.getElementById('scanResults').style.display = 'none';
-                         document.getElementById('multiClientResults').style.display = 'block';
-                     };
-                     
-                     const resultsTitle = resultsHeader.querySelector('.results-title');
-                     if (resultsTitle) {
-                         resultsTitle.appendChild(backButton);
-                     }
-                 }
-             }
-             
-             // Display results
-             displayScanResults(currentScanResults);
-         }
-        
+                });
+                return;
+            }
+
+            // Set current client for file operations
+            const client = result.client_info || {};
+            currentClientId = client.id || `client_${index}`;
+
+            // Switch to single client view with this client's results
+            currentScanResults = {
+                suspicious_files: suspiciousFiles,
+                scanned_files: result.scan_result?.scan_results?.scanned_files || result.scan_result?.scanned_files || 0,
+                suspicious_count: result.scan_result?.scan_results?.suspicious_count || result.scan_result?.suspicious_count || suspiciousFiles.length,
+                critical_count: result.scan_result?.scan_results?.critical_count || result.scan_result?.critical_count || 0
+            };
+
+            // Store client info for file operations
+            if (!clients.find(c => c.id === currentClientId)) {
+                clients.push({
+                    id: currentClientId,
+                    name: client.name || `Client ${index + 1}`,
+                    url: client.url || client.domain || '',
+                    api_key: client.api_key || '',
+                    domain: client.domain || client.url || ''
+                });
+            }
+
+            // Hide multi-client results
+            hideMultiClientResults();
+
+            // Show single client results with back button
+            const scanResultsDiv = document.getElementById('scanResults');
+            if (scanResultsDiv) {
+                scanResultsDiv.style.display = 'block';
+
+                // Add back button to return to multi-client view
+                const resultsHeader = scanResultsDiv.querySelector('.results-header');
+                if (resultsHeader) {
+                    // Remove existing back button if any
+                    const existingBackBtn = resultsHeader.querySelector('.back-to-multi-client');
+                    if (existingBackBtn) {
+                        existingBackBtn.remove();
+                    }
+
+                    // Add new back button
+                    const backButton = document.createElement('button');
+                    backButton.className = 'btn btn-outline-secondary btn-sm back-to-multi-client';
+                    backButton.innerHTML = '<i class="fas fa-arrow-left me-1"></i>Quay lại tổng quan';
+                    backButton.onclick = function() {
+                        document.getElementById('scanResults').style.display = 'none';
+                        document.getElementById('multiClientResults').style.display = 'block';
+                    };
+
+                    const resultsTitle = resultsHeader.querySelector('.results-title');
+                    if (resultsTitle) {
+                        resultsTitle.appendChild(backButton);
+                    }
+                }
+            }
+
+            // Display results
+            displayScanResults(currentScanResults);
+        }
+
         function hideMultiClientResults() {
             const container = document.getElementById('multiClientResults');
             if (container) {
                 container.style.display = 'none';
             }
         }
-        
+
         // Time ago function
         function getTimeAgo(timestamp) {
             if (!timestamp) return 'Không xác định';
-            
+
             const now = Date.now() / 1000;
             const diff = now - timestamp;
-            
+
             if (diff < 3600) { // < 1 hour
                 const minutes = Math.floor(diff / 60);
                 return `${minutes} phút trước`;
@@ -5405,7 +5479,7 @@ if (isset($_GET['api'])) {
                 return new Date(timestamp * 1000).toLocaleDateString('vi-VN');
             }
         }
-        
+
         // Get severity label
         function getSeverityLabel(severity) {
             const labels = {
@@ -5415,7 +5489,7 @@ if (isset($_GET['api'])) {
             };
             return labels[severity] || 'Thông tin';
         }
-        
+
         // Refresh recent threats
         function refreshRecentThreats() {
             const refreshBtn = document.querySelector('.sidebar-refresh i');
@@ -5425,7 +5499,7 @@ if (isset($_GET['api'])) {
                     refreshBtn.style.animation = '';
                 }, 500);
             }
-            
+
             // Re-populate recent threats from current results
             if (currentScanResults) {
                 displayScanResults(currentScanResults);
@@ -5438,4 +5512,5 @@ if (isset($_GET['api'])) {
         });
     </script>
 </body>
-</html> 
+
+</html>
