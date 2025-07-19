@@ -1972,6 +1972,373 @@ if (isset($_GET['api'])) {
             overflow: hidden;
         }
 
+        /* Two Column Layout Styles */
+        .threats-main-container {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .threats-header {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            padding: 16px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .threat-count-badge {
+            background: var(--primary-blue);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Override threats container for main column */
+        .threats-main-container .threats-container {
+            padding: 20px;
+            display: grid;
+            gap: 16px;
+        }
+
+        /* Original threat card styles */
+        .threats-main-container .threat-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .threats-main-container .threat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--info-color);
+        }
+
+        .threats-main-container .threat-card.critical::before {
+            background: var(--critical-red);
+        }
+
+        .threats-main-container .threat-card.warning::before {
+            background: var(--warning-color);
+        }
+
+        .threats-main-container .threat-card.info::before {
+            background: var(--info-color);
+        }
+
+        .threats-main-container .threat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+            border-bottom: none;
+            padding: 0;
+            background: none;
+            border-radius: 0;
+        }
+
+        .threats-main-container .threat-file {
+            color: #1f2937;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: help;
+            flex: 1;
+        }
+
+        .threats-main-container .threat-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .threats-main-container .action-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .threats-main-container .action-view {
+            background: var(--primary-blue);
+            color: white;
+        }
+
+        .threats-main-container .action-view:hover {
+            background: var(--dark-blue);
+            transform: translateY(-1px);
+        }
+
+        .threats-main-container .action-delete {
+            background: var(--critical-red);
+            color: white;
+        }
+
+        .threats-main-container .action-delete:hover {
+            background: #b91c1c;
+            transform: translateY(-1px);
+        }
+
+        /* Recent Threats Sidebar Styles */
+        .recent-threats-sidebar {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .sidebar-header {
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+            padding: 16px 20px;
+            border-bottom: 1px solid #fecaca;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sidebar-header h6 {
+            color: #dc2626;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .sidebar-refresh {
+            cursor: pointer;
+            color: #dc2626;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar-refresh:hover {
+            background: rgba(220, 38, 38, 0.1);
+            transform: rotate(180deg);
+        }
+
+        .recent-threats-container {
+            padding: 12px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .recent-threat-item {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .recent-threat-item:hover {
+            background: #fee2e2;
+            border-color: #fca5a5;
+            transform: translateX(2px);
+        }
+
+        .recent-threat-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .recent-threat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 6px;
+        }
+
+        .recent-threat-file {
+            font-size: 12px;
+            font-weight: 600;
+            color: #dc2626;
+            word-break: break-all;
+            cursor: pointer;
+            flex: 1;
+            margin-right: 8px;
+        }
+
+        .recent-threat-file:hover {
+            color: #991b1b;
+            text-decoration: underline;
+        }
+
+        .recent-threat-delete {
+            background: none;
+            border: none;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .recent-threat-delete:hover {
+            background: #dc2626;
+            color: white;
+        }
+
+        .recent-threat-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .recent-threat-severity {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .recent-threat-time {
+            font-size: 10px;
+            color: #6b7280;
+        }
+
+        .sidebar-footer {
+            padding: 12px 20px;
+            background: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+            border-radius: 0 0 12px 12px;
+        }
+
+        /* Tooltip Styles */
+        .threat-tooltip {
+            position: absolute;
+            background: #1f2937;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            max-width: 300px;
+            z-index: 9999;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            word-wrap: break-word;
+        }
+
+        .threat-tooltip.show {
+            opacity: 1;
+        }
+
+        .threat-tooltip::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: 20px;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 6px solid #1f2937;
+        }
+
+        .threat-issue-item {
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .threat-issue-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .threat-issue-line {
+            font-weight: 600;
+            color: #fbbf24;
+        }
+
+        .threat-issue-reason {
+            color: #d1d5db;
+            margin-top: 4px;
+        }
+
+        /* Enhanced threat card with tooltip trigger */
+        .threat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        }
+
+        .threat-file {
+            color: #1f2937;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: help;
+        }
+
+        .threat-icon {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .threat-patterns {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .threat-pattern {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        @media (max-width: 768px) {
+            .row {
+                flex-direction: column;
+            }
+            
+            .col-md-8, .col-md-4 {
+                max-width: 100%;
+                flex: 0 0 100%;
+            }
+            
+            .recent-threats-sidebar {
+                margin-top: 20px;
+                position: static;
+            }
+        }
+
         /* Animations */
         @keyframes fadeInUp {
             from {
@@ -2384,8 +2751,46 @@ if (isset($_GET['api'])) {
                     </select>
                 </div>
             </div>
-            <div class="threats-container" id="threatsContainer">
-                <!-- Threats will be loaded here -->
+            
+            <!-- Two Column Layout -->
+            <div class="row mt-4">
+                <!-- Left Column - Main Threats List (Large) -->
+                <div class="col-md-8">
+                    <div class="threats-main-container">
+                        <div class="threats-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-list-alt me-2"></i>Danh Sách File Đã Quét
+                            </h5>
+                            <div class="threat-count-badge" id="mainThreatCount">0 files</div>
+                        </div>
+                        <div class="threats-container" id="threatsContainer">
+                            <!-- Main threats list will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right Column - Recent Threats Sidebar -->
+                <div class="col-md-4">
+                    <div class="recent-threats-sidebar">
+                        <div class="sidebar-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-clock me-2"></i>File Nguy Hiểm Gần Đây
+                            </h6>
+                            <div class="sidebar-refresh" onclick="refreshRecentThreats()">
+                                <i class="fas fa-sync-alt"></i>
+                            </div>
+                        </div>
+                        <div class="recent-threats-container" id="recentThreatsContainer">
+                            <!-- Recent threats will be populated by JavaScript -->
+                        </div>
+                        <div class="sidebar-footer">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Hiển thị file được tạo/sửa trong 7 ngày qua
+                            </small>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -2689,10 +3094,12 @@ if (isset($_GET['api'])) {
             };
         }
 
-        // Display scan results with modern design
+        // Display scan results with two column design
         function displayScanResults(results) {
             const scanResultsDiv = document.getElementById('scanResults');
             const threatsContainer = document.getElementById('threatsContainer');
+            const recentThreatsContainer = document.getElementById('recentThreatsContainer');
+            const mainThreatCount = document.getElementById('mainThreatCount');
             
             if (!results || !results.suspicious_files || results.suspicious_files.length === 0) {
                 scanResultsDiv.style.display = 'block';
@@ -2703,10 +3110,12 @@ if (isset($_GET['api'])) {
                         <p class="text-muted">Không phát hiện threats nào</p>
                     </div>
                 `;
+                recentThreatsContainer.innerHTML = '<div class="text-center text-muted p-3"><small>Không có threats nào</small></div>';
+                mainThreatCount.textContent = '0 files';
                 return;
             }
 
-            // Sort by time (newest first) and severity
+            // Sort main threats by time (newest first) and severity
             const sortedFiles = results.suspicious_files.sort((a, b) => {
                 const aTime = a.metadata?.modified_time || 0;
                 const bTime = b.metadata?.modified_time || 0;
@@ -2719,21 +3128,43 @@ if (isset($_GET['api'])) {
                 return (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0);
             });
 
+            // Filter recent threats (last 7 days)
+            const now = Date.now() / 1000;
+            const recentThreats = sortedFiles.filter(file => {
+                const fileTime = file.metadata?.modified_time || 0;
+                const age = now - fileTime;
+                return age < 7 * 24 * 3600; // 7 days
+            }).slice(0, 10); // Limit to 10 most recent
+
             scanResultsDiv.style.display = 'block';
+            
+            // Update main threat count
+            mainThreatCount.textContent = `${sortedFiles.length} files`;
+            
+            // Populate main threats container
             threatsContainer.innerHTML = sortedFiles.map(file => {
                 const severity = getSeverityLevel(file);
                 const ageInfo = getAgeInfo(file.metadata?.modified_time);
                 const fileSize = formatFileSize(file.metadata?.size || 0);
                 
+                // Store issues data directly in element for tooltip
+                const issuesData = JSON.stringify(file.issues || []);
+                
                 return `
-                    <div class="threat-card ${severity} fade-in-up">
+                    <div class="threat-card ${severity} fade-in-up" 
+                         data-file-path="${file.path}"
+                         data-issues='${issuesData.replace(/'/g, '&#39;')}'
+                         onmouseenter="showThreatTooltipFromCard(event, this)"
+                         onmouseleave="hideThreatTooltip()">
                         <div class="threat-header">
-                            <div class="threat-path">${file.path}</div>
+                            <h4 class="threat-file">
+                                <i class="fas fa-file-code threat-icon"></i>
+                                ${file.path}
+                            </h4>
                             <div class="threat-actions">
                                 <button class="action-btn action-view" onclick="viewThreat('${file.path}')">
-                                    <i class="fas fa-eye"></i> Xem
+                                    <i class="fas fa-edit"></i> Sửa
                                 </button>
-                               
                                 <button class="action-btn action-delete" onclick="deleteFile('${file.path}')">
                                     <i class="fas fa-trash"></i> Xóa
                                 </button>
@@ -2741,24 +3172,56 @@ if (isset($_GET['api'])) {
                         </div>
                         
                         <div class="threat-meta">
+                            <span class="meta-badge meta-severity ${severity}">${getSeverityLabel(severity)}</span>
                             <span class="meta-badge meta-age ${ageInfo.class}">${ageInfo.label}</span>
                             <span class="meta-badge meta-size">${fileSize}</span>
                         </div>
                         
                         <div class="threat-details">
-                            ${file.issues?.length || 0} vấn đề phát hiện:
-                            ${(file.issues || []).slice(0, 3).map(issue => 
-                                `<span class="threat-pattern">${issue.pattern}</span>`
-                            ).join(' ')}
-                            ${(file.issues || []).length > 3 ? '...' : ''}
+                            <strong>${file.issues?.length || 0} vấn đề phát hiện:</strong>
+                            <div class="threat-patterns">
+                                ${(file.issues || []).slice(0, 3).map(issue => 
+                                    `<span class="threat-pattern">${issue.pattern}</span>`
+                                ).join('')}
+                                ${(file.issues || []).length > 3 ? '<span class="threat-pattern">...</span>' : ''}
+                            </div>
                         </div>
                     </div>
                 `;
             }).join('');
+            
+            // Populate recent threats sidebar
+            if (recentThreats.length > 0) {
+                recentThreatsContainer.innerHTML = recentThreats.map(file => {
+                    const severity = getSeverityLevel(file);
+                    const timeAgo = getTimeAgo(file.metadata?.modified_time);
+                    
+                    return `
+                        <div class="recent-threat-item">
+                            <div class="recent-threat-header">
+                                <div class="recent-threat-file" onclick="viewThreat('${file.path}')">${file.path}</div>
+                                <button class="recent-threat-delete" onclick="deleteFile('${file.path}')" title="Xóa file">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div class="recent-threat-meta">
+                                <span class="recent-threat-severity ${severity}">${getSeverityLabel(severity)}</span>
+                                <span class="recent-threat-time">${timeAgo}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                recentThreatsContainer.innerHTML = '<div class="text-center text-muted p-3"><small>Không có file nguy hiểm gần đây</small></div>';
+            }
 
             // Add filter event listeners
-            document.getElementById('severityFilter').addEventListener('change', filterResults);
-            document.getElementById('ageFilter').addEventListener('change', filterResults);
+            setTimeout(() => {
+                const severityFilter = document.getElementById('severityFilter');
+                const ageFilter = document.getElementById('ageFilter');
+                if (severityFilter) severityFilter.addEventListener('change', filterResults);
+                if (ageFilter) ageFilter.addEventListener('change', filterResults);
+            }, 100);
         }
 
         // Get severity level based on file characteristics
@@ -3754,6 +4217,133 @@ if (isset($_GET['api'])) {
                         backdrop.remove();
                     }
                 }
+            }
+        }
+
+        // Tooltip Functions
+        let currentTooltip = null;
+        
+        function showThreatTooltipFromCard(event, cardElement) {
+            // Remove existing tooltip
+            hideThreatTooltip();
+            
+            const filePath = cardElement.getAttribute('data-file-path');
+            const issuesDataStr = cardElement.getAttribute('data-issues');
+            
+            if (!issuesDataStr) return;
+            
+            try {
+                const issues = JSON.parse(issuesDataStr);
+                if (!issues || issues.length === 0) return;
+                
+                // Create tooltip content
+                const content = issues.map(issue => 
+                    `<div class="threat-issue-item">
+                        <div class="threat-issue-line">Dòng ${issue.line || 'N/A'}</div>
+                        <div class="threat-issue-reason">${issue.description || issue.pattern || ''}</div>
+                    </div>`
+                ).join('');
+                
+                // Create tooltip
+                currentTooltip = document.createElement('div');
+                currentTooltip.className = 'threat-tooltip';
+                currentTooltip.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #fbbf24;">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        Threats trong ${filePath}:
+                    </div>
+                    ${content}
+                `;
+                
+                document.body.appendChild(currentTooltip);
+                
+                // Position tooltip
+                const rect = cardElement.getBoundingClientRect();
+                const tooltipRect = currentTooltip.getBoundingClientRect();
+                
+                let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+                let top = rect.top - tooltipRect.height - 10;
+                
+                // Adjust if tooltip goes off screen
+                if (left < 10) left = 10;
+                if (left + tooltipRect.width > window.innerWidth - 10) {
+                    left = window.innerWidth - tooltipRect.width - 10;
+                }
+                if (top < 10) {
+                    top = rect.bottom + 10;
+                }
+                
+                currentTooltip.style.left = left + 'px';
+                currentTooltip.style.top = top + 'px';
+                
+                // Show tooltip
+                setTimeout(() => {
+                    if (currentTooltip) {
+                        currentTooltip.classList.add('show');
+                    }
+                }, 50);
+                
+            } catch (e) {
+                console.error('Error parsing tooltip data:', e);
+            }
+        }
+        
+        function hideThreatTooltip() {
+            if (currentTooltip) {
+                currentTooltip.classList.remove('show');
+                setTimeout(() => {
+                    if (currentTooltip && currentTooltip.parentNode) {
+                        currentTooltip.parentNode.removeChild(currentTooltip);
+                    }
+                    currentTooltip = null;
+                }, 200);
+            }
+        }
+        
+        // Time ago function
+        function getTimeAgo(timestamp) {
+            if (!timestamp) return 'Không xác định';
+            
+            const now = Date.now() / 1000;
+            const diff = now - timestamp;
+            
+            if (diff < 3600) { // < 1 hour
+                const minutes = Math.floor(diff / 60);
+                return `${minutes} phút trước`;
+            } else if (diff < 86400) { // < 1 day
+                const hours = Math.floor(diff / 3600);
+                return `${hours} giờ trước`;
+            } else if (diff < 604800) { // < 1 week
+                const days = Math.floor(diff / 86400);
+                return `${days} ngày trước`;
+            } else {
+                return new Date(timestamp * 1000).toLocaleDateString('vi-VN');
+            }
+        }
+        
+        // Get severity label
+        function getSeverityLabel(severity) {
+            const labels = {
+                'critical': 'Nguy hiểm',
+                'warning': 'Cảnh báo',
+                'info': 'Thông tin'
+            };
+            return labels[severity] || 'Thông tin';
+        }
+        
+        // Refresh recent threats
+        function refreshRecentThreats() {
+            const refreshBtn = document.querySelector('.sidebar-refresh i');
+            if (refreshBtn) {
+                refreshBtn.style.animation = 'spin 0.5s linear';
+                setTimeout(() => {
+                    refreshBtn.style.animation = '';
+                }, 500);
+            }
+            
+            // Re-populate recent threats from current results
+            if (currentScanResults) {
+                displayScanResults(currentScanResults);
             }
         }
 

@@ -260,7 +260,13 @@ class SecurityScanner {
         }
 
         $excludeDirs = ['.git', '.svn', 'node_modules', 'vendor', 'cache', 'logs', 'tmp', 'temp'];
-        $excludeFiles = ['security_scan_client.php', 'security_scan_server.php']; // Bỏ qua chính file này
+        $excludeFiles = [
+            'security_scan_client.php', 
+            'security_scan_server.php',
+            './config/scanner_config.php',
+            'config/scanner_config.php',
+            'scanner_config.php'
+        ]; // Bỏ qua các file này
         
         try {
             $iterator = new RecursiveIteratorIterator(
@@ -278,8 +284,11 @@ class SecurityScanner {
                     $fileName = basename($filePath);
                     $extension = strtolower($file->getExtension());
                     
-                    // Bỏ qua file không cần thiết
-                    if (in_array($fileName, $excludeFiles)) {
+                    // Bỏ qua file không cần thiết - Enhanced check
+                    if (in_array($fileName, $excludeFiles) || 
+                        in_array($filePath, $excludeFiles) ||
+                        strpos($filePath, 'scanner_config.php') !== false ||
+                        strpos($fileName, 'scanner_config') !== false) {
                         continue;
                     }
                     
@@ -317,7 +326,13 @@ class SecurityScanner {
         }
 
         $excludeDirs = ['.git', '.svn', 'node_modules', 'vendor', 'cache', 'logs', 'tmp', 'temp'];
-        $excludeFiles = ['security_scan_client.php', 'security_scan_server.php']; // Bỏ qua chính file này
+        $excludeFiles = [
+            'security_scan_client.php', 
+            'security_scan_server.php',
+            './config/scanner_config.php',
+            'config/scanner_config.php',
+            'scanner_config.php'
+        ]; // Bỏ qua các file này
         
         try {
             $iterator = new RecursiveIteratorIterator(
@@ -335,8 +350,11 @@ class SecurityScanner {
                     $fileName = basename($filePath);
                     $extension = strtolower($file->getExtension());
                     
-                    // Bỏ qua file không cần thiết
-                    if (in_array($fileName, $excludeFiles)) {
+                    // Bỏ qua file không cần thiết - Enhanced check
+                    if (in_array($fileName, $excludeFiles) || 
+                        in_array($filePath, $excludeFiles) ||
+                        strpos($filePath, 'scanner_config.php') !== false ||
+                        strpos($fileName, 'scanner_config') !== false) {
                         continue;
                     }
                     
