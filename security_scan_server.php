@@ -954,21 +954,31 @@ if (isset($_GET['api'])) {
 
             // Try to get client from database first
             $client = $clientManager->getClient($clientId);
+            $allClients = $clientManager->getClients();
             
-            // If not found and clientId looks like temp client, try to extract from session or reconstruct
-            if (!$client && strpos($clientId, 'temp_client_') === 0) {
-                // Try to find client in session or reconstruct from common patterns
-                $allClients = $clientManager->getClients();
-                
-                // Extract index from temp client ID
-                if (preg_match('/temp_client_(\d+)/', $clientId, $matches)) {
+            // Enhanced client lookup logic for better matching
+            if (!$client) {
+                // Case 1: Handle numeric client IDs like "client_0", "client_1", "client_2"
+                if (preg_match('/^client_(\d+)$/', $clientId, $matches)) {
                     $index = (int)$matches[1];
-                    if (isset($allClients[$index])) {
-                        $client = $allClients[$index];
+                    $clientArray = array_values($allClients); // Re-index array
+                    if (isset($clientArray[$index])) {
+                        $client = $clientArray[$index];
                     }
                 }
                 
-                // If still not found, try to find by similar name patterns
+                // Case 2: Handle temp client IDs like "temp_client_2_timestamp"
+                if (!$client && strpos($clientId, 'temp_client_') === 0) {
+                    if (preg_match('/temp_client_(\d+)/', $clientId, $matches)) {
+                        $index = (int)$matches[1];
+                        $clientArray = array_values($allClients); // Re-index array
+                        if (isset($clientArray[$index])) {
+                            $client = $clientArray[$index];
+                        }
+                    }
+                }
+                
+                // Case 3: Smart matching by URL patterns
                 if (!$client) {
                     foreach ($allClients as $c) {
                         if (strpos($clientId, 'xemay365') !== false && strpos($c['url'], 'xemay365') !== false) {
@@ -5473,6 +5483,14 @@ if (isset($_GET['api'])) {
                  return;
              }
 
+            // Debug client info before calling editor
+            console.log('Opening editor with client:', {
+                providedClientId: client.id,
+                clientName: client.name,
+                clientUrl: client.url,
+                clientIndex: clientIndex
+            });
+            
             // Use the same logic as single client threat viewing
             openFileInEditor(client.id, filePath);
         }
@@ -5481,23 +5499,44 @@ if (isset($_GET['api'])) {
             const result = allClientResults[clientIndex];
             if (!result) return;
 
-            const client = result.client_info || {};
-            const tempClientId = client.id || `client_${clientIndex}`;
+            // Enhanced client resolution - same logic as viewThreatInClient
+            let client = result.client_info || result.client || {};
+            let matchedClient = null;
+            
+            // First try to find by exact index in clients array
+            if (clients[clientIndex]) {
+                matchedClient = clients[clientIndex];
+            }
+            
+            // If no direct match, try to find by client info in result
+            if (!matchedClient && (result.client_info || result.client)) {
+                const clientInfo = result.client_info || result.client;
+                matchedClient = clients.find(c => 
+                    c.name === clientInfo.name ||
+                    c.id === clientInfo.id ||
+                    c.url === clientInfo.url ||
+                    c.url === clientInfo.client_url
+                );
+            }
+            
+            // Use matched client or create temp one
+            if (matchedClient) {
+                client = matchedClient;
+            } else {
+                // Create temporary client based on result info
+                const clientInfo = result.client_info || result.client || {};
+                client = {
+                    id: `temp_client_${clientIndex}_${Date.now()}`,
+                    name: clientInfo.name || `Client ${clientIndex + 1}`,
+                    url: clientInfo.url || clientInfo.client_url || 'http://localhost',
+                    api_key: clientInfo.api_key || 'default-key',
+                    domain: clientInfo.domain || 'localhost'
+                };
+            }
 
             // Store current client context
             const previousClientId = currentClientId;
-            currentClientId = tempClientId;
-
-            // Ensure client exists in clients array
-            if (!clients.find(c => c.id === tempClientId)) {
-                clients.push({
-                    id: tempClientId,
-                    name: client.name || `Client ${clientIndex + 1}`,
-                    url: client.url || client.domain || '',
-                    api_key: client.api_key || '',
-                    domain: client.domain || client.url || ''
-                });
-            }
+            currentClientId = client.id;
 
             // Use the same logic as single client threat deletion  
             Swal.fire({
@@ -5512,7 +5551,13 @@ if (isset($_GET['api'])) {
             }).then((result) => {
                 if (result.isConfirmed) {
                     // Call delete API with specific client
-                    fetch(`?api=delete_file&client_id=${tempClientId}`, {
+                    console.log('Deleting file with client:', {
+                        clientId: client.id,
+                        filePath: filePath,
+                        clientName: client.name
+                    });
+                    
+                    fetch(`?api=delete_file&client_id=${client.id}`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -5521,7 +5566,13 @@ if (isset($_GET['api'])) {
                                 file_path: filePath
                             })
                         })
-                        .then(response => response.json())
+                        .then(response => {
+                            // Check if response is ok first
+                            if (!response.ok) {
+                                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                            }
+                            return response.json();
+                        })
                         .then(data => {
                             if (data.success) {
                                 Swal.fire('Đã Xóa!', 'File đã được xóa thành công.', 'success');
@@ -5531,13 +5582,38 @@ if (isset($_GET['api'])) {
                                 if (threatItem && threatItem.closest('.threat-item')) {
                                     threatItem.closest('.threat-item').remove();
                                 }
+                                
+                                // Refresh scan results to update counts
+                                if (typeof refreshScanResults === 'function') {
+                                    refreshScanResults();
+                                }
                             } else {
                                 Swal.fire('Lỗi!', data.error || 'Không thể xóa file.', 'error');
                             }
                         })
                         .catch(error => {
                             console.error('Delete error:', error);
-                            Swal.fire('Lỗi!', 'Có lỗi xảy ra khi xóa file.', 'error');
+                            
+                            // Enhanced error handling - check if it's a connection issue after potential success
+                            if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                                Swal.fire({
+                                    icon: 'warning',
+                                    title: 'Lưu ý!',
+                                    html: `
+                                        <p>Có thể file đã được xóa thành công nhưng gặp lỗi kết nối.</p>
+                                        <p><small>Vui lòng refresh trang để kiểm tra.</small></p>
+                                    `,
+                                    showCancelButton: true,
+                                    confirmButtonText: 'Refresh trang',
+                                    cancelButtonText: 'Đóng'
+                                }).then((result) => {
+                                    if (result.isConfirmed) {
+                                        location.reload();
+                                    }
+                                });
+                            } else {
+                                Swal.fire('Lỗi!', `Có lỗi xảy ra: ${error.message}`, 'error');
+                            }
                         });
                 }
             });
