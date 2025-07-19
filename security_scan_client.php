@@ -13,10 +13,10 @@ class SecurityClientConfig {
     const CLIENT_NAME = 'xemay365'; // Tên website này
     const CLIENT_VERSION = '1.0';
     
-    // Giới hạn quét cho client
-    const MAX_SCAN_FILES = 10000;
-    const MAX_SCAN_TIME = 300; // 5 phút
-    const MAX_MEMORY = '256M';
+    // Giới hạn quét cho client - UNLIMITED SCAN
+    const MAX_SCAN_FILES = 999999999; // Virtually unlimited
+    const MAX_SCAN_TIME = 600; // 10 phút
+    const MAX_MEMORY = '512M'; // Tăng memory
     
     // API Patterns Configuration
     const PATTERNS_API_URL = 'https://hiepcodeweb.com/api/security_patterns.php';
@@ -370,10 +370,76 @@ class SecurityScanner {
             // Get patterns from API or fallback
             $patterns = $this->apiPatterns;
             
+            // Enhanced critical patterns with more malware detection
+            $enhancedCriticalPatterns = [
+                // Execution functions
+                'eval(' => 'Code execution vulnerability',
+                'assert(' => 'Assert function execution',
+                'system(' => 'System command execution',
+                'exec(' => 'Command execution',
+                'shell_exec(' => 'Shell command execution',
+                'passthru(' => 'Passthru execution',
+                'popen(' => 'Process pipe execution',
+                'proc_open(' => 'Process execution',
+                
+                // Obfuscation
+                'base64_decode(' => 'Base64 encoded payload',
+                'gzinflate(' => 'Compressed payload',
+                'gzuncompress(' => 'Uncompressed payload',
+                'str_rot13(' => 'ROT13 obfuscation',
+                'convert_uudecode(' => 'UU decode obfuscation',
+                'hex2bin(' => 'Hex to binary conversion',
+                
+                // File operations
+                'file_put_contents(' => 'File writing operation',
+                'fwrite(' => 'File write operation',
+                'fputs(' => 'File output operation',
+                'move_uploaded_file(' => 'File upload processing',
+                
+                // Network operations
+                'fsockopen(' => 'Socket connection',
+                'socket_create(' => 'Raw socket creation',
+                'curl_exec(' => 'HTTP request execution',
+                
+                // Dangerous variables
+                '$_GET[' => 'GET parameter usage',
+                '$_POST[' => 'POST parameter usage', 
+                '$_REQUEST[' => 'REQUEST parameter usage',
+                '$_COOKIE[' => 'Cookie parameter usage',
+                
+                // Common malware patterns
+                '<?=@eval(' => 'Short tag eval execution',
+                '<?php eval(' => 'Direct PHP eval',
+                '@eval(' => 'Suppressed eval execution',
+                'goto ' => 'Control flow manipulation',
+                'goto' => 'Goto statement detected (any form)',
+                'goto;' => 'Goto with semicolon',
+                '$_F=__FILE__;' => 'File reference manipulation',
+                'readdir(' => 'Directory reading',
+                'scandir(' => 'Directory scanning',
+                'unlink(' => 'File deletion',
+                'rmdir(' => 'Directory removal',
+                'chmod(' => 'Permission modification',
+                
+                // Common webshell indicators
+                'c99' => 'C99 webshell',
+                'r57' => 'R57 webshell', 
+                'wso' => 'WSO webshell',
+                'b374k' => 'B374K webshell',
+                'adminer' => 'Adminer file manager',
+                'shell' => 'Shell reference',
+                'backdoor' => 'Backdoor reference',
+                'hack' => 'Hack reference',
+                'exploit' => 'Exploit reference',
+                'malware' => 'Malware reference',
+                'trojan' => 'Trojan reference'
+            ];
+            
             // Merge all critical patterns
             $criticalPatterns = array_merge(
                 $patterns['critical_malware_patterns'] ?? [],
-                $patterns['severe_patterns'] ?? []
+                $patterns['severe_patterns'] ?? [],
+                $enhancedCriticalPatterns
             );
 
             // Use warning patterns from API/fallback
@@ -389,6 +455,9 @@ class SecurityScanner {
 
             // Bắt đầu quét - ưu tiên priority files trước
             $this->scanDirectoryWithPriority('./', $criticalPatterns, $suspiciousPatterns, $webshellPatterns, $priorityFiles);
+            
+            // Debug logging
+            error_log("Security scan completed - Files scanned: {$this->scannedFiles}, Suspicious found: " . count($this->suspiciousFiles));
 
             // Tạo kết quả
             $this->generateScanResults();
@@ -396,10 +465,15 @@ class SecurityScanner {
             return [
                 'success' => true,
                 'client_info' => [
+                    'id' => SecurityClientConfig::CLIENT_NAME, // Use client name as ID
                     'name' => SecurityClientConfig::CLIENT_NAME,
                     'version' => SecurityClientConfig::CLIENT_VERSION,
                     'domain' => $_SERVER['HTTP_HOST'] ?? 'unknown',
-                    'scan_time' => time() - $this->scanStartTime
+                    'url' => 'http' . (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 's' : '') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . dirname($_SERVER['SCRIPT_NAME'] ?? ''),
+                    'client_url' => 'http' . (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 's' : '') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . $_SERVER['SCRIPT_NAME'],
+                    'api_key' => SecurityClientConfig::API_KEY,
+                    'scan_time' => time() - $this->scanStartTime,
+                    'timestamp' => time()
                 ],
                 'scan_results' => $this->scanResults,
                 'timestamp' => date('Y-m-d H:i:s')
@@ -422,7 +496,8 @@ class SecurityScanner {
             return;
         }
 
-        $excludeDirs = ['.git', '.svn', 'node_modules', 'vendor', 'cache', 'logs', 'tmp', 'temp'];
+        // Only exclude version control and package manager dirs - be more selective
+        $excludeDirs = ['.git', '.svn', 'node_modules', 'vendor'];
         $excludeFiles = [
             'security_scan_client.php', 
             'security_scan_server.php',
@@ -473,9 +548,42 @@ class SecurityScanner {
                         continue;
                     }
                     
-                    // Quét file PHP và các file nghi ngờ
-                    if ($extension === 'php' || strpos($fileName, '.php.') !== false ||
-                        $this->isSuspiciousFileExtension($fileName)) {
+                    // Enhanced file scanning - scan more file types
+                    $shouldScanFile = false;
+                    
+                    // Always scan PHP files
+                    if ($extension === 'php' || strpos($fileName, '.php.') !== false) {
+                        $shouldScanFile = true;
+                    }
+                    
+                    // Scan suspicious extensions
+                    if ($this->isSuspiciousFileExtension($fileName)) {
+                        $shouldScanFile = true;
+                    }
+                    
+                    // Scan files with no extension (could be malware)
+                    if (empty($extension) && filesize($filePath) > 0) {
+                        $shouldScanFile = true;
+                    }
+                    
+                    // Scan text-based files that could contain malware
+                    $textExtensions = ['txt', 'inc', 'conf', 'config', 'log', 'dat', 'cache'];
+                    if (in_array($extension, $textExtensions)) {
+                        $shouldScanFile = true;
+                    }
+                    
+                    // Scan files with suspicious names regardless of extension
+                    $suspiciousNames = ['shell', 'hack', 'backdoor', 'c99', 'r57', 'wso', 'b374k', 'adminer'];
+                    foreach ($suspiciousNames as $suspName) {
+                        if (stripos($fileName, $suspName) !== false) {
+                            $shouldScanFile = true;
+                            break;
+                        }
+                    }
+                    
+                    if ($shouldScanFile) {
+                        // Debug logging for file scanning
+                        error_log("Scanning file: {$filePath}");
                         $this->scanFile($filePath, $criticalPatterns, $suspiciousPatterns, $webshellPatterns);
                         $this->scannedFiles++;
                     }
@@ -493,7 +601,8 @@ class SecurityScanner {
             return;
         }
 
-        $excludeDirs = ['.git', '.svn', 'node_modules', 'vendor', 'cache', 'logs', 'tmp', 'temp'];
+        // Only exclude version control and package manager dirs - be more selective  
+        $excludeDirs = ['.git', '.svn', 'node_modules', 'vendor'];
         $excludeFiles = [
             'security_scan_client.php', 
             'security_scan_server.php',
@@ -608,13 +717,19 @@ class SecurityScanner {
     
     private function scanFile($filePath, $criticalPatterns, $suspiciousPatterns, $webshellPatterns = [], $isPriority = false) {
         if (!file_exists($filePath) || !is_readable($filePath)) {
+            error_log("SCAN ERROR: File not exists/readable: {$filePath}");
             return;
         }
 
         $content = @file_get_contents($filePath);
         if ($content === false) {
+            error_log("SCAN ERROR: Cannot read file content: {$filePath}");
             return;
         }
+
+        // Debug: Log file scanning with basic content info
+        $contentLength = strlen($content);
+        error_log("SCANNING FILE: {$filePath} (Size: {$contentLength} bytes)");
 
         $issues = [];
 
@@ -622,6 +737,10 @@ class SecurityScanner {
         foreach ($criticalPatterns as $pattern => $description) {
             if (strpos($content, $pattern) !== false) {
                 $lineNumber = $this->findPatternLineNumber($content, $pattern);
+                
+                // Debug logging for pattern detection
+                error_log("CRITICAL PATTERN FOUND in {$filePath}: {$pattern} at line {$lineNumber}");
+                
                 $issues[] = [
                     'pattern' => $pattern,
                     'description' => $description,
@@ -782,8 +901,22 @@ class SecurityScanner {
 
     private function findPatternLineNumber($content, $pattern) {
         $lines = explode("\n", $content);
+        
+        // Check if pattern is a regex (starts with / and contains regex flags)
+        $isRegex = (strpos($pattern, '/') === 0 && preg_match('/\/[imsxADSUXJu]*$/', $pattern));
+        
         foreach ($lines as $lineNum => $line) {
-            if (strpos($line, $pattern) !== false) {
+            $found = false;
+            
+            if ($isRegex) {
+                // Use preg_match for regex patterns
+                $found = @preg_match($pattern, $line);
+            } else {
+                // Use strpos for simple string patterns
+                $found = (strpos($line, $pattern) !== false);
+            }
+            
+            if ($found) {
                 return $lineNum + 1;
             }
         }
@@ -792,8 +925,22 @@ class SecurityScanner {
 
     private function getContextAroundPattern($content, $pattern) {
         $lines = explode("\n", $content);
+        
+        // Check if pattern is a regex (starts with / and contains regex flags)
+        $isRegex = (strpos($pattern, '/') === 0 && preg_match('/\/[imsxADSUXJu]*$/', $pattern));
+        
         foreach ($lines as $lineNum => $line) {
-            if (strpos($line, $pattern) !== false) {
+            $found = false;
+            
+            if ($isRegex) {
+                // Use preg_match for regex patterns
+                $found = @preg_match($pattern, $line);
+            } else {
+                // Use strpos for simple string patterns
+                $found = (strpos($line, $pattern) !== false);
+            }
+            
+            if ($found) {
                 $start = max(0, $lineNum - 2);
                 $end = min(count($lines) - 1, $lineNum + 2);
                 $context = [];

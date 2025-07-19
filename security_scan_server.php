@@ -952,9 +952,53 @@ if (isset($_GET['api'])) {
                 break;
             }
 
+            // Try to get client from database first
             $client = $clientManager->getClient($clientId);
+            
+            // If not found and clientId looks like temp client, try to extract from session or reconstruct
+            if (!$client && strpos($clientId, 'temp_client_') === 0) {
+                // Try to find client in session or reconstruct from common patterns
+                $allClients = $clientManager->getClients();
+                
+                // Extract index from temp client ID
+                if (preg_match('/temp_client_(\d+)/', $clientId, $matches)) {
+                    $index = (int)$matches[1];
+                    if (isset($allClients[$index])) {
+                        $client = $allClients[$index];
+                    }
+                }
+                
+                // If still not found, try to find by similar name patterns
+                if (!$client) {
+                    foreach ($allClients as $c) {
+                        if (strpos($clientId, 'xemay365') !== false && strpos($c['url'], 'xemay365') !== false) {
+                            $client = $c;
+                            break;
+                        } else if (strpos($clientId, 'hiep') !== false && strpos($c['url'], 'hiep') !== false) {
+                            $client = $c;
+                            break;
+                        } else if (strpos($clientId, 'local') !== false && strpos($c['url'], 'localhost') !== false) {
+                            $client = $c;
+                            break;
+                        }
+                    }
+                }
+            }
+            
             if (!$client) {
-                echo json_encode(['success' => false, 'error' => 'Client not found']);
+                // Enhanced error with debug info
+                $allClients = $clientManager->getClients();
+                echo json_encode([
+                    'success' => false, 
+                    'error' => 'Client not found',
+                    'debug' => [
+                        'requested_client_id' => $clientId,
+                        'available_clients' => array_map(function($c) {
+                            return ['id' => $c['id'], 'name' => $c['name'], 'url' => $c['url']];
+                        }, $allClients),
+                        'is_temp_client' => strpos($clientId, 'temp_client_') === 0
+                    ]
+                ]);
                 break;
             }
 
@@ -3773,8 +3817,9 @@ if (isset($_GET['api'])) {
                                             <div class="d-flex justify-content-between align-items-start">
                                                 <div class="flex-grow-1">
                                                     ${getSeverityBadge(issue.severity)}
-                                                    <span class="ms-2 fw-bold text-danger">${issue.pattern}</span>
+                                                    <span class="ms-2 fw-bold text-danger">${issue.description || issue.pattern}</span>
                                                     ${(issue.line_number || issue.line) ? `<span class="ms-2 badge bg-dark">Dòng ${issue.line_number || issue.line}</span>` : ''}
+                                                    ${issue.pattern && issue.description && issue.pattern !== issue.description ? `<div class="mt-1"><small class="text-muted font-monospace" style="font-size: 9px;">Pattern: ${issue.pattern.length > 50 ? issue.pattern.substring(0, 50) + '...' : issue.pattern}</small></div>` : ''}
                                                 </div>
                                             </div>
                                             ${issue.description ? `<div class="mt-1"><small class="text-muted">${issue.description}</small></div>` : ''}
@@ -5298,8 +5343,9 @@ if (isset($_GET['api'])) {
                                                  <div class="d-flex justify-content-between align-items-start">
                                                      <div class="flex-grow-1">
                                                          ${getSeverityBadge(issue.severity)}
-                                                         <span class="ms-2 fw-bold text-danger">${issue.pattern}</span>
+                                                         <span class="ms-2 fw-bold text-danger">${issue.description || issue.pattern}</span>
                                                          ${(issue.line_number || issue.line) ? `<span class="ms-2 badge bg-dark">Dòng ${issue.line_number || issue.line}</span>` : ''}
+                                                         ${issue.pattern && issue.description && issue.pattern !== issue.description ? `<div class="mt-1"><small class="text-muted font-monospace" style="font-size: 9px;">Pattern: ${issue.pattern.length > 50 ? issue.pattern.substring(0, 50) + '...' : issue.pattern}</small></div>` : ''}
                                                      </div>
                                                  </div>
                                                  ${issue.description ? `<div class="mt-1"><small class="text-muted">${issue.description}</small></div>` : ''}
@@ -5335,35 +5381,56 @@ if (isset($_GET['api'])) {
         }
 
         function viewThreatInClient(clientIndex, filePath) {
+            console.log('viewThreatInClient called:', { clientIndex, filePath, allClientResults });
+            
             const result = allClientResults[clientIndex];
             if (!result) {
+                console.error('Result not found for clientIndex:', clientIndex);
+                console.log('Available results:', allClientResults);
                 Swal.fire({
                     icon: 'error',
-                    title: 'Lỗi!',
-                    text: 'Không tìm thấy thông tin client.'
+                    title: 'Lỗi Debug Info!',
+                    html: `
+                        <div class="text-start">
+                            <p><strong>Client Index:</strong> ${clientIndex}</p>
+                            <p><strong>Total Results:</strong> ${allClientResults?.length || 0}</p>
+                            <p><strong>Available Indices:</strong> ${allClientResults?.map((r, i) => i).join(', ') || 'None'}</p>
+                            <p><strong>File Path:</strong> ${filePath}</p>
+                        </div>
+                    `
                 });
                 return;
             }
 
-            // Try to get client from multiple sources
+            // Try to get client from multiple sources with enhanced fallback
             let client = result.client_info || result.client || {};
             
-            // If still no client info, try to find in original clients array
-            if (!client.id && !client.name) {
-                const originalClient = clients[clientIndex];
-                if (originalClient) {
-                    client = originalClient;
+            // Enhanced client info extraction
+            if (!client.url && !client.domain) {
+                // Try to find matching client from original clients array by name or other info
+                const possibleClient = clients.find(c => 
+                    c.name === (result.client_name || client.name) ||
+                    c.id === (result.client_id || client.id)
+                );
+                
+                if (possibleClient) {
+                    console.log('Found matching client:', possibleClient);
+                    client = { ...client, ...possibleClient };
+                } else if (clients[clientIndex]) {
+                    console.log('Using fallback client by index:', clients[clientIndex]);
+                    client = { ...client, ...clients[clientIndex] };
                 }
             }
 
-            const tempClientId = client.id || `temp_client_${clientIndex}`;
+            const tempClientId = client.id || `temp_client_${clientIndex}_${Date.now()}`;
 
             console.log('Opening editor for:', {
                 clientIndex,
                 filePath,
                 client,
                 tempClientId,
-                allClientResults: allClientResults[clientIndex]
+                resultKeys: Object.keys(result),
+                clientKeys: Object.keys(client)
             });
 
             // Ensure client exists in clients array
