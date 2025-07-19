@@ -1957,6 +1957,12 @@ if (isset($_GET['api'])) {
         #monacoEditor {
             border: none;
             outline: none;
+            resize: both;
+            overflow: hidden;
+            min-width: 400px;
+            min-height: 300px;
+            max-width: 95%;
+            max-height: 70vh;
         }
 
         .modal-xl {
@@ -2232,57 +2238,7 @@ if (isset($_GET['api'])) {
             border-radius: 0 0 12px 12px;
         }
 
-        /* Tooltip Styles */
-        .threat-tooltip {
-            position: absolute;
-            background: #1f2937;
-            color: white;
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 12px;
-            max-width: 300px;
-            z-index: 9999;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.2s ease;
-            word-wrap: break-word;
-        }
-
-        .threat-tooltip.show {
-            opacity: 1;
-        }
-
-        .threat-tooltip::before {
-            content: '';
-            position: absolute;
-            top: -6px;
-            left: 20px;
-            border-left: 6px solid transparent;
-            border-right: 6px solid transparent;
-            border-bottom: 6px solid #1f2937;
-        }
-
-        .threat-issue-item {
-            margin-bottom: 8px;
-            padding: 8px 12px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-        }
-
-        .threat-issue-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .threat-issue-line {
-            font-weight: 600;
-            color: #fbbf24;
-        }
-
-        .threat-issue-reason {
-            color: #d1d5db;
-            margin-top: 4px;
-        }
+        /* Tooltip styles removed */
 
         /* Enhanced threat card with tooltip trigger */
         .threat-card:hover {
@@ -3147,14 +3103,13 @@ if (isset($_GET['api'])) {
                 const ageInfo = getAgeInfo(file.metadata?.modified_time);
                 const fileSize = formatFileSize(file.metadata?.size || 0);
                 
-                // Store issues data directly in element for tooltip
-                const issuesData = JSON.stringify(file.issues || []);
+                // Issues data not needed since tooltip removed
                 
                 return `
                     <div class="threat-card ${severity} fade-in-up" 
                          data-file-path="${file.path}"
-                         data-issues='${issuesData.replace(/'/g, '&#39;')}'
-                         onmouseenter="showThreatTooltipFromCard(event, this)"
+
+
                          onmouseleave="hideThreatTooltip()">
                         <div class="threat-header">
                             <h4 class="threat-file">
@@ -4220,135 +4175,7 @@ if (isset($_GET['api'])) {
             }
         }
 
-        // Tooltip Functions
-        let currentTooltip = null;
-        
-        function showThreatTooltipFromCard(event, cardElement) {
-            // Remove existing tooltip
-            hideThreatTooltip();
-            
-            const filePath = cardElement.getAttribute('data-file-path');
-            const issuesDataStr = cardElement.getAttribute('data-issues');
-            
-            if (!issuesDataStr) {
-                // Fallback - show basic info if no issues data
-                showBasicTooltip(event, cardElement, filePath);
-                return;
-            }
-            
-            try {
-                const issues = JSON.parse(issuesDataStr);
-                if (!issues || issues.length === 0) {
-                    showBasicTooltip(event, cardElement, filePath);
-                    return;
-                }
-                
-                // Create tooltip content
-                const content = issues.map(issue => 
-                    `<div class="threat-issue-item">
-                        <div class="threat-issue-line">Dòng ${issue.line || 'N/A'}</div>
-                        <div class="threat-issue-reason">${issue.description || issue.pattern || ''}</div>
-                    </div>`
-                ).join('');
-                
-                // Create tooltip
-                currentTooltip = document.createElement('div');
-                currentTooltip.className = 'threat-tooltip';
-                currentTooltip.innerHTML = `
-                    <div style="font-weight: 600; margin-bottom: 8px; color: #fbbf24;">
-                        <i class="fas fa-exclamation-triangle me-1"></i>
-                        Threats trong ${filePath}:
-                    </div>
-                    ${content}
-                `;
-                
-                document.body.appendChild(currentTooltip);
-                
-                // Position tooltip
-                const rect = cardElement.getBoundingClientRect();
-                const tooltipRect = currentTooltip.getBoundingClientRect();
-                
-                let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
-                let top = rect.top - tooltipRect.height - 10;
-                
-                // Adjust if tooltip goes off screen
-                if (left < 10) left = 10;
-                if (left + tooltipRect.width > window.innerWidth - 10) {
-                    left = window.innerWidth - tooltipRect.width - 10;
-                }
-                if (top < 10) {
-                    top = rect.bottom + 10;
-                }
-                
-                currentTooltip.style.left = left + 'px';
-                currentTooltip.style.top = top + 'px';
-                
-                // Show tooltip
-                setTimeout(() => {
-                    if (currentTooltip) {
-                        currentTooltip.classList.add('show');
-                    }
-                }, 50);
-                
-            } catch (e) {
-                console.error('Error parsing tooltip data:', e);
-            }
-        }
-        
-        function showBasicTooltip(event, cardElement, filePath) {
-            // Create basic tooltip for files without detailed issues
-            currentTooltip = document.createElement('div');
-            currentTooltip.className = 'threat-tooltip';
-            currentTooltip.innerHTML = `
-                <div style="font-weight: 600; margin-bottom: 8px; color: #fbbf24;">
-                    <i class="fas fa-file-code me-1"></i>
-                    File: ${filePath}
-                </div>
-                <div style="color: #d1d5db;">
-                    Click "Sửa" để xem chi tiết và chỉnh sửa file này.
-                </div>
-            `;
-            
-            document.body.appendChild(currentTooltip);
-            
-            // Position tooltip
-            const rect = cardElement.getBoundingClientRect();
-            const tooltipRect = currentTooltip.getBoundingClientRect();
-            
-            let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
-            let top = rect.top - tooltipRect.height - 10;
-            
-            // Adjust if tooltip goes off screen
-            if (left < 10) left = 10;
-            if (left + tooltipRect.width > window.innerWidth - 10) {
-                left = window.innerWidth - tooltipRect.width - 10;
-            }
-            if (top < 10) {
-                top = rect.bottom + 10;
-            }
-            
-            currentTooltip.style.left = left + 'px';
-            currentTooltip.style.top = top + 'px';
-            
-            // Show tooltip
-            setTimeout(() => {
-                if (currentTooltip) {
-                    currentTooltip.classList.add('show');
-                }
-            }, 50);
-        }
-        
-        function hideThreatTooltip() {
-            if (currentTooltip) {
-                currentTooltip.classList.remove('show');
-                setTimeout(() => {
-                    if (currentTooltip && currentTooltip.parentNode) {
-                        currentTooltip.parentNode.removeChild(currentTooltip);
-                    }
-                    currentTooltip = null;
-                }, 200);
-            }
-        }
+        // Tooltip functions removed to avoid errors
         
         // Time ago function
         function getTimeAgo(timestamp) {

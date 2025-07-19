@@ -1552,13 +1552,7 @@ function handleSaveFileRequest() {
     }
     
     try {
-        // Backup original file
-        $backupPath = $filePath . '.backup.' . date('Y-m-d_H-i-s');
-        if (file_exists($filePath)) {
-            copy($filePath, $backupPath);
-        }
-        
-        // Write new content
+        // Write new content directly (no backup needed)
         $bytesWritten = file_put_contents($filePath, $content);
         
         if ($bytesWritten === false) {
@@ -1569,8 +1563,7 @@ function handleSaveFileRequest() {
             'success' => true,
             'message' => 'File saved successfully',
             'file_path' => $filePath,
-            'size' => $bytesWritten,
-            'backup_path' => $backupPath
+            'size' => $bytesWritten
         ]);
     } catch (Exception $e) {
         echo json_encode([
