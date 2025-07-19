@@ -662,12 +662,15 @@ class EmailManager
                                 <button class="btn btn-sm btn-outline-info" onclick="findInCode()">
                                     <i class="fas fa-search me-1"></i>Find
                                 </button>
+                                <button class="btn btn-sm btn-outline-dark" onclick="toggleFullscreen()" id="fullscreenBtn">
+                                    <i class="fas fa-expand me-1"></i>Fullscreen
+                                </button>
                                 <button class="btn btn-sm btn-success" onclick="saveCode()">
                                     <i class="fas fa-save me-1"></i>Save
                                 </button>
                             </div>
                         </div>
-                        <div id="monacoEditor" style="height: 500px; width: 100%;"></div>
+                        <div id="monacoEditor" style="height: 600px; width: 100%;"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -2073,6 +2076,43 @@ if (isset($_GET['api'])) {
             max-height: 70vh;
         }
 
+        /* Fullscreen Modal Styles */
+        .fullscreen-modal {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: none !important;
+            max-height: none !important;
+            margin: 0 !important;
+            z-index: 9999 !important;
+        }
+
+        .fullscreen-modal .modal-dialog {
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: none !important;
+            max-height: none !important;
+            margin: 0 !important;
+        }
+
+        .fullscreen-modal .modal-content {
+            width: 100% !important;
+            height: 100vh !important;
+            border-radius: 0 !important;
+            border: none !important;
+        }
+
+        .fullscreen-modal .modal-body {
+            height: calc(100vh - 120px) !important;
+        }
+
+        .fullscreen-modal #monacoEditor {
+            height: calc(100vh - 180px) !important;
+            max-height: none !important;
+        }
+
         .modal-xl {
             max-width: 90vw;
         }
@@ -3179,7 +3219,7 @@ if (isset($_GET['api'])) {
 
             <!-- System Health -->
             <div class="col-12 col-lg-4 mb-4">
-                <div class="bento-item h-100">
+                <div class="bento-item h-100 ">
                     <div class="card-header-modern">
                         <div class="card-icon">
                             <i class="fas fa-heartbeat"></i>
@@ -4438,12 +4478,15 @@ if (isset($_GET['api'])) {
                                                                     <button class="btn btn-sm btn-outline-info" onclick="findInCode()">
                                                                         <i class="fas fa-search me-1"></i>Find
                                                                     </button>
+                                                                    <button class="btn btn-sm btn-outline-dark" onclick="toggleFullscreen()" id="fullscreenBtn">
+                                                                        <i class="fas fa-expand me-1"></i>Fullscreen
+                                                                    </button>
                                                                     <button class="btn btn-sm btn-success" onclick="saveCode()">
                                                                         <i class="fas fa-save me-1"></i>Save
                                                                     </button>
                                                                 </div>
                                                             </div>
-                                                            <div id="monacoEditor" style="height: 500px; width: 100%;"></div>
+                                                            <div id="monacoEditor" style="height: 600px; width: 100%;"></div>
                                                         </div>
                                                     </div>
                                                     <div class="modal-footer">
@@ -4606,6 +4649,38 @@ if (isset($_GET['api'])) {
         function findInCode() {
             if (monacoEditor) {
                 monacoEditor.trigger('', 'actions.find');
+            }
+        }
+
+        // Toggle fullscreen
+        function toggleFullscreen() {
+            const modal = document.getElementById('codeEditorModal');
+            const btn = document.getElementById('fullscreenBtn');
+            
+            if (!modal || !btn) return;
+            
+            if (modal.classList.contains('fullscreen-modal')) {
+                // Exit fullscreen
+                modal.classList.remove('fullscreen-modal');
+                btn.innerHTML = '<i class="fas fa-expand me-1"></i>Fullscreen';
+                
+                // Resize editor
+                setTimeout(() => {
+                    if (monacoEditor) {
+                        monacoEditor.layout();
+                    }
+                }, 100);
+            } else {
+                // Enter fullscreen
+                modal.classList.add('fullscreen-modal');
+                btn.innerHTML = '<i class="fas fa-compress me-1"></i>Exit Fullscreen';
+                
+                // Resize editor
+                setTimeout(() => {
+                    if (monacoEditor) {
+                        monacoEditor.layout();
+                    }
+                }, 100);
             }
         }
 
@@ -5092,13 +5167,27 @@ if (isset($_GET['api'])) {
                                          <strong>${threat.issues.length} issues:</strong>
                                      </small>
                                      <div class="mt-1">
-                                         ${threat.issues.slice(0, 2).map(issue => `
-                                             <div class="d-inline-block me-2 mb-1">
-                                                 ${getSeverityBadge(issue.severity)}
-                                                 <small class="ms-1">${issue.pattern}</small>
+                                         ${threat.issues.slice(0, 3).map(issue => `
+                                             <div class="issue-item border rounded p-2 mb-2" style="background: #fef2f2; border-color: #fecaca !important;">
+                                                 <div class="d-flex justify-content-between align-items-start">
+                                                     <div class="flex-grow-1">
+                                                         ${getSeverityBadge(issue.severity)}
+                                                         <span class="ms-2 fw-bold text-danger">${issue.pattern}</span>
+                                                         ${(issue.line_number || issue.line) ? `<span class="ms-2 badge bg-dark">Dòng ${issue.line_number || issue.line}</span>` : ''}
+                                                     </div>
+                                                 </div>
+                                                 ${issue.description ? `<div class="mt-1"><small class="text-muted">${issue.description}</small></div>` : ''}
+                                                 ${issue.context ? `<div class="mt-1"><code style="font-size: 11px; background: #f8f9fa; padding: 2px 4px; border-radius: 3px;">${issue.context.substring(0, 100)}...</code></div>` : ''}
                                              </div>
                                          `).join('')}
-                                         ${threat.issues.length > 2 ? `<small class="text-muted">+${threat.issues.length - 2} more</small>` : ''}
+                                         ${threat.issues.length > 3 ? `
+                                             <div class="mt-2 p-2 bg-light border rounded">
+                                                 <small class="text-muted">
+                                                     <i class="fas fa-info-circle me-1"></i>
+                                                     Và ${threat.issues.length - 3} issues khác. Click <strong>Edit</strong> để xem toàn bộ.
+                                                 </small>
+                                             </div>
+                                         ` : ''}
                                      </div>
                                  </div>
                              ` : ''}
@@ -5121,25 +5210,67 @@ if (isset($_GET['api'])) {
 
         function viewThreatInClient(clientIndex, filePath) {
             const result = allClientResults[clientIndex];
-            if (!result) return;
+            if (!result) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Lỗi!',
+                    text: 'Không tìm thấy thông tin client.'
+                });
+                return;
+            }
 
-            const client = result.client_info || {};
-            const tempClientId = client.id || `client_${clientIndex}`;
+            // Try to get client from multiple sources
+            let client = result.client_info || result.client || {};
+            
+            // If still no client info, try to find in original clients array
+            if (!client.id && !client.name) {
+                const originalClient = clients[clientIndex];
+                if (originalClient) {
+                    client = originalClient;
+                }
+            }
 
-            // Store current client context
-            const previousClientId = currentClientId;
-            currentClientId = tempClientId;
+            const tempClientId = client.id || `temp_client_${clientIndex}`;
+
+            console.log('Opening editor for:', {
+                clientIndex,
+                filePath,
+                client,
+                tempClientId,
+                allClientResults: allClientResults[clientIndex]
+            });
 
             // Ensure client exists in clients array
-            if (!clients.find(c => c.id === tempClientId)) {
-                clients.push({
+            let existingClient = clients.find(c => c.id === tempClientId);
+            if (!existingClient) {
+                const newClient = {
                     id: tempClientId,
                     name: client.name || `Client ${clientIndex + 1}`,
-                    url: client.url || client.domain || '',
-                    api_key: client.api_key || '',
-                    domain: client.domain || client.url || ''
-                });
+                    url: client.url || client.domain || client.client_url || '',
+                    api_key: client.api_key || 'default-api-key',
+                    domain: client.domain || client.url || client.client_url || ''
+                };
+                clients.push(newClient);
+                existingClient = newClient;
+                console.log('Added temp client:', newClient);
             }
+
+                         // Validate client info before opening editor
+             if (!existingClient.url || existingClient.url === '') {
+                 Swal.fire({
+                     icon: 'warning',
+                     title: 'Thiếu thông tin client!',
+                     html: `
+                         <div class="text-start">
+                             <p><strong>Không có URL của client để mở editor.</strong></p>
+                             <p><small>Client: ${existingClient.name}</small></p>
+                             <p><small>File: ${filePath}</small></p>
+                             <p><small class="text-muted">Hãy đảm bảo rằng thông tin client đã được cấu hình đúng.</small></p>
+                         </div>
+                     `
+                 });
+                 return;
+             }
 
             // Use the same logic as single client threat viewing
             openFileInEditor(tempClientId, filePath);
