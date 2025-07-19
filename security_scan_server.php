@@ -1584,6 +1584,16 @@ if (isset($_GET['api'])) {
             color: var(--text-secondary);
         }
 
+        .meta-time {
+            background: #f3f4f6;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
+        }
+
+        .meta-time i {
+            font-size: 0.6rem;
+        }
+
         .threat-details {
             font-size: 0.85rem;
             color: var(--text-secondary);
@@ -2364,6 +2374,12 @@ if (isset($_GET['api'])) {
 
         .recent-threat-meta {
             display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .meta-row {
+            display: flex;
             justify-content: space-between;
             align-items: center;
         }
@@ -2375,9 +2391,51 @@ if (isset($_GET['api'])) {
             font-weight: 600;
         }
 
+        .recent-threat-age {
+            font-size: 9px;
+            padding: 1px 6px;
+            border-radius: 8px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .recent-threat-age.new {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+
+        .recent-threat-age.recent {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+
+        .recent-threat-age.old {
+            background: #f3f4f6;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
+        }
+
         .recent-threat-time {
             font-size: 10px;
             color: #6b7280;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .time-relative {
+            font-weight: 600;
+            color: #4b5563;
+        }
+
+        .time-absolute {
+            font-size: 9px;
+            color: #9ca3af;
+            font-weight: 400;
+            margin-top: 1px;
         }
 
         .sidebar-footer {
@@ -3290,7 +3348,7 @@ if (isset($_GET['api'])) {
                         <div class="sidebar-footer">
                             <small class="text-muted">
                                 <i class="fas fa-info-circle me-1"></i>
-                                Hiển thị file được tạo/sửa trong 7 ngày qua
+                                Hiển thị files <strong>nguy hiểm</strong> được phát hiện trong <strong>5 tháng qua</strong>
                             </small>
                         </div>
                     </div>
@@ -3637,12 +3695,18 @@ if (isset($_GET['api'])) {
                 return (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0);
             });
 
-            // Filter recent threats (last 7 days)
+            // Filter recent threats (last 5 months) - Only critical, severe, and suspicious files  
             const now = Date.now() / 1000;
             const recentThreats = sortedFiles.filter(file => {
                 const fileTime = file.metadata?.modified_time || 0;
                 const age = now - fileTime;
-                return age < 7 * 24 * 3600; // 7 days
+                
+                // Only show files in last 5 months
+                if (age >= 5 * 30 * 24 * 3600) return false;
+                
+                // Only show files with critical, severe issues or suspicious extensions
+                return file.category === 'critical' || file.category === 'webshell' || 
+                       file.path.includes('.php.') || file.severity === 'critical';
             }).slice(0, 10); // Limit to 10 most recent
 
             scanResultsDiv.style.display = 'block';
@@ -3654,6 +3718,7 @@ if (isset($_GET['api'])) {
             threatsContainer.innerHTML = sortedFiles.map(file => {
                 const severity = getSeverityLevel(file);
                 const ageInfo = getAgeInfo(file.metadata?.modified_time);
+                const timeInfo = getTimeInfo(file.metadata?.modified_time);
                 const fileSize = formatFileSize(file.metadata?.size || 0);
 
                 // Issues data not needed since tooltip removed
@@ -3681,17 +3746,50 @@ if (isset($_GET['api'])) {
                         
                         <div class="threat-meta">
                             <span class="meta-badge meta-severity ${severity}">${getSeverityLabel(severity)}</span>
-                            <span class="meta-badge meta-age ${ageInfo.class}">${ageInfo.label}</span>
+                            <span class="meta-badge meta-age ${ageInfo.class}" title="${timeInfo.tooltip}">${ageInfo.label}</span>
                             <span class="meta-badge meta-size">${fileSize}</span>
+                            <span class="meta-badge meta-time" title="${timeInfo.tooltip}">
+                                <i class="fas fa-clock me-1"></i>${timeInfo.relative}
+                            </span>
                         </div>
                         
                         <div class="threat-details">
                             <strong>${file.issues?.length || 0} vấn đề phát hiện:</strong>
-                            <div class="threat-patterns">
-                                ${(file.issues || []).slice(0, 3).map(issue => 
-                                    `<span class="threat-pattern">${issue.pattern}</span>`
-                                ).join('')}
-                                ${(file.issues || []).length > 3 ? '<span class="threat-pattern">...</span>' : ''}
+                            <div class="threat-issues">
+                                ${(file.issues || []).slice(0, 3).map(issue => {
+                                    const getSeverityBadge = (severity) => {
+                                        const badges = {
+                                            'critical': '<span class="badge bg-danger">Critical</span>',
+                                            'high': '<span class="badge bg-warning">High</span>',
+                                            'medium': '<span class="badge bg-info">Medium</span>',
+                                            'low': '<span class="badge bg-secondary">Low</span>',
+                                            'warning': '<span class="badge bg-warning">Warning</span>'
+                                        };
+                                        return badges[severity] || '<span class="badge bg-secondary">Unknown</span>';
+                                    };
+                                    
+                                    return `
+                                        <div class="issue-item border rounded p-2 mb-2" style="background: #fef2f2; border-color: #fecaca !important;">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div class="flex-grow-1">
+                                                    ${getSeverityBadge(issue.severity)}
+                                                    <span class="ms-2 fw-bold text-danger">${issue.pattern}</span>
+                                                    ${(issue.line_number || issue.line) ? `<span class="ms-2 badge bg-dark">Dòng ${issue.line_number || issue.line}</span>` : ''}
+                                                </div>
+                                            </div>
+                                            ${issue.description ? `<div class="mt-1"><small class="text-muted">${issue.description}</small></div>` : ''}
+                                            ${issue.context ? `<div class="mt-1"><code style="font-size: 11px; background: #f8f9fa; padding: 2px 4px; border-radius: 3px;">${issue.context.substring(0, 100)}...</code></div>` : ''}
+                                        </div>
+                                    `;
+                                }).join('')}
+                                ${(file.issues || []).length > 3 ? `
+                                    <div class="mt-2 p-2 bg-light border rounded">
+                                        <small class="text-muted">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            Và ${(file.issues || []).length - 3} issues khác. Click <strong>Sửa</strong> để xem toàn bộ.
+                                        </small>
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
                     </div>
@@ -3702,25 +3800,53 @@ if (isset($_GET['api'])) {
             if (recentThreats.length > 0) {
                 recentThreatsContainer.innerHTML = recentThreats.map(file => {
                     const severity = getSeverityLevel(file);
-                    const timeAgo = getTimeAgo(file.metadata?.modified_time);
+                    const timeInfo = getTimeInfo(file.metadata?.modified_time);
+                    const ageInfo = getAgeInfo(file.metadata?.modified_time);
 
                     return `
                         <div class="recent-threat-item">
                             <div class="recent-threat-header">
-                                <div class="recent-threat-file" onclick="viewThreat('${file.path}')">${file.path}</div>
+                                <div class="recent-threat-file" onclick="viewThreat('${file.path}')" title="Click để mở editor">${file.path}</div>
                                 <button class="recent-threat-delete" onclick="deleteFile('${file.path}')" title="Xóa file">
                                     <i class="fas fa-times"></i>
                                 </button>
                             </div>
                             <div class="recent-threat-meta">
-                                <span class="recent-threat-severity ${severity}">${getSeverityLabel(severity)}</span>
-                                <span class="recent-threat-time">${timeAgo}</span>
+                                <div class="meta-row">
+                                    <span class="recent-threat-severity ${severity}">${getSeverityLabel(severity)}</span>
+                                    <span class="recent-threat-age ${ageInfo.class}">${ageInfo.label}</span>
+                                </div>
+                                <div class="meta-row mt-1">
+                                    <div class="recent-threat-time" title="${timeInfo.tooltip}">
+                                        <i class="fas fa-calendar-alt me-1"></i>
+                                        <span class="time-relative">${timeInfo.relative}</span>
+                                        <div class="time-absolute">${timeInfo.absolute}</div>
+                                    </div>
+                                </div>
+                                ${file.issues && file.issues.length > 0 ? `
+                                    <div class="meta-row mt-1">
+                                        <small class="text-danger">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            ${file.issues.length} vấn đề phát hiện
+                                        </small>
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
                     `;
                 }).join('');
             } else {
-                recentThreatsContainer.innerHTML = '<div class="text-center text-muted p-3"><small>Không có file nguy hiểm gần đây</small></div>';
+                recentThreatsContainer.innerHTML = `
+                    <div class="text-center text-muted p-3">
+                        <i class="fas fa-shield-alt text-success mb-2" style="font-size: 24px;"></i>
+                        <div><small><strong>Không có file nguy hiểm gần đây</strong></small></div>
+                        <div class="mt-1">
+                            <small style="font-size: 9px; color: #9ca3af;">
+                                Không phát hiện threats trong vòng 5 tháng qua
+                            </small>
+                        </div>
+                    </div>
+                `;
             }
 
             // Add filter event listeners
@@ -3764,15 +3890,15 @@ if (isset($_GET['api'])) {
             const now = Date.now() / 1000;
             const age = now - timestamp;
 
-            if (age < 7 * 24 * 3600) { // 1 week
+            if (age < 30 * 24 * 3600) { // 1 month
                 return {
                     class: 'new',
-                    label: 'Mới'
+                    label: 'MỚI'
                 };
             } else if (age < 5 * 30 * 24 * 3600) { // 5 months
                 return {
                     class: 'recent',
-                    label: 'Gần đây'
+                    label: 'GẦN ĐÂY'
                 };
             } else {
                 return {
@@ -5590,25 +5716,67 @@ if (isset($_GET['api'])) {
             }
         }
 
-        // Time ago function
-        function getTimeAgo(timestamp) {
-            if (!timestamp) return 'Không xác định';
+        // Enhanced time display function
+        function getTimeInfo(timestamp) {
+            if (!timestamp) return {
+                relative: 'Không xác định',
+                absolute: 'Không xác định',
+                tooltip: 'Thời gian không xác định'
+            };
 
             const now = Date.now() / 1000;
             const diff = now - timestamp;
+            const date = new Date(timestamp * 1000);
+            
+            // Format absolute date and time
+            const absoluteDate = date.toLocaleDateString('vi-VN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+            
+            const absoluteTime = date.toLocaleTimeString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            const absoluteFull = `${absoluteDate} lúc ${absoluteTime}`;
 
-            if (diff < 3600) { // < 1 hour
+            // Calculate relative time
+            let relative;
+            if (diff < 60) { // < 1 minute
+                relative = 'Vừa xong';
+            } else if (diff < 3600) { // < 1 hour
                 const minutes = Math.floor(diff / 60);
-                return `${minutes} phút trước`;
+                relative = `${minutes} phút trước`;
             } else if (diff < 86400) { // < 1 day
                 const hours = Math.floor(diff / 3600);
-                return `${hours} giờ trước`;
+                relative = `${hours} giờ trước`;
             } else if (diff < 604800) { // < 1 week
                 const days = Math.floor(diff / 86400);
-                return `${days} ngày trước`;
+                relative = `${days} ngày trước`;
+            } else if (diff < 2592000) { // < 1 month
+                const weeks = Math.floor(diff / 604800);
+                relative = `${weeks} tuần trước`;
+            } else if (diff < 31536000) { // < 1 year
+                const months = Math.floor(diff / 2592000);
+                relative = `${months} tháng trước`;
             } else {
-                return new Date(timestamp * 1000).toLocaleDateString('vi-VN');
+                const years = Math.floor(diff / 31536000);
+                relative = `${years} năm trước`;
             }
+
+            return {
+                relative: relative,
+                absolute: absoluteFull,
+                tooltip: `Phát hiện: ${absoluteFull} (${relative})`
+            };
+        }
+
+        // Legacy function for backward compatibility
+        function getTimeAgo(timestamp) {
+            return getTimeInfo(timestamp).relative;
         }
 
         // Get severity label

@@ -202,6 +202,54 @@ class SecurityScanner {
     private function getFallbackPatterns() {
         return [
             'status' => 'success',
+            'critical_malware_patterns' => [
+                'eval(' => 'Code execution vulnerability',
+                'goto ' => 'Control flow manipulation', 
+                'base64_decode(' => 'Encoded payload execution',
+                'gzinflate(' => 'Compressed malware payload',
+                'str_rot13(' => 'String obfuscation technique',
+                '$_F=__FILE__;' => 'File system manipulation',
+                'readdir(' => 'Directory traversal attempt',
+                '<?php eval' => 'Direct PHP code injection'
+            ],
+            'suspicious_file_patterns' => [
+                '.php.jpg' => 'Disguised PHP file with image extension',
+                '.php.png' => 'Disguised PHP file with image extension', 
+                '.php.gif' => 'Disguised PHP file with image extension',
+                '.php.jpeg' => 'Disguised PHP file with image extension',
+                '.phtml' => 'Alternative PHP extension',
+                '.php3' => 'Legacy PHP extension',
+                '.php4' => 'Legacy PHP extension',
+                '.php5' => 'Legacy PHP extension'
+            ],
+            'severe_patterns' => [
+                'move_uploaded_file(' => 'File upload without validation',
+                'exec(' => 'System command execution',
+                'system(' => 'Direct system call',
+                'shell_exec(' => 'Shell command execution',
+                'passthru(' => 'Command output bypass',
+                'proc_open(' => 'Process creation',
+                'popen(' => 'Pipe command execution'
+            ],
+            'warning_patterns' => [
+                'file_get_contents(' => 'File read operation',
+                'file_put_contents(' => 'File write operation',
+                'fopen(' => 'File handle creation',
+                'fwrite(' => 'File write operation',
+                'include(' => 'File inclusion',
+                'require(' => 'Required file inclusion',
+                'include_once(' => 'Single file inclusion',
+                'require_once(' => 'Single required inclusion',
+                '$_REQUEST' => 'User input handling',
+                '$_GET' => 'GET parameter usage',
+                '$_POST' => 'POST parameter usage',
+                '__FILE__' => 'File path reference',
+                '__DIR__' => 'Directory path reference',
+                'curl_exec(' => 'HTTP request execution',
+                'unlink(' => 'File deletion',
+                'rmdir(' => 'Directory removal',
+                'mkdir(' => 'Directory creation'
+            ],
             'blacklist' => [
                 'file_names' => ['shell.php', 'backdoor.php', 'webshell.php', 'c99.php', 'r57.php'],
                 'content_patterns' => ['eval\\s*\\(.*\\$_', 'system\\s*\\(.*\\$_', 'exec\\s*\\(.*\\$_']
@@ -319,90 +367,17 @@ class SecurityScanner {
             // Add API content patterns to enhance detection
             $apiContentPatterns = $this->getApiContentPatterns();
 
-            // Enhanced Critical Threat Patterns
-            $criticalPatterns = [
-                // Code Execution
-                'eval(' => 'Direct code execution vulnerability',
-                'assert(' => 'Code assertion execution',
-                'system(' => 'Direct system command execution',
-                'exec(' => 'System command execution',
-                'shell_exec(' => 'Shell command execution',
-                'passthru(' => 'Command output bypass execution',
-                'popen(' => 'Process pipe execution',
-                'proc_open(' => 'Process execution with pipes',
+            // Get patterns from API or fallback
+            $patterns = $this->apiPatterns;
+            
+            // Merge all critical patterns
+            $criticalPatterns = array_merge(
+                $patterns['critical_malware_patterns'] ?? [],
+                $patterns['severe_patterns'] ?? []
+            );
 
-                // Encoding/Obfuscation
-                'base64_decode(' => 'Base64 encoded payload execution',
-                'gzinflate(' => 'Compressed malware payload',
-                'gzuncompress(' => 'Compressed data decompression',
-                'str_rot13(' => 'ROT13 string obfuscation',
-                'convert_uudecode(' => 'UU encoding obfuscation',
-                'hex2bin(' => 'Hexadecimal to binary conversion',
-
-                // File Operations (Critical)
-                'file_put_contents(' => 'Potentially malicious file writing',
-                'fwrite(' => 'Direct file writing operation',
-                'fputs(' => 'File output operation',
-
-                // Network Operations
-                'curl_exec(' => 'HTTP request execution',
-                'fsockopen(' => 'Socket connection establishment',
-                'socket_create(' => 'Raw socket creation',
-
-                // Webshell Indicators
-                '$_GET[' => 'GET parameter processing (webshell indicator)',
-                '$_POST[' => 'POST parameter processing (webshell indicator)',
-                '$_REQUEST[' => 'REQUEST parameter processing (webshell indicator)',
-                '$_COOKIE[' => 'Cookie parameter processing',
-
-                // Common Webshell Functions
-                'move_uploaded_file(' => 'File upload processing',
-                'copy(' => 'File copying operation',
-                'rename(' => 'File renaming operation',
-                'unlink(' => 'File deletion operation',
-                'rmdir(' => 'Directory removal operation',
-                'mkdir(' => 'Directory creation operation',
-
-                // Database Operations (Suspicious)
-                'mysql_query(' => 'Direct MySQL query execution',
-                'mysqli_query(' => 'MySQLi query execution',
-                'pg_query(' => 'PostgreSQL query execution'
-            ];
-
-            $suspiciousPatterns = [
-                // File Operations
-                'file_get_contents(' => 'File reading operation',
-                'fopen(' => 'File handle creation',
-                'fread(' => 'File reading operation',
-                'readfile(' => 'Direct file output',
-                'include(' => 'File inclusion',
-                'require(' => 'File requirement',
-                'include_once(' => 'Single file inclusion',
-                'require_once(' => 'Single file requirement',
-
-                // String Operations
-                'preg_replace(' => 'Regular expression replacement',
-                'str_replace(' => 'String replacement operation',
-                'substr(' => 'String substring operation',
-                'chr(' => 'Character generation',
-                'ord(' => 'Character code conversion',
-
-                // Array Operations
-                'array_map(' => 'Array mapping function',
-                'array_filter(' => 'Array filtering function',
-                'call_user_func(' => 'Dynamic function calling',
-                'call_user_func_array(' => 'Dynamic function calling with arrays',
-
-                // Variable Operations
-                'extract(' => 'Variable extraction from array',
-                'parse_str(' => 'String parsing to variables',
-                'variable_get(' => 'Variable retrieval',
-
-                // HTTP Operations
-                'header(' => 'HTTP header manipulation',
-                'setcookie(' => 'Cookie setting operation',
-                'session_start(' => 'Session initialization'
-            ];
+            // Use warning patterns from API/fallback
+            $suspiciousPatterns = $patterns['warning_patterns'] ?? [];
             
             // Webshell Detection Patterns
             $webshellPatterns = $this->getWebshellPatterns();
