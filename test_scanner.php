@@ -3,6 +3,11 @@
  * Quick Scanner Test - Direct testing of security scanner
  */
 
+// Set CLI environment to avoid REQUEST_METHOD errors
+$_SERVER['REQUEST_METHOD'] = 'CLI';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$_SERVER['SCRIPT_NAME'] = '/test_scanner.php';
+
 // Include the scanner client
 require_once 'security_scan_client.php';
 

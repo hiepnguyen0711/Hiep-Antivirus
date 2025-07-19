@@ -71,7 +71,25 @@ function getApiKey() {
         return str_replace('Bearer ', '', $headers['Authorization']);
     }
     
-    return $_GET['api_key'] ?? $_POST['api_key'] ?? null;
+    // Check GET and POST parameters
+    if (isset($_GET['api_key'])) {
+        return $_GET['api_key'];
+    }
+    
+    if (isset($_POST['api_key'])) {
+        return $_POST['api_key'];
+    }
+    
+    // Check JSON POST body
+    $jsonInput = file_get_contents('php://input');
+    if ($jsonInput) {
+        $data = json_decode($jsonInput, true);
+        if ($data && isset($data['api_key'])) {
+            return $data['api_key'];
+        }
+    }
+    
+    return null;
 }
 
 function getClientIP() {
@@ -370,80 +388,63 @@ class SecurityScanner {
             // Get patterns from API or fallback
             $patterns = $this->apiPatterns;
             
-            // Enhanced critical patterns with more malware detection
-            $enhancedCriticalPatterns = [
-                // Execution functions
+            // Use EXACT patterns from security_scan.php - PROVEN TO WORK
+            
+            // Critical malware patterns (HIGH SEVERITY - RED) - FROM security_scan.php
+            $criticalPatterns = [
                 'eval(' => 'Code execution vulnerability',
-                'assert(' => 'Assert function execution',
-                'system(' => 'System command execution',
-                'exec(' => 'Command execution',
-                'shell_exec(' => 'Shell command execution',
-                'passthru(' => 'Passthru execution',
-                'popen(' => 'Process pipe execution',
-                'proc_open(' => 'Process execution',
-                
-                // Obfuscation
-                'base64_decode(' => 'Base64 encoded payload',
-                'gzinflate(' => 'Compressed payload',
-                'gzuncompress(' => 'Uncompressed payload',
-                'str_rot13(' => 'ROT13 obfuscation',
-                'convert_uudecode(' => 'UU decode obfuscation',
-                'hex2bin(' => 'Hex to binary conversion',
-                
-                // File operations
-                'file_put_contents(' => 'File writing operation',
-                'fwrite(' => 'File write operation',
-                'fputs(' => 'File output operation',
-                'move_uploaded_file(' => 'File upload processing',
-                
-                // Network operations
-                'fsockopen(' => 'Socket connection',
-                'socket_create(' => 'Raw socket creation',
-                'curl_exec(' => 'HTTP request execution',
-                
-                // Dangerous variables
-                '$_GET[' => 'GET parameter usage',
-                '$_POST[' => 'POST parameter usage', 
-                '$_REQUEST[' => 'REQUEST parameter usage',
-                '$_COOKIE[' => 'Cookie parameter usage',
-                
-                // Common malware patterns
-                '<?=@eval(' => 'Short tag eval execution',
-                '<?php eval(' => 'Direct PHP eval',
-                '@eval(' => 'Suppressed eval execution',
                 'goto ' => 'Control flow manipulation',
-                'goto' => 'Goto statement detected (any form)',
-                'goto;' => 'Goto with semicolon',
-                '$_F=__FILE__;' => 'File reference manipulation',
-                'readdir(' => 'Directory reading',
-                'scandir(' => 'Directory scanning',
+                'base64_decode(' => 'Encoded payload execution',
+                'gzinflate(' => 'Compressed malware payload',
+                'str_rot13(' => 'String obfuscation technique',
+                '$_F=__FILE__;' => 'File system manipulation',
+                'readdir(' => 'Directory traversal attempt',
+                '<?php eval' => 'Direct PHP code injection'
+            ];
+
+            // Severe patterns - FROM security_scan.php  
+            $severePatterns = [
+                'move_uploaded_file(' => 'File upload without validation',
+                'exec(' => 'System command execution',
+                'system(' => 'Direct system call',
+                'shell_exec(' => 'Shell command execution',
+                'passthru(' => 'Command output bypass',
+                'proc_open(' => 'Process creation',
+                'popen(' => 'Pipe command execution'
+            ];
+
+            // Warning patterns - FROM security_scan.php
+            $warningPatterns = [
+                'file_get_contents(' => 'File read operation',
+                'file_put_contents(' => 'File write operation',
+                'fopen(' => 'File handle creation',
+                'fwrite(' => 'File write operation',
+                'include(' => 'File inclusion',
+                'require(' => 'Required file inclusion',
+                'include_once(' => 'Single file inclusion',
+                'require_once(' => 'Single required inclusion',
+                '$_REQUEST' => 'User input handling',
+                '$_GET' => 'GET parameter usage',
+                '$_POST' => 'POST parameter usage',
+                '__FILE__' => 'File path reference',
+                '__DIR__' => 'Directory path reference',
+                'curl_exec(' => 'HTTP request execution',
                 'unlink(' => 'File deletion',
                 'rmdir(' => 'Directory removal',
-                'chmod(' => 'Permission modification',
-                
-                // Common webshell indicators
-                'c99' => 'C99 webshell',
-                'r57' => 'R57 webshell', 
-                'wso' => 'WSO webshell',
-                'b374k' => 'B374K webshell',
-                'adminer' => 'Adminer file manager',
-                'shell' => 'Shell reference',
-                'backdoor' => 'Backdoor reference',
-                'hack' => 'Hack reference',
-                'exploit' => 'Exploit reference',
-                'malware' => 'Malware reference',
-                'trojan' => 'Trojan reference'
+                'mkdir(' => 'Directory creation'
             ];
-            
-            // Merge all critical patterns
-            $criticalPatterns = array_merge(
-                $patterns['critical_malware_patterns'] ?? [],
-                $patterns['severe_patterns'] ?? [],
-                $enhancedCriticalPatterns
-            );
 
-            // Use warning patterns from API/fallback
-            $suspiciousPatterns = $patterns['warning_patterns'] ?? [];
+            // Suspicious file patterns - FROM security_scan.php
+            $suspiciousFilePatterns = [
+                '.php.jpg' => 'Disguised PHP file with image extension',
+                '.php.png' => 'Disguised PHP file with image extension',
+                '.php.gif' => 'Disguised PHP file with image extension',
+                '.php.jpeg' => 'Disguised PHP file with image extension',
+                '.phtml' => 'Alternative PHP extension',
+                '.php3' => 'Legacy PHP extension',
+                '.php4' => 'Legacy PHP extension',
+                '.php5' => 'Legacy PHP extension'
+            ];
             
             // Webshell Detection Patterns
             $webshellPatterns = $this->getWebshellPatterns();
@@ -453,8 +454,8 @@ class SecurityScanner {
                 $criticalPatterns[$pattern] = 'API Blacklist Pattern';
             }
 
-            // Bắt đầu quét - ưu tiên priority files trước
-            $this->scanDirectoryWithPriority('./', $criticalPatterns, $suspiciousPatterns, $webshellPatterns, $priorityFiles);
+            // Bắt đầu quét - ưu tiên priority files trước - sử dụng patterns từ security_scan.php
+            $this->scanDirectoryAdvanced('./', $criticalPatterns, $severePatterns, $warningPatterns, $suspiciousFilePatterns, $priorityFiles);
             
             // Debug logging
             error_log("Security scan completed - Files scanned: {$this->scannedFiles}, Suspicious found: " . count($this->suspiciousFiles));
@@ -715,6 +716,287 @@ class SecurityScanner {
         return preg_match($pattern, $fileName) || preg_match($pattern, $filePath);
     }
     
+    /**
+     * Advanced scanning method using logic from security_scan.php - PROVEN TO WORK
+     */
+    private function scanDirectoryAdvanced($dir, $criticalPatterns, $severePatterns, $warningPatterns, $suspiciousFilePatterns, $priorityFiles = []) {
+        if (!is_dir($dir) || $this->scannedFiles >= SecurityClientConfig::MAX_SCAN_FILES) {
+            return;
+        }
+
+        // Minimal exclusions - SAME AS security_scan.php
+        $excludeDirs = ['.git', '.svn', '.hg'];
+        $excludeFiles = ['security_scan_client.php', 'security_scan_server.php'];
+        
+        try {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::LEAVES_ONLY
+            );
+            
+            foreach ($iterator as $file) {
+                if ($this->scannedFiles >= SecurityClientConfig::MAX_SCAN_FILES) {
+                    break;
+                }
+                
+                // Performance optimization - yield control every 50 files
+                if ($this->scannedFiles % 50 === 0) {
+                    usleep(500); // 0.5ms pause to prevent blocking
+                }
+                
+                if ($file->isFile()) {
+                    $filePath = $file->getPathname();
+                    $fileName = basename($filePath);
+                    $extension = strtolower($file->getExtension());
+                    
+                    // Skip excluded files
+                    if (in_array($fileName, $excludeFiles)) {
+                        continue;
+                    }
+                    
+                    // Skip excluded directories
+                    $shouldSkip = false;
+                    foreach ($excludeDirs as $excludeDir) {
+                        if (strpos($filePath, '/' . $excludeDir . '/') !== false) {
+                            $shouldSkip = true;
+                            break;
+                        }
+                    }
+                    
+                    if ($shouldSkip) {
+                        continue;
+                    }
+                    
+                    // EXACT scanning logic from security_scan.php
+                    $shouldScan = ($extension === 'php') || 
+                                  (strpos($fileName, '.php.') !== false) ||
+                                  in_array($extension, ['phtml', 'php3', 'php4', 'php5']);
+                    
+                    if ($shouldScan) {
+                        // Additional check: Only scan files within current project directory
+                        $realPath = realpath($filePath);
+                        $projectRoot = realpath('./');
+                        
+                        if (!$realPath || !$projectRoot || strpos($realPath, $projectRoot) !== 0) {
+                            continue; // Skip files outside project directory
+                        }
+                        
+                        $this->scannedFiles++;
+                        error_log("SCANNING FILE: {$filePath}");
+                        
+                        // Get file metadata
+                        $fileMetadata = $this->getFileMetadata($filePath);
+                        
+                        // Check for suspicious file extensions and empty files FIRST (HIGHEST PRIORITY)
+                        $suspiciousIssues = $this->checkSuspiciousFile($filePath, $suspiciousFilePatterns);
+                        if (!empty($suspiciousIssues)) {
+                            $this->suspiciousFiles[] = [
+                                'path' => $filePath,
+                                'issues' => $suspiciousIssues,
+                                'file_size' => filesize($filePath),
+                                'modified_time' => filemtime($filePath),
+                                'md5' => md5_file($filePath),
+                                'category' => 'suspicious_file',
+                                'is_priority' => in_array($fileName, $priorityFiles),
+                                'metadata' => $fileMetadata
+                            ];
+                            $this->criticalFiles[] = $filePath;
+                        } else {
+                            // Check for critical malware patterns (HIGHEST PRIORITY)
+                            $criticalIssues = $this->scanFileWithLineNumbers($filePath, $criticalPatterns);
+                            if (!empty($criticalIssues)) {
+                                $this->suspiciousFiles[] = [
+                                    'path' => $filePath,
+                                    'issues' => $criticalIssues,
+                                    'file_size' => filesize($filePath),
+                                    'modified_time' => filemtime($filePath),
+                                    'md5' => md5_file($filePath),
+                                    'category' => 'critical',
+                                    'is_priority' => in_array($fileName, $priorityFiles),
+                                    'metadata' => $fileMetadata
+                                ];
+                                $this->criticalFiles[] = $filePath;
+                            } else {
+                                // Check for severe patterns
+                                $severeIssues = $this->scanFileWithLineNumbers($filePath, $severePatterns);
+                                if (!empty($severeIssues)) {
+                                    $this->suspiciousFiles[] = [
+                                        'path' => $filePath,
+                                        'issues' => $severeIssues,
+                                        'file_size' => filesize($filePath),
+                                        'modified_time' => filemtime($filePath),
+                                        'md5' => md5_file($filePath),
+                                        'category' => 'severe',
+                                        'is_priority' => in_array($fileName, $priorityFiles),
+                                        'metadata' => $fileMetadata
+                                    ];
+                                } else {
+                                    // Check for warning patterns (LOWER PRIORITY)
+                                    $warningIssues = $this->scanFileWithLineNumbers($filePath, $warningPatterns);
+                                    if (!empty($warningIssues)) {
+                                        $this->suspiciousFiles[] = [
+                                            'path' => $filePath,
+                                            'issues' => $warningIssues,
+                                            'file_size' => filesize($filePath),
+                                            'modified_time' => filemtime($filePath),
+                                            'md5' => md5_file($filePath),
+                                            'category' => 'warning',
+                                            'is_priority' => in_array($fileName, $priorityFiles),
+                                            'metadata' => $fileMetadata
+                                        ];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+        } catch (Exception $e) {
+            error_log("SCAN DIRECTORY ERROR: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Scan file with line numbers - EXACT copy from security_scan.php
+     */
+    private function scanFileWithLineNumbers($filePath, $patterns) {
+        if (!file_exists($filePath) || !is_readable($filePath)) {
+            return [];
+        }
+        
+        $content = @file_get_contents($filePath);
+        if ($content === false) {
+            return [];
+        }
+        
+        $lines = explode("\n", $content);
+        $issues = [];
+        
+        foreach ($patterns as $pattern => $description) {
+            foreach ($lines as $lineNumber => $line) {
+                // Use stripos for case-insensitive matching - SAME AS security_scan.php
+                if (stripos($line, $pattern) !== false) {
+                    error_log("PATTERN FOUND in {$filePath}: {$pattern} at line " . ($lineNumber + 1));
+                    $issues[] = [
+                        'pattern' => $pattern,
+                        'description' => $description,
+                        'line' => $lineNumber + 1,
+                        'severity' => 'critical',
+                        'context' => trim($line)
+                    ];
+                }
+            }
+        }
+        
+        return $issues;
+    }
+
+    /**
+     * Check suspicious file - EXACT copy from security_scan.php
+     */
+    private function checkSuspiciousFile($filePath, $suspiciousPatterns) {
+        $issues = [];
+        $fileName = basename($filePath);
+        
+        // Check for suspicious file extensions
+        foreach ($suspiciousPatterns as $pattern => $description) {
+            if (stripos($fileName, $pattern) !== false) {
+                $issues[] = [
+                    'pattern' => $pattern,
+                    'description' => $description,
+                    'line' => 0,
+                    'severity' => 'critical',
+                    'context' => 'Suspicious filename: ' . $fileName
+                ];
+            }
+        }
+        
+        // Enhanced empty file detection - EXACTLY from security_scan.php
+        if (strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) === 'php') {
+            $content = @file_get_contents($filePath);
+            if ($content !== false) {
+                $contentTrimmed = trim($content);
+                $contentNoPhpTags = str_replace(['<?php', '<?', '?>'], '', $contentTrimmed);
+                $contentClean = trim($contentNoPhpTags);
+                $fileSize = filesize($filePath);
+                
+                $isSuspiciousEmpty = false;
+                $description = '';
+                
+                // Case 1: Completely empty file (0 bytes)
+                if ($fileSize === 0 || empty($contentTrimmed)) {
+                    $isSuspiciousEmpty = true;
+                    $description = 'EMPTY PHP FILE (0 bytes) - Definitely planted by hacker';
+                }
+                // Case 2: Only PHP tags with no content (very small files)
+                elseif (empty($contentClean) || strlen($contentClean) < 3) {
+                    $isSuspiciousEmpty = true;
+                    $description = 'Nearly empty PHP file - Contains only PHP tags or whitespace';
+                }
+                // Case 3: Very small file anywhere (common hacker pattern)
+                elseif ($fileSize < 50) {
+                    $isSuspiciousEmpty = true;
+                    $description = 'Extremely small PHP file (' . $fileSize . ' bytes) - Very suspicious';
+                }
+                // Case 4: Common hacker filenames
+                elseif (in_array(strtolower($fileName), ['app.php', 'style.php', 'config.php', 'db.php', 'wp.php', 'test.php', 'shell.php', 'hack.php', 'backdoor.php', 'upload.php'])) {
+                    $isSuspiciousEmpty = true;
+                    $description = 'Common hacker filename "' . $fileName . '" - EXTREMELY SUSPICIOUS';
+                }
+                
+                if ($isSuspiciousEmpty) {
+                    $issues[] = [
+                        'pattern' => 'suspicious_empty_file',
+                        'description' => $description,
+                        'line' => 1,
+                        'severity' => 'critical',
+                        'context' => 'File size: ' . $fileSize . ' bytes. Content: ' . substr($contentTrimmed, 0, 100) . '...'
+                    ];
+                }
+            }
+        }
+        
+        return $issues;
+    }
+
+    /**
+     * Get file metadata - from security_scan.php
+     */
+    private function getFileMetadata($filePath) {
+        $metadata = [
+            'modified_time' => 0,
+            'size' => 0,
+            'is_recent' => false,
+            'age_category' => 'old'
+        ];
+        
+        if (file_exists($filePath)) {
+            $modifiedTime = filemtime($filePath);
+            $metadata['modified_time'] = $modifiedTime;
+            $metadata['size'] = filesize($filePath);
+            
+            $now = time();
+            $hours24 = 24 * 3600;
+            $days7 = 7 * 24 * 3600;
+            $months5 = 5 * 30 * 24 * 3600;
+            
+            if (($now - $modifiedTime) < $hours24) {
+                $metadata['age_category'] = 'very_recent';
+                $metadata['is_recent'] = true;
+            } elseif (($now - $modifiedTime) < $days7) {
+                $metadata['age_category'] = 'recent';
+                $metadata['is_recent'] = true;
+            } elseif (($now - $modifiedTime) < $months5) {
+                $metadata['age_category'] = 'medium';
+            } else {
+                $metadata['age_category'] = 'old';
+            }
+        }
+        
+        return $metadata;
+    }
+
     private function scanFile($filePath, $criticalPatterns, $suspiciousPatterns, $webshellPatterns = [], $isPriority = false) {
         if (!file_exists($filePath) || !is_readable($filePath)) {
             error_log("SCAN ERROR: File not exists/readable: {$filePath}");
