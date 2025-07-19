@@ -18,6 +18,11 @@ class SecurityClientConfig {
     const MAX_SCAN_TIME = 300; // 5 phút
     const MAX_MEMORY = '256M';
     
+    // API Patterns Configuration
+    const PATTERNS_API_URL = 'https://hiepcodeweb.com/api/security_patterns.php';
+    const API_CACHE_DURATION = 3600; // 1 hour cache
+    const ENABLE_API_PATTERNS = true;
+    
     // Bảo mật
     const ALLOWED_IPS = []; // Để trống = cho phép tất cả, hoặc ['IP1', 'IP2']
     const RATE_LIMIT = 10; // Số request/phút
@@ -116,6 +121,7 @@ class SecurityScanner {
     private $criticalFiles = [];
     private $scanStartTime;
     private $scanResults = [];
+    private $apiPatterns = null;
     
     public function __construct() {
         $this->scanStartTime = time();
@@ -124,6 +130,177 @@ class SecurityScanner {
         set_time_limit(SecurityClientConfig::MAX_SCAN_TIME);
         ini_set('memory_limit', SecurityClientConfig::MAX_MEMORY);
         ini_set('max_execution_time', SecurityClientConfig::MAX_SCAN_TIME);
+        
+        // Load API patterns if enabled
+        if (SecurityClientConfig::ENABLE_API_PATTERNS) {
+            $this->loadApiPatterns();
+        }
+    }
+    
+    /**
+     * Load blacklist/whitelist patterns from API
+     */
+    private function loadApiPatterns() {
+        try {
+            $cacheFile = __DIR__ . '/cache/api_patterns.json';
+            $cacheDir = dirname($cacheFile);
+            
+            // Create cache directory if not exists
+            if (!is_dir($cacheDir)) {
+                mkdir($cacheDir, 0755, true);
+            }
+            
+            // Check cache validity
+            if (file_exists($cacheFile)) {
+                $cacheAge = time() - filemtime($cacheFile);
+                if ($cacheAge < SecurityClientConfig::API_CACHE_DURATION) {
+                    $cached = file_get_contents($cacheFile);
+                    $this->apiPatterns = json_decode($cached, true);
+                    if ($this->apiPatterns && isset($this->apiPatterns['status']) && $this->apiPatterns['status'] === 'success') {
+                        return;
+                    }
+                }
+            }
+            
+            // Fetch from API
+            $url = SecurityClientConfig::PATTERNS_API_URL . '?action=get_patterns';
+            $context = stream_context_create([
+                'http' => [
+                    'timeout' => 10,
+                    'user_agent' => 'SecurityScanner/' . SecurityClientConfig::CLIENT_VERSION
+                ]
+            ]);
+            
+            $response = file_get_contents($url, false, $context);
+            if ($response === false) {
+                throw new Exception('Failed to fetch API patterns');
+            }
+            
+            $patterns = json_decode($response, true);
+            if (!$patterns || !isset($patterns['status']) || $patterns['status'] !== 'success') {
+                throw new Exception('Invalid API response');
+            }
+            
+            $this->apiPatterns = $patterns;
+            
+            // Cache the patterns
+            file_put_contents($cacheFile, $response);
+            
+        } catch (Exception $e) {
+            error_log("API Patterns Error: " . $e->getMessage());
+            // Use fallback patterns
+            $this->apiPatterns = $this->getFallbackPatterns();
+        }
+    }
+    
+    /**
+     * Get fallback patterns if API is unavailable
+     */
+    private function getFallbackPatterns() {
+        return [
+            'status' => 'success',
+            'blacklist' => [
+                'file_names' => ['shell.php', 'backdoor.php', 'webshell.php', 'c99.php', 'r57.php'],
+                'content_patterns' => ['eval\\s*\\(.*\\$_', 'system\\s*\\(.*\\$_', 'exec\\s*\\(.*\\$_']
+            ],
+            'whitelist' => [
+                'framework_files' => ['wp-config.php', 'composer.json', 'package.json'],
+                'safe_directories' => ['wp-admin', 'wp-includes', 'vendor', 'node_modules']
+            ]
+        ];
+    }
+    
+    /**
+     * Check if file should be skipped (whitelist)
+     */
+    private function isWhitelistedFile($filePath, $fileName) {
+        if (!$this->apiPatterns || !isset($this->apiPatterns['whitelist'])) {
+            return false;
+        }
+        
+        $whitelist = $this->apiPatterns['whitelist'];
+        
+        // Check framework files
+        if (isset($whitelist['framework_files']) && in_array($fileName, $whitelist['framework_files'])) {
+            return true;
+        }
+        
+        // Check safe directories
+        if (isset($whitelist['safe_directories'])) {
+            foreach ($whitelist['safe_directories'] as $safeDir) {
+                if (strpos($filePath, '/' . $safeDir . '/') !== false) {
+                    return true;
+                }
+            }
+        }
+        
+        // Check safe extensions
+        if (isset($whitelist['safe_extensions'])) {
+            $extension = '.' . pathinfo($fileName, PATHINFO_EXTENSION);
+            foreach ($whitelist['safe_extensions'] as $safeExt) {
+                if (fnmatch($safeExt, $fileName) || fnmatch($safeExt, $extension)) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if file is blacklisted (high priority)
+     */
+    private function isBlacklistedFile($filePath, $fileName) {
+        if (!$this->apiPatterns || !isset($this->apiPatterns['blacklist'])) {
+            return false;
+        }
+        
+        $blacklist = $this->apiPatterns['blacklist'];
+        
+        // Check dangerous file names
+        if (isset($blacklist['file_names']) && in_array($fileName, $blacklist['file_names'])) {
+            return true;
+        }
+        
+        // Check dangerous file extensions
+        if (isset($blacklist['file_extensions'])) {
+            foreach ($blacklist['file_extensions'] as $dangerExt) {
+                if (fnmatch($dangerExt, $fileName)) {
+                    return true;
+                }
+            }
+        }
+        
+        // Check suspicious paths
+        if (isset($blacklist['suspicious_paths'])) {
+            foreach ($blacklist['suspicious_paths'] as $suspPath) {
+                if (strpos($filePath, $suspPath) !== false) {
+                    return true;
+                }
+            }
+        }
+        
+        // Check directory patterns
+        if (isset($blacklist['directory_patterns'])) {
+            foreach ($blacklist['directory_patterns'] as $pattern) {
+                if (fnmatch($pattern, $filePath)) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Get additional content patterns from API
+     */
+    private function getApiContentPatterns() {
+        if (!$this->apiPatterns || !isset($this->apiPatterns['blacklist']['content_patterns'])) {
+            return [];
+        }
+        
+        return $this->apiPatterns['blacklist']['content_patterns'];
     }
     
     public function performScan($options = []) {
@@ -135,6 +312,9 @@ class SecurityScanner {
             
             // Lấy priority files từ options
             $priorityFiles = $options['priority_files'] ?? [];
+            
+            // Add API content patterns to enhance detection
+            $apiContentPatterns = $this->getApiContentPatterns();
 
             // Enhanced Critical Threat Patterns
             $criticalPatterns = [
@@ -223,6 +403,11 @@ class SecurityScanner {
             
             // Webshell Detection Patterns
             $webshellPatterns = $this->getWebshellPatterns();
+            
+            // Merge API patterns into detection patterns
+            foreach ($apiContentPatterns as $pattern) {
+                $criticalPatterns[$pattern] = 'API Blacklist Pattern';
+            }
 
             // Bắt đầu quét - ưu tiên priority files trước
             $this->scanDirectoryWithPriority('./', $criticalPatterns, $suspiciousPatterns, $webshellPatterns, $priorityFiles);
@@ -292,6 +477,11 @@ class SecurityScanner {
                         continue;
                     }
                     
+                    // Check API whitelist - skip safe files
+                    if ($this->isWhitelistedFile($filePath, $fileName)) {
+                        continue;
+                    }
+                    
                     // Bỏ qua thư mục không cần thiết
                     $shouldSkip = false;
                     foreach ($excludeDirs as $excludeDir) {
@@ -358,6 +548,11 @@ class SecurityScanner {
                         continue;
                     }
                     
+                    // Check API whitelist - skip safe files
+                    if ($this->isWhitelistedFile($filePath, $fileName)) {
+                        continue;
+                    }
+                    
                     // Bỏ qua thư mục loại trừ
                     $skip = false;
                     foreach ($excludeDirs as $excludeDir) {
@@ -375,12 +570,16 @@ class SecurityScanner {
                     if ($extension === 'php' || strpos($fileName, '.php.') !== false ||
                         $this->isSuspiciousFileExtension($fileName)) {
                         
-                        // Check if file matches priority patterns
-                        $isPriority = false;
-                        foreach ($priorityFiles as $pattern) {
-                            if ($this->matchesPattern($filePath, $pattern)) {
-                                $isPriority = true;
-                                break;
+                        // Check API blacklist first (highest priority)
+                        $isPriority = $this->isBlacklistedFile($filePath, $fileName);
+                        
+                        // If not blacklisted, check priority patterns
+                        if (!$isPriority) {
+                            foreach ($priorityFiles as $pattern) {
+                                if ($this->matchesPattern($filePath, $pattern)) {
+                                    $isPriority = true;
+                                    break;
+                                }
                             }
                         }
                         

@@ -4230,11 +4230,18 @@ if (isset($_GET['api'])) {
             const filePath = cardElement.getAttribute('data-file-path');
             const issuesDataStr = cardElement.getAttribute('data-issues');
             
-            if (!issuesDataStr) return;
+            if (!issuesDataStr) {
+                // Fallback - show basic info if no issues data
+                showBasicTooltip(event, cardElement, filePath);
+                return;
+            }
             
             try {
                 const issues = JSON.parse(issuesDataStr);
-                if (!issues || issues.length === 0) return;
+                if (!issues || issues.length === 0) {
+                    showBasicTooltip(event, cardElement, filePath);
+                    return;
+                }
                 
                 // Create tooltip content
                 const content = issues.map(issue => 
@@ -4286,6 +4293,49 @@ if (isset($_GET['api'])) {
             } catch (e) {
                 console.error('Error parsing tooltip data:', e);
             }
+        }
+        
+        function showBasicTooltip(event, cardElement, filePath) {
+            // Create basic tooltip for files without detailed issues
+            currentTooltip = document.createElement('div');
+            currentTooltip.className = 'threat-tooltip';
+            currentTooltip.innerHTML = `
+                <div style="font-weight: 600; margin-bottom: 8px; color: #fbbf24;">
+                    <i class="fas fa-file-code me-1"></i>
+                    File: ${filePath}
+                </div>
+                <div style="color: #d1d5db;">
+                    Click "Sửa" để xem chi tiết và chỉnh sửa file này.
+                </div>
+            `;
+            
+            document.body.appendChild(currentTooltip);
+            
+            // Position tooltip
+            const rect = cardElement.getBoundingClientRect();
+            const tooltipRect = currentTooltip.getBoundingClientRect();
+            
+            let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+            let top = rect.top - tooltipRect.height - 10;
+            
+            // Adjust if tooltip goes off screen
+            if (left < 10) left = 10;
+            if (left + tooltipRect.width > window.innerWidth - 10) {
+                left = window.innerWidth - tooltipRect.width - 10;
+            }
+            if (top < 10) {
+                top = rect.bottom + 10;
+            }
+            
+            currentTooltip.style.left = left + 'px';
+            currentTooltip.style.top = top + 'px';
+            
+            // Show tooltip
+            setTimeout(() => {
+                if (currentTooltip) {
+                    currentTooltip.classList.add('show');
+                }
+            }, 50);
         }
         
         function hideThreatTooltip() {
