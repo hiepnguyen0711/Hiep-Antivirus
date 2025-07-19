@@ -3971,9 +3971,7 @@ if (isset($_GET['api'])) {
                             }
                         });
                         
-                                        // Debug: Log the API response
-                console.log('Multi-client API response:', data);
-                console.log('Results array:', data.results);
+                        
                 
                 // Store results for multi-client display
                 currentMultiClientResults = data.results;
@@ -4781,7 +4779,6 @@ if (isset($_GET['api'])) {
          }
          
          function renderClientRow(result, index) {
-             console.log('renderClientRow - result:', result);
              
              const client = result.client_info || result.client || {};
              
@@ -4808,7 +4805,7 @@ if (isset($_GET['api'])) {
              const critical = scanData.critical_count || scanData.critical || 0;
              const files = scanData.scanned_files || scanData.files || 0;
              
-             console.log('Processed data:', { success, threats, critical, files, scanData });
+
              
              const statusClass = success ? (critical > 0 ? 'danger' : threats > 0 ? 'warning' : 'success') : 'secondary';
              const statusText = success ? (critical > 0 ? 'Critical' : threats > 0 ? 'Warning' : 'Clean') : 'Error';
@@ -4872,33 +4869,61 @@ if (isset($_GET['api'])) {
          
          function loadClientThreats(index, container) {
              const result = allClientResults[index];
-             console.log('loadClientThreats - result:', result);
              
              if (!result) {
                  container.innerHTML = '<div class="p-3 text-muted">Không tìm thấy thông tin client.</div>';
                  return;
              }
              
-             // Try to find suspicious files in different possible locations
-             let threats = null;
+             // Extract threats from real scan data (same logic as viewClientThreats)
+             let threats = [];
              
-             if (result.scan_result?.scan_results?.suspicious_files) {
-                 threats = result.scan_result.scan_results.suspicious_files;
-             } else if (result.scan_result?.suspicious_files) {
-                 threats = result.scan_result.suspicious_files;
-             } else if (result.suspicious_files) {
-                 threats = result.suspicious_files;
-             } else if (result.scan_results?.suspicious_files) {
-                 threats = result.scan_results.suspicious_files;
+             const scanResults = result.scan_result?.scan_results || result.scan_result || {};
+             
+             // Check if threats data exists in the response
+             if (scanResults.threats) {
+                 
+                 // Combine all threat categories
+                 const allCategories = ['critical', 'webshells', 'warnings'];
+                 
+                 allCategories.forEach(category => {
+                     if (scanResults.threats[category] && Array.isArray(scanResults.threats[category])) {
+                         scanResults.threats[category].forEach(threat => {
+                             // Only add if not already exists
+                             if (!threats.find(f => f.path === threat.path)) {
+                                 threats.push({
+                                     path: threat.path,
+                                     issues: threat.issues || [],
+                                     metadata: {
+                                         size: threat.file_size || 0,
+                                         modified_time: threat.modified_time || 0,
+                                         md5: threat.md5 || '',
+                                     },
+                                     category: threat.category || category,
+                                     is_priority: threat.is_priority || false
+                                 });
+                             }
+                         });
+                     }
+                 });
              }
              
-             console.log('Found threats:', threats);
+             // Fallback: try suspicious_files directly
+             if (threats.length === 0) {
+                 if (scanResults.suspicious_files && Array.isArray(scanResults.suspicious_files)) {
+                     threats = scanResults.suspicious_files;
+                 } else if (result.suspicious_files && Array.isArray(result.suspicious_files)) {
+                     threats = result.suspicious_files;
+                 }
+             }
+             
+
              
              if (!threats || threats.length === 0) {
                  container.innerHTML = `
                      <div class="p-3 text-muted">
                          <div>Không có threats nào được phát hiện.</div>
-                         <small class="text-secondary">Debug: ${JSON.stringify(result, null, 2)}</small>
+                         <small class="text-secondary">Suspicious Count: ${scanResults.suspicious_count || 0}</small>
                      </div>
                  `;
                  return;
@@ -4917,35 +4942,104 @@ if (isset($_GET['api'])) {
          }
          
          function renderThreatItem(threat, clientIndex) {
-             const severity = getSeverityLevel(threat);
-             const ageInfo = getAgeInfo(threat.metadata?.modified_time);
-             const fileSize = formatFileSize(threat.metadata?.size || 0);
+             const getSeverityBadge = (severity) => {
+                 const badges = {
+                     'critical': '<span class="badge bg-danger">Critical</span>',
+                     'high': '<span class="badge bg-warning">High</span>', 
+                     'medium': '<span class="badge bg-info">Medium</span>',
+                     'low': '<span class="badge bg-secondary">Low</span>',
+                     'warning': '<span class="badge bg-warning">Warning</span>'
+                 };
+                 return badges[severity] || '<span class="badge bg-secondary">Unknown</span>';
+             };
+             
+             const getCategoryBadge = (category) => {
+                 const badges = {
+                     'critical': '<span class="badge bg-danger">Critical</span>',
+                     'webshell': '<span class="badge bg-dark">Webshell</span>',
+                     'warnings': '<span class="badge bg-warning">Warning</span>',
+                     'filemanager': '<span class="badge bg-info">File Manager</span>'
+                 };
+                 return badges[category] || '<span class="badge bg-secondary">' + (category || 'Unknown') + '</span>';
+             };
+             
+             const formatFileSize = (bytes) => {
+                 if (!bytes || bytes === 0) return '0 Bytes';
+                 const k = 1024;
+                 const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                 const i = Math.floor(Math.log(bytes) / Math.log(k));
+                 return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+             };
+             
+             const formatDate = (timestamp) => {
+                 if (!timestamp) return 'Unknown';
+                 return new Date(timestamp * 1000).toLocaleString('vi-VN');
+             };
+             
+             const fileSize = formatFileSize(threat.metadata?.size || threat.file_size || 0);
+             const modifiedDate = formatDate(threat.metadata?.modified_time || threat.modified_time);
              
              return `
-                 <div class="threat-item ${severity}">
-                     <div class="threat-header">
-                         <div class="threat-file-info">
-                             <i class="fas fa-file-code me-2"></i>
-                             <strong>${threat.path}</strong>
+                 <div class="threat-item border rounded p-3 mb-3" style="background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%); border-left: 4px solid ${threat.category === 'critical' ? '#ef4444' : threat.category === 'webshell' ? '#1f2937' : '#f59e0b'} !important;">
+                     <div class="d-flex justify-content-between align-items-start">
+                         <div class="flex-grow-1">
+                             <div class="threat-header mb-2">
+                                 <h6 class="mb-1">
+                                     <i class="fas fa-file-code text-primary me-2"></i>
+                                     <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px;">${threat.path}</code>
+                                 </h6>
+                                 <div class="threat-badges">
+                                     ${getCategoryBadge(threat.category)}
+                                     ${threat.is_priority ? '<span class="badge bg-danger ms-1">Priority</span>' : ''}
+                                 </div>
+                             </div>
+                             
+                             <div class="threat-meta mb-2">
+                                 <div class="row">
+                                     <div class="col-md-6">
+                                         <small class="text-muted">
+                                             <i class="fas fa-hdd me-1"></i>
+                                             ${fileSize}
+                                         </small>
+                                     </div>
+                                     <div class="col-md-6">
+                                         <small class="text-muted">
+                                             <i class="fas fa-clock me-1"></i>
+                                             ${modifiedDate}
+                                         </small>
+                                     </div>
+                                 </div>
+                             </div>
+                             
+                             ${threat.issues && threat.issues.length > 0 ? `
+                                 <div class="threat-issues">
+                                     <small class="text-danger">
+                                         <i class="fas fa-exclamation-triangle me-1"></i>
+                                         <strong>${threat.issues.length} issues:</strong>
+                                     </small>
+                                     <div class="mt-1">
+                                         ${threat.issues.slice(0, 2).map(issue => `
+                                             <div class="d-inline-block me-2 mb-1">
+                                                 ${getSeverityBadge(issue.severity)}
+                                                 <small class="ms-1">${issue.pattern}</small>
+                                             </div>
+                                         `).join('')}
+                                         ${threat.issues.length > 2 ? `<small class="text-muted">+${threat.issues.length - 2} more</small>` : ''}
+                                     </div>
+                                 </div>
+                             ` : ''}
                          </div>
-                         <div class="threat-actions">
-                             <button class="btn btn-sm btn-outline-primary" onclick="viewThreatInClient(${clientIndex}, '${threat.path}')">
-                                 <i class="fas fa-edit"></i> Sửa
-                             </button>
-                             <button class="btn btn-sm btn-outline-danger" onclick="deleteThreatInClient(${clientIndex}, '${threat.path}')">
-                                 <i class="fas fa-trash"></i> Xóa
-                             </button>
+                         
+                         <div class="threat-actions ms-3">
+                             <div class="btn-group-vertical">
+                                 <button class="btn btn-sm btn-outline-primary" onclick="viewThreatInClient(${clientIndex}, '${threat.path}')" title="Edit File">
+                                     <i class="fas fa-edit"></i>
+                                 </button>
+                                 <button class="btn btn-sm btn-outline-danger" onclick="deleteThreatInClient(${clientIndex}, '${threat.path}')" title="Delete File">
+                                     <i class="fas fa-trash"></i>
+                                 </button>
+                             </div>
                          </div>
-                     </div>
-                     <div class="threat-meta">
-                         <span class="badge bg-${severity === 'critical' ? 'danger' : severity === 'warning' ? 'warning' : 'info'}">${getSeverityLabel(severity)}</span>
-                         <span class="badge bg-secondary">${ageInfo.label}</span>
-                         <span class="badge bg-light text-dark">${fileSize}</span>
-                     </div>
-                     <div class="threat-details mt-2">
-                         <small><strong>${threat.issues?.length || 0} vấn đề:</strong> 
-                         ${(threat.issues || []).slice(0, 3).map(issue => issue.pattern).join(', ')}
-                         ${(threat.issues || []).length > 3 ? '...' : ''}</small>
                      </div>
                  </div>
              `;
@@ -5094,38 +5188,7 @@ if (isset($_GET['api'])) {
              updatePagination();
          }
          
-         // Debug function to inspect data structure
-         function debugClientData(index) {
-             const result = currentMultiClientResults[index];
-             console.log('=== DEBUG CLIENT DATA ===');
-             console.log('Index:', index);
-             console.log('Full result:', result);
-             console.log('Client info:', result?.client_info || result?.client);
-             console.log('Scan result:', result?.scan_result);
-             console.log('Scan results:', result?.scan_result?.scan_results);
-             console.log('Suspicious files:', result?.scan_result?.scan_results?.suspicious_files);
-             console.log('Alternative suspicious files:', result?.scan_result?.suspicious_files);
-             console.log('Direct suspicious files:', result?.suspicious_files);
-             console.log('==========================');
-             
-             // Also try to call viewClientThreats to see what happens
-             viewClientThreats(index);
-         }
-         
-         // Add debug button to page (temporary)
-         document.addEventListener('DOMContentLoaded', function() {
-             setTimeout(() => {
-                 const debugBtn = document.createElement('button');
-                 debugBtn.innerHTML = '🐛 Debug Client 0';
-                 debugBtn.className = 'btn btn-warning btn-sm';
-                 debugBtn.style.position = 'fixed';
-                 debugBtn.style.top = '10px';
-                 debugBtn.style.right = '10px';
-                 debugBtn.style.zIndex = '9999';
-                 debugBtn.onclick = () => debugClientData(0);
-                 document.body.appendChild(debugBtn);
-             }, 2000);
-         });
+
         
         function addClientCardInteractions() {
             // Add hover effects and click handlers
@@ -5179,8 +5242,6 @@ if (isset($_GET['api'])) {
         
                  function viewClientThreats(index) {
              const result = currentMultiClientResults[index];
-             console.log('viewClientThreats - result:', result);
-             console.log('viewClientThreats - index:', index);
              
              if (!result) {
                  Swal.fire({
@@ -5191,60 +5252,70 @@ if (isset($_GET['api'])) {
                  return;
              }
              
-             // Check multiple possible data structures
-             let suspiciousFiles = null;
+             // Extract threats from real scan data 
+             let suspiciousFiles = [];
              
-             if (result.scan_result?.scan_results?.suspicious_files) {
-                 suspiciousFiles = result.scan_result.scan_results.suspicious_files;
-             } else if (result.scan_result?.suspicious_files) {
-                 suspiciousFiles = result.scan_result.suspicious_files;
-             } else if (result.suspicious_files) {
-                 suspiciousFiles = result.suspicious_files;
-             }
+             // Try to parse threats from different data structures
+             const scanResults = result.scan_result?.scan_results || result.scan_result || {};
              
-             console.log('suspiciousFiles found:', suspiciousFiles);
-             
-             if (!suspiciousFiles || suspiciousFiles.length === 0) {
-                 // Last attempt: create mock data if count indicates there should be threats
-                 const suspiciousCount = result.scan_result?.scan_results?.suspicious_count || 
-                                       result.scan_result?.suspicious_count || 
-                                       result.suspicious_count || 0;
-                                       
-                 if (suspiciousCount > 0) {
-                     console.log('Found suspicious count but no files, creating mock data');
-                     suspiciousFiles = [];
-                     for (let i = 0; i < Math.min(suspiciousCount, 5); i++) {
-                         suspiciousFiles.push({
-                             path: `./suspicious_file_${i + 1}.php`,
-                             issues: [
-                                 { line: 10 + i, pattern: 'eval(', description: 'Code execution vulnerability' },
-                                 { line: 20 + i, pattern: 'system(', description: 'System command execution' }
-                             ],
-                             metadata: {
-                                 size: 1024 + i * 500,
-                                 modified_time: Date.now() - i * 86400000
+             // Check if threats data exists in the response
+             if (scanResults.threats) {
+                 
+                 // Combine all threat categories
+                 const allCategories = ['critical', 'webshells', 'warnings', 'all'];
+                 
+                 allCategories.forEach(category => {
+                     if (scanResults.threats[category] && Array.isArray(scanResults.threats[category])) {
+                         scanResults.threats[category].forEach(threat => {
+                             // Only add if not already exists (avoid duplicates from 'all' category)
+                             if (!suspiciousFiles.find(f => f.path === threat.path)) {
+                                 suspiciousFiles.push({
+                                     path: threat.path,
+                                     issues: threat.issues || [],
+                                     metadata: {
+                                         size: threat.file_size || 0,
+                                         modified_time: threat.modified_time || 0,
+                                         md5: threat.md5 || '',
+                                     },
+                                     category: threat.category || category,
+                                     is_priority: threat.is_priority || false
+                                 });
                              }
                          });
                      }
-                     console.log('Created mock suspicious files:', suspiciousFiles);
-                 } else {
-                     Swal.fire({
-                         icon: 'info',
-                         title: 'Không có threats',
-                         text: 'Client này không có file nguy hiểm nào.',
-                         html: `
-                             <div style="text-align: left; font-size: 12px; margin-top: 10px;">
-                                 <strong>Debug Info:</strong><br>
-                                 - Index: ${index}<br>
-                                 - Client: ${result.client_info?.name || 'Unknown'}<br>
-                                 - Scan Result: ${result.scan_result ? 'Yes' : 'No'}<br>
-                                 - Scan Results: ${result.scan_result?.scan_results ? 'Yes' : 'No'}<br>
-                                 - Suspicious Count: ${suspiciousCount}
-                             </div>
-                         `
-                     });
-                     return;
+                 });
+             }
+             
+             // Fallback: try suspicious_files directly
+             if (suspiciousFiles.length === 0) {
+                 if (scanResults.suspicious_files && Array.isArray(scanResults.suspicious_files)) {
+                     suspiciousFiles = scanResults.suspicious_files;
+                 } else if (result.suspicious_files && Array.isArray(result.suspicious_files)) {
+                     suspiciousFiles = result.suspicious_files;
                  }
+             }
+             
+
+             
+             if (!suspiciousFiles || suspiciousFiles.length === 0) {
+                 const suspiciousCount = scanResults.suspicious_count || 0;
+                 
+                 Swal.fire({
+                     icon: 'info',
+                     title: 'Không có threats',
+                     text: 'Client này không có file nguy hiểm nào.',
+                     html: `
+                         <div style="text-align: left; font-size: 12px; margin-top: 10px;">
+                             <strong>Debug Info:</strong><br>
+                             - Index: ${index}<br>
+                             - Client: ${result.client_info?.name || 'Unknown'}<br>
+                             - Suspicious Count: ${suspiciousCount}<br>
+                             - Has Threats Object: ${scanResults.threats ? 'Yes' : 'No'}<br>
+                             - Has Suspicious Files: ${scanResults.suspicious_files ? 'Yes' : 'No'}
+                         </div>
+                     `
+                 });
+                 return;
              }
              
              // Set current client for file operations
