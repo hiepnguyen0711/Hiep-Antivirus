@@ -2468,6 +2468,12 @@ if (isset($_GET['api'])) {
              color: #6b7280;
          }
 
+         .back-to-multi-client {
+             margin-left: 16px;
+             font-size: 12px !important;
+             padding: 6px 12px !important;
+         }
+
         .client-details {
             text-align: left;
         }
@@ -4721,19 +4727,95 @@ if (isset($_GET['api'])) {
          }
          
          function viewThreatInClient(clientIndex, filePath) {
-             const client = allClientResults[clientIndex]?.client_info;
-             if (!client) return;
+             const result = allClientResults[clientIndex];
+             if (!result) return;
+             
+             const client = result.client_info || {};
+             const tempClientId = client.id || `client_${clientIndex}`;
+             
+             // Store current client context
+             const previousClientId = currentClientId;
+             currentClientId = tempClientId;
+             
+             // Ensure client exists in clients array
+             if (!clients.find(c => c.id === tempClientId)) {
+                 clients.push({
+                     id: tempClientId,
+                     name: client.name || `Client ${clientIndex + 1}`,
+                     url: client.url || client.domain || '',
+                     api_key: client.api_key || '',
+                     domain: client.domain || client.url || ''
+                 });
+             }
              
              // Use the same logic as single client threat viewing
-             viewThreat(filePath);
+             openFileInEditor(tempClientId, filePath);
          }
          
          function deleteThreatInClient(clientIndex, filePath) {
-             const client = allClientResults[clientIndex]?.client_info;
-             if (!client) return;
+             const result = allClientResults[clientIndex];
+             if (!result) return;
              
-             // Use the same logic as single client threat deletion
-             deleteFile(filePath);
+             const client = result.client_info || {};
+             const tempClientId = client.id || `client_${clientIndex}`;
+             
+             // Store current client context
+             const previousClientId = currentClientId;
+             currentClientId = tempClientId;
+             
+             // Ensure client exists in clients array
+             if (!clients.find(c => c.id === tempClientId)) {
+                 clients.push({
+                     id: tempClientId,
+                     name: client.name || `Client ${clientIndex + 1}`,
+                     url: client.url || client.domain || '',
+                     api_key: client.api_key || '',
+                     domain: client.domain || client.url || ''
+                 });
+             }
+             
+             // Use the same logic as single client threat deletion  
+             Swal.fire({
+                 title: 'Xác Nhận Xóa File',
+                 html: `Bạn có chắc muốn xóa file này?<br><strong>${filePath}</strong>`,
+                 icon: 'warning',
+                 showCancelButton: true,
+                 confirmButtonColor: '#d33',
+                 cancelButtonColor: '#3085d6',
+                 confirmButtonText: 'Xóa',
+                 cancelButtonText: 'Hủy'
+             }).then((result) => {
+                 if (result.isConfirmed) {
+                     // Call delete API with specific client
+                     fetch(`?api=delete_file&client_id=${tempClientId}`, {
+                         method: 'POST',
+                         headers: {
+                             'Content-Type': 'application/json',
+                         },
+                         body: JSON.stringify({
+                             file_path: filePath
+                         })
+                     })
+                     .then(response => response.json())
+                     .then(data => {
+                         if (data.success) {
+                             Swal.fire('Đã Xóa!', 'File đã được xóa thành công.', 'success');
+                             
+                             // Remove from current view
+                             const threatItem = document.querySelector(`[onclick*="${filePath}"]`);
+                             if (threatItem && threatItem.closest('.threat-item')) {
+                                 threatItem.closest('.threat-item').remove();
+                             }
+                         } else {
+                             Swal.fire('Lỗi!', data.error || 'Không thể xóa file.', 'error');
+                         }
+                     })
+                     .catch(error => {
+                         console.error('Delete error:', error);
+                         Swal.fire('Lỗi!', 'Có lỗi xảy ra khi xóa file.', 'error');
+                     });
+                 }
+             });
          }
          
          function changePage(direction) {
@@ -4837,21 +4919,76 @@ if (isset($_GET['api'])) {
             });
         }
         
-        function viewClientThreats(index) {
-            const result = currentMultiClientResults[index];
-            if (!result || !result.scan_result?.scan_results?.suspicious_files) return;
-            
-            // Switch to single client view with this client's results
-            currentScanResults = {
-                suspicious_files: result.scan_result.scan_results.suspicious_files,
-                scanned_files: result.scan_result.scan_results.scanned_files,
-                suspicious_count: result.scan_result.scan_results.suspicious_count,
-                critical_count: result.scan_result.scan_results.critical_count
-            };
-            
-            hideMultiClientResults();
-            displayScanResults(currentScanResults);
-        }
+                 function viewClientThreats(index) {
+             const result = currentMultiClientResults[index];
+             if (!result || !result.scan_result?.scan_results?.suspicious_files) {
+                 Swal.fire({
+                     icon: 'info',
+                     title: 'Không có threats',
+                     text: 'Client này không có file nguy hiểm nào.'
+                 });
+                 return;
+             }
+             
+             // Set current client for file operations
+             const client = result.client_info || {};
+             currentClientId = client.id || `client_${index}`;
+             
+             // Switch to single client view with this client's results
+             currentScanResults = {
+                 suspicious_files: result.scan_result.scan_results.suspicious_files,
+                 scanned_files: result.scan_result.scan_results.scanned_files,
+                 suspicious_count: result.scan_result.scan_results.suspicious_count,
+                 critical_count: result.scan_result.scan_results.critical_count
+             };
+             
+             // Store client info for file operations
+             if (!clients.find(c => c.id === currentClientId)) {
+                 clients.push({
+                     id: currentClientId,
+                     name: client.name || `Client ${index + 1}`,
+                     url: client.url || client.domain || '',
+                     api_key: client.api_key || '',
+                     domain: client.domain || client.url || ''
+                 });
+             }
+             
+             // Hide multi-client results
+             hideMultiClientResults();
+             
+             // Show single client results with back button
+             const scanResultsDiv = document.getElementById('scanResults');
+             if (scanResultsDiv) {
+                 scanResultsDiv.style.display = 'block';
+                 
+                 // Add back button to return to multi-client view
+                 const resultsHeader = scanResultsDiv.querySelector('.results-header');
+                 if (resultsHeader) {
+                     // Remove existing back button if any
+                     const existingBackBtn = resultsHeader.querySelector('.back-to-multi-client');
+                     if (existingBackBtn) {
+                         existingBackBtn.remove();
+                     }
+                     
+                     // Add new back button
+                     const backButton = document.createElement('button');
+                     backButton.className = 'btn btn-outline-secondary btn-sm back-to-multi-client';
+                     backButton.innerHTML = '<i class="fas fa-arrow-left me-1"></i>Quay lại tổng quan';
+                     backButton.onclick = function() {
+                         document.getElementById('scanResults').style.display = 'none';
+                         document.getElementById('multiClientResults').style.display = 'block';
+                     };
+                     
+                     const resultsTitle = resultsHeader.querySelector('.results-title');
+                     if (resultsTitle) {
+                         resultsTitle.appendChild(backButton);
+                     }
+                 }
+             }
+             
+             // Display results
+             displayScanResults(currentScanResults);
+         }
         
         function hideMultiClientResults() {
             const container = document.getElementById('multiClientResults');
