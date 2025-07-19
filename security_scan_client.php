@@ -23,6 +23,9 @@ class SecurityClientConfig {
     const API_CACHE_DURATION = 3600; // 1 hour cache
     const ENABLE_API_PATTERNS = true;
     
+    // Logging Configuration
+    const ENABLE_LOGGING = false; // Disable log file creation
+    
     // Bảo mật
     const ALLOWED_IPS = []; // Để trống = cho phép tất cả, hoặc ['IP1', 'IP2']
     const RATE_LIMIT = 10; // Số request/phút
@@ -991,7 +994,9 @@ class SecurityScanner {
         }
         
         $logFile = './logs/last_scan_client.json';
-        file_put_contents($logFile, json_encode($scanResult, JSON_PRETTY_PRINT));
+        if (SecurityClientConfig::ENABLE_LOGGING) {
+            file_put_contents($logFile, json_encode($scanResult, JSON_PRETTY_PRINT));
+        }
     }
 }
 
@@ -1100,7 +1105,9 @@ function handleScanRequest() {
         if (!file_exists('./logs')) {
             mkdir('./logs', 0755, true);
         }
-        file_put_contents('./logs/client_scan_' . date('Y-m-d') . '.log', $logEntry, FILE_APPEND);
+        if (SecurityClientConfig::ENABLE_LOGGING) {
+            file_put_contents('./logs/client_scan_' . date('Y-m-d') . '.log', $logEntry, FILE_APPEND);
+        }
     }
     
     echo json_encode($result);
@@ -1178,7 +1185,9 @@ function handleDeleteFileRequest() {
         'json_error' => json_last_error_msg()
     ];
     
-    file_put_contents('./logs/delete_requests.log', json_encode($debugInfo) . "\n", FILE_APPEND);
+            if (SecurityClientConfig::ENABLE_LOGGING) {
+            file_put_contents('./logs/delete_requests.log', json_encode($debugInfo) . "\n", FILE_APPEND);
+        }
     
     if (empty($filePath)) {
         http_response_code(400);
@@ -1220,7 +1229,9 @@ function handleDeleteFileRequest() {
             ];
             
             // Log successful deletion
-            file_put_contents('./logs/delete_success.log', json_encode($result) . "\n", FILE_APPEND);
+            if (SecurityClientConfig::ENABLE_LOGGING) {
+                file_put_contents('./logs/delete_success.log', json_encode($result) . "\n", FILE_APPEND);
+            }
             
             echo json_encode($result);
         } else {
@@ -1231,7 +1242,9 @@ function handleDeleteFileRequest() {
             ];
             
             // Log failure
-            file_put_contents('./logs/delete_failure.log', json_encode($result) . "\n", FILE_APPEND);
+            if (SecurityClientConfig::ENABLE_LOGGING) {
+                file_put_contents('./logs/delete_failure.log', json_encode($result) . "\n", FILE_APPEND);
+            }
             
             echo json_encode($result);
         }
@@ -1243,7 +1256,9 @@ function handleDeleteFileRequest() {
         ];
         
         // Log exception
-        file_put_contents('./logs/delete_exception.log', json_encode($result) . "\n", FILE_APPEND);
+        if (SecurityClientConfig::ENABLE_LOGGING) {
+            file_put_contents('./logs/delete_exception.log', json_encode($result) . "\n", FILE_APPEND);
+        }
         
         echo json_encode($result);
     }
@@ -1290,7 +1305,9 @@ function handleQuarantineFileRequest() {
             if (rename($filePath, $quarantineFile)) {
                 // Ghi log quarantine
                 $logEntry = date('Y-m-d H:i:s') . " - Quarantined: $filePath -> $quarantineFile\n";
-                file_put_contents('./logs/quarantine.log', $logEntry, FILE_APPEND | LOCK_EX);
+                if (SecurityClientConfig::ENABLE_LOGGING) {
+            file_put_contents('./logs/quarantine.log', $logEntry, FILE_APPEND | LOCK_EX);
+        }
 
                 echo json_encode([
                     'success' => true,

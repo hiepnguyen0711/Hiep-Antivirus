@@ -1223,13 +1223,8 @@ function deleteMalwareFiles($malware_files) {
     $backup_created = false;
     $details = array();
     
-    // Create backup directory
-    $backup_dir = './security_backups/' . date('Y-m-d_H-i-s');
-    if (!file_exists($backup_dir)) {
-        if (mkdir($backup_dir, 0755, true)) {
-            $backup_created = true;
-        }
-    }
+    // Skip backup creation
+    $backup_created = false;
     
     foreach ($malware_files as $file_path) {
         if (!file_exists($file_path) || !is_readable($file_path)) {
@@ -1237,12 +1232,7 @@ function deleteMalwareFiles($malware_files) {
             continue;
         }
         
-        // Create backup before deletion
-        if ($backup_created) {
-            $content = file_get_contents($file_path);
-            $backup_file = $backup_dir . '/' . basename($file_path) . '.malware_backup';
-            file_put_contents($backup_file, $content);
-        }
+        // Skip backup - delete directly
         
         // Delete the malware file
         if (unlink($file_path)) {
@@ -1277,12 +1267,8 @@ function performAutoFix($scan_data) {
     $details = array();
     
     // Create backup directory
-    $backup_dir = './security_backups/' . date('Y-m-d_H-i-s');
-    if (!file_exists($backup_dir)) {
-        if (mkdir($backup_dir, 0755, true)) {
-            $backup_created = true;
-        }
-    }
+    // Skip backup creation for critical files
+    $backup_created = false;
     
     // STEP 1: Auto-delete critical malware files
     if (isset($scan_data['critical_files']) && !empty($scan_data['critical_files'])) {
@@ -1294,12 +1280,7 @@ function performAutoFix($scan_data) {
             $full_path = './' . $normalized_path;
             
             if (file_exists($full_path)) {
-                // Backup before deletion
-                if ($backup_created) {
-                    $content = file_get_contents($full_path);
-                    $backup_file = $backup_dir . '/' . basename($full_path) . '.malware_backup';
-                    file_put_contents($backup_file, $content);
-                }
+                // Skip backup - delete directly
                 
                 // Delete malware file
                 if (unlink($full_path)) {
