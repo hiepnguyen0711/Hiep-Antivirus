@@ -5405,58 +5405,66 @@ if (isset($_GET['api'])) {
             // Try to get client from multiple sources with enhanced fallback
             let client = result.client_info || result.client || {};
             
-            // Enhanced client info extraction
-            if (!client.url && !client.domain) {
-                // Try to find matching client from original clients array by name or other info
-                const possibleClient = clients.find(c => 
-                    c.name === (result.client_name || client.name) ||
-                    c.id === (result.client_id || client.id)
+            // Enhanced client info extraction with better fallback logic
+            let matchedClient = null;
+            
+            // First try to find by exact index in clients array
+            if (clients[clientIndex]) {
+                matchedClient = clients[clientIndex];
+                console.log('Found client by index:', matchedClient);
+            }
+            
+            // If no direct match, try to find by client info in result
+            if (!matchedClient && (result.client_info || result.client)) {
+                const clientInfo = result.client_info || result.client;
+                matchedClient = clients.find(c => 
+                    c.name === clientInfo.name ||
+                    c.id === clientInfo.id ||
+                    c.url === clientInfo.url ||
+                    c.url === clientInfo.client_url
                 );
-                
-                if (possibleClient) {
-                    console.log('Found matching client:', possibleClient);
-                    client = { ...client, ...possibleClient };
-                } else if (clients[clientIndex]) {
-                    console.log('Using fallback client by index:', clients[clientIndex]);
-                    client = { ...client, ...clients[clientIndex] };
-                }
+                console.log('Found client by info match:', matchedClient);
+            }
+            
+            // Fallback to first client if still no match
+            if (!matchedClient && clients.length > 0) {
+                matchedClient = clients[0];
+                console.log('Using fallback first client:', matchedClient);
+            }
+            
+            // Use matched client or create temp one
+            if (matchedClient) {
+                client = matchedClient;
+            } else {
+                // Create temporary client based on result info
+                const clientInfo = result.client_info || result.client || {};
+                client = {
+                    id: `temp_client_${clientIndex}_${Date.now()}`,
+                    name: clientInfo.name || `Client ${clientIndex + 1}`,
+                    url: clientInfo.url || clientInfo.client_url || 'http://localhost',
+                    api_key: clientInfo.api_key || 'default-key',
+                    domain: clientInfo.domain || 'localhost'
+                };
+                console.log('Created temporary client:', client);
             }
 
-            const tempClientId = client.id || `temp_client_${clientIndex}_${Date.now()}`;
-
-            console.log('Opening editor for:', {
+            console.log('Final client for editor:', {
                 clientIndex,
                 filePath,
                 client,
-                tempClientId,
                 resultKeys: Object.keys(result),
                 clientKeys: Object.keys(client)
             });
 
-            // Ensure client exists in clients array
-            let existingClient = clients.find(c => c.id === tempClientId);
-            if (!existingClient) {
-                const newClient = {
-                    id: tempClientId,
-                    name: client.name || `Client ${clientIndex + 1}`,
-                    url: client.url || client.domain || client.client_url || '',
-                    api_key: client.api_key || 'default-api-key',
-                    domain: client.domain || client.url || client.client_url || ''
-                };
-                clients.push(newClient);
-                existingClient = newClient;
-                console.log('Added temp client:', newClient);
-            }
-
                          // Validate client info before opening editor
-             if (!existingClient.url || existingClient.url === '') {
+             if (!client.url || client.url === '') {
                  Swal.fire({
                      icon: 'warning',
                      title: 'Thiếu thông tin client!',
                      html: `
                          <div class="text-start">
                              <p><strong>Không có URL của client để mở editor.</strong></p>
-                             <p><small>Client: ${existingClient.name}</small></p>
+                             <p><small>Client: ${client.name}</small></p>
                              <p><small>File: ${filePath}</small></p>
                              <p><small class="text-muted">Hãy đảm bảo rằng thông tin client đã được cấu hình đúng.</small></p>
                          </div>
@@ -5466,7 +5474,7 @@ if (isset($_GET['api'])) {
              }
 
             // Use the same logic as single client threat viewing
-            openFileInEditor(tempClientId, filePath);
+            openFileInEditor(client.id, filePath);
         }
 
         function deleteThreatInClient(clientIndex, filePath) {
