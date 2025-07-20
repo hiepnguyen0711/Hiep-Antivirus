@@ -384,6 +384,15 @@ class SecurityScanner
         return $this->apiPatterns['blacklist']['content_patterns'];
     }
 
+    private function getApiWhitelist()
+    {
+        if (!$this->apiPatterns || !isset($this->apiPatterns['whitelist']['safe_content_patterns'])) {
+            return [];
+        }
+
+        return $this->apiPatterns['whitelist']['safe_content_patterns'];
+    }
+
     public function performScan($options = [])
     {
         try {
@@ -394,7 +403,7 @@ class SecurityScanner
 
             // Lấy priority files từ options
             $priorityFiles = $options['priority_files'] ?? [];
-            $whitelist = $this->apiPatterns['whitelist'];
+            $whitelist = $this->getApiWhitelist();
             // Add API content patterns to enhance detection
             $apiContentPatterns = $this->getApiContentPatterns();
 
@@ -463,12 +472,13 @@ class SecurityScanner
             // Webshell Detection Patterns
             $webshellPatterns = $this->getWebshellPatterns();
 
-             
+
 
             // Merge API patterns into detection patterns
             foreach ($apiContentPatterns as $pattern) {
                 $criticalPatterns[$pattern] = 'API Blacklist Pattern';
             }
+            $safeContentPatterns = $this->getApiWhitelist();
 
 
             // Bắt đầu quét - ưu tiên priority files trước - sử dụng patterns từ security_scan.php
@@ -479,6 +489,7 @@ class SecurityScanner
 
             // Tạo kết quả
             $this->generateScanResults();
+
 
             return [
                 'success' => true,
@@ -495,7 +506,8 @@ class SecurityScanner
                 ],
                 'scan_results' => $this->scanResults,
                 'timestamp' => date('Y-m-d H:i:s'),
-                'api_patterns' => $whitelist
+                'api_patterns' => $whitelist,
+                'safe_content_patterns' => $safeContentPatterns
             ];
         } catch (Exception $e) {
             return [
