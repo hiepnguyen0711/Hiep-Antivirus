@@ -1399,7 +1399,7 @@ class SecurityScanner {
         
         $logFile = './logs/last_scan_client.json';
         if (SecurityClientConfig::ENABLE_LOGGING) {
-            file_put_contents($logFile, json_encode($scanResult, JSON_PRETTY_PRINT));
+            // file_put_contents($logFile, json_encode($scanResult, JSON_PRETTY_PRINT));
         }
     }
 }
@@ -1634,9 +1634,8 @@ function handleDeleteFileRequest() {
             
             // Log successful deletion
             if (SecurityClientConfig::ENABLE_LOGGING) {
-                file_put_contents('./logs/delete_success.log', json_encode($result) . "\n", FILE_APPEND);
+                // file_put_contents('./logs/delete_success.log', json_encode($result) . "\n", FILE_APPEND);
             }
-            
             echo json_encode($result);
         } else {
             $result = [
@@ -1647,8 +1646,9 @@ function handleDeleteFileRequest() {
             
             // Log failure
             if (SecurityClientConfig::ENABLE_LOGGING) {
-                file_put_contents('./logs/delete_failure.log', json_encode($result) . "\n", FILE_APPEND);
+                // file_put_contents('./logs/delete_failure.log', json_encode($result) . "\n", FILE_APPEND);
             }
+            header('Content-Type: application/json');
             
             echo json_encode($result);
         }
@@ -1661,8 +1661,9 @@ function handleDeleteFileRequest() {
         
         // Log exception
         if (SecurityClientConfig::ENABLE_LOGGING) {
-            file_put_contents('./logs/delete_exception.log', json_encode($result) . "\n", FILE_APPEND);
+            // file_put_contents('./logs/delete_exception.log', json_encode($result) . "\n", FILE_APPEND);
         }
+        header('Content-Type: application/json');
         
         echo json_encode($result);
     }

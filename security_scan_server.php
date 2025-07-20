@@ -293,7 +293,6 @@ class ScannerManager
             'error' => $error
         ];
 
-        file_put_contents('./logs/api_responses.log', json_encode($responseLog) . "\n", FILE_APPEND);
 
         if ($error) {
             return [
@@ -3861,7 +3860,7 @@ if (isset($_GET['api'])) {
                     const ageInfo = getAgeInfo(file.metadata?.modified_time);
 
                     return `
-                        <div class="recent-threat-item">
+                        <div class="recent-threat-item" data-file-path="${file.path}">
                             <div class="recent-threat-header">
                                 <div class="recent-threat-file" onclick="viewThreat('${file.path}')" title="Click để mở editor">${file.path}</div>
                                 <button class="recent-threat-delete" onclick="deleteFile('${file.path}')" title="Xóa file">
@@ -4027,27 +4026,55 @@ if (isset($_GET['api'])) {
                 if (result.isConfirmed) {
                     fetch(`?api=delete_file`, {
                             method: 'POST',
+                            dataType: 'json',
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded'
                             },
                             body: `client_id=${currentClientId}&file_path=${encodeURIComponent(filePath)}`
                         })
-                        .then(response => response.json())
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                            }
+                            return response.json();
+                        })
                         .then(data => {
                             if (data.success) {
                                 Swal.fire('Đã xóa!', 'File đã được xóa thành công.', 'success');
                                 // Remove card from display
                                 document.querySelectorAll('.threat-card').forEach(card => {
-                                    if (card.querySelector('.threat-path').textContent === filePath) {
+                                    if (card.dataset.filePath === filePath) {
                                         card.remove();
                                     }
                                 });
+
+                                document.querySelectorAll('.recent-threat-item').forEach(item => {
+                                    if (item.dataset.filePath === filePath) {
+                                        item.remove();
+                                    }
+                                });
                             } else {
-                                Swal.fire('Lỗi!', data.error || 'Không thể xóa file.', 'error');
+                                // Better error handling - distinguish between different error types
+                                let errorMessage = data.error || 'Không thể xóa file.';
+                                let icon = 'error';
+                                
+                                if (errorMessage.includes('File not found') || errorMessage.includes('not found')) {
+                                    errorMessage = 'File không tồn tại hoặc đã được xóa trước đó.';
+                                    icon = 'info';
+                                    
+                                    // Remove card from display if file not found
+                                    document.querySelectorAll('.threat-card').forEach(card => {
+                                        if (card.querySelector('.threat-path').textContent === filePath) {
+                                            card.remove();
+                                        }
+                                    });
+                                }
+                                
+                                Swal.fire('Thông báo', errorMessage, icon);
                             }
                         })
                         .catch(error => {
-                            Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
+                            Swal.fire('Lỗi!', 'Không thể kết nối tới server .'+error.message , 'error');
                         });
                 }
             });
@@ -5590,7 +5617,22 @@ if (isset($_GET['api'])) {
                                     refreshScanResults();
                                 }
                             } else {
-                                Swal.fire('Lỗi!', data.error || 'Không thể xóa file.', 'error');
+                                // Better error handling - distinguish between different error types
+                                let errorMessage = data.error || 'Không thể xóa file.';
+                                let icon = 'error';
+                                
+                                if (errorMessage.includes('File not found') || errorMessage.includes('not found')) {
+                                    errorMessage = 'File không tồn tại hoặc đã được xóa trước đó.';
+                                    icon = 'info';
+                                    
+                                    // Remove from view if file not found
+                                    const threatItem = document.querySelector(`[onclick*="${filePath}"]`);
+                                    if (threatItem && threatItem.closest('.threat-item')) {
+                                        threatItem.closest('.threat-item').remove();
+                                    }
+                                }
+                                
+                                Swal.fire('Thông báo', errorMessage, icon);
                             }
                         })
                         .catch(error => {
