@@ -114,8 +114,8 @@ function checkRateLimit() {
     $requests = [];
     
     if (file_exists($rateFile)) {
-        $content = file_get_contents($rateFile);
-        $requests = $content ? json_decode($content, true) : [];
+        // $content = file_get_contents($rateFile);
+        // $requests = $content ? json_decode($content, true) : [];
     }
     
     // Lọc request trong 1 phút qua
@@ -130,7 +130,7 @@ function checkRateLimit() {
     
     // Thêm request hiện tại
     $requests[] = $currentTime;
-    file_put_contents($rateFile, json_encode($requests));
+    // file_put_contents($rateFile, json_encode($requests));
     
     return true;
 }
