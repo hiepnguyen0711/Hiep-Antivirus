@@ -276,7 +276,7 @@ class ScannerManager
             'headers' => $headers
         ];
 
-        file_put_contents('./logs/api_requests.log', json_encode($logData) . "\n", FILE_APPEND);
+        // file_put_contents('./logs/api_requests.log', json_encode($logData) . "\n", FILE_APPEND);
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -3827,7 +3827,6 @@ if (isset($_GET['api'])) {
                                         <div class="issue-item border rounded p-2 mb-2" style="background: #fef2f2; border-color: #fecaca !important;">
                                             <div class="d-flex justify-content-between align-items-start">
                                                 <div class="flex-grow-1">
-                                                    ${getSeverityBadge(issue.severity)}
                                                     <span class="ms-2 fw-bold text-danger">${issue.description || issue.pattern}</span>
                                                     ${(issue.line_number || issue.line) ? `<span class="ms-2 badge bg-dark">Dòng ${issue.line_number || issue.line}</span>` : ''}
                                                     ${issue.pattern && issue.description && issue.pattern !== issue.description ? `<div class="mt-1"><small class="text-muted font-monospace" style="font-size: 9px;">Pattern: ${issue.pattern.length > 50 ? issue.pattern.substring(0, 50) + '...' : issue.pattern}</small></div>` : ''}
