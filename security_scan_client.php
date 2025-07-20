@@ -463,6 +463,8 @@ class SecurityScanner
             // Webshell Detection Patterns
             $webshellPatterns = $this->getWebshellPatterns();
 
+             
+
             // Merge API patterns into detection patterns
             foreach ($apiContentPatterns as $pattern) {
                 $criticalPatterns[$pattern] = 'API Blacklist Pattern';
@@ -471,7 +473,7 @@ class SecurityScanner
 
             // Bắt đầu quét - ưu tiên priority files trước - sử dụng patterns từ security_scan.php
             $this->scanDirectoryAdvanced('./', $criticalPatterns, $severePatterns, $warningPatterns, $suspiciousFilePatterns, $priorityFiles, $whitelist);
-
+            // white List
             // Debug logging
             error_log("Security scan completed - Files scanned: {$this->scannedFiles}, Suspicious found: " . count($this->suspiciousFiles));
 
@@ -751,6 +753,8 @@ class SecurityScanner
         $excludeDirs = ['.git', '.svn', '.hg'];
         $excludeFiles = ['security_scan_client.php', 'security_scan_server.php', 'scanner_config.php', 'server_cron.php'];
 
+
+
         try {
             $iterator = new RecursiveIteratorIterator(
                 new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
@@ -777,6 +781,14 @@ class SecurityScanner
                         continue;
                     }
 
+                    if ($this->isWhitelistedFile($filePath, $fileName)) {
+                        continue;
+                    }
+
+                    if (in_array($filePath, $whitelist)) {
+                        continue;
+                    }
+
                     // Skip excluded directories
                     $shouldSkip = false;
                     foreach ($excludeDirs as $excludeDir) {
@@ -791,9 +803,15 @@ class SecurityScanner
                     }
 
 
-                    // 3. Skip whitelist patterns
+                    // 3. Skip whitelist patterns and skip file in whitelist
                     if (!empty($whitelist)) {
                         foreach ($whitelist as $pat) {
+
+                            // skip content_patterns in whitelist
+                            if (in_array($pat, $whitelist['content_patterns'])) {
+                                continue;
+                            }
+
                             // fnmatch hỗ trợ wildcard, hoặc đơn giản strpos
                             if (
                                 (@fnmatch($pat, $fileName)   === true) ||
