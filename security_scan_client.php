@@ -393,6 +393,39 @@ class SecurityScanner
         return $this->apiPatterns['whitelist']['safe_content_patterns'];
     }
 
+    /**
+     * Get safe content patterns from API for whitelist checking
+     */
+    private function getApiSafeContentPatterns()
+    {
+        if (!$this->apiPatterns || !isset($this->apiPatterns['whitelist']['safe_content_patterns'])) {
+            return [];
+        }
+
+        return $this->apiPatterns['whitelist']['safe_content_patterns'];
+    }
+
+    /**
+     * Get line content at specific line number
+     */
+    private function getLineContentAtNumber($content, $lineNumber)
+    {
+        if ($lineNumber <= 0) {
+            return '';
+        }
+
+        $lines = explode("\n", $content);
+        
+        // Convert to 0-based index
+        $index = $lineNumber - 1;
+        
+        if (isset($lines[$index])) {
+            return trim($lines[$index]);
+        }
+        
+        return '';
+    }
+
     public function performScan($options = [])
     {
         try {
@@ -928,7 +961,7 @@ class SecurityScanner
     }
 
     /**
-     * Scan file with line numbers - EXACT copy from security_scan.php
+     * Scan file with line numbers - EXACT copy from security_scan.php with WHITELIST check
      */
     private function scanFileWithLineNumbers($filePath, $patterns)
     {
@@ -944,18 +977,54 @@ class SecurityScanner
         $lines = explode("\n", $content);
         $issues = [];
 
+        // Get safe content patterns from API
+        $safeContentPatterns = $this->getApiSafeContentPatterns();
+
         foreach ($patterns as $pattern => $description) {
             foreach ($lines as $lineNumber => $line) {
                 // Use stripos for case-insensitive matching - SAME AS security_scan.php
                 if (stripos($line, $pattern) !== false) {
-                    error_log("PATTERN FOUND in {$filePath}: {$pattern} at line " . ($lineNumber + 1));
-                    $issues[] = [
-                        'pattern' => $pattern,
-                        'description' => $description,
-                        'line' => $lineNumber + 1,
-                        'severity' => 'critical',
-                        'context' => trim($line)
-                    ];
+                    
+                    // Check if this line matches any safe content patterns (WHITELIST CHECK)
+                    $isSafe = false;
+                    if (!empty($safeContentPatterns)) {
+                        foreach ($safeContentPatterns as $safePattern) {
+                            // Clean the safe pattern (remove escape slashes)
+                            $cleanSafePattern = str_replace(['\\(', '\\)', '\\\\'], ['(', ')', '\\'], $safePattern);
+                            
+                            // Check exact match or regex match
+                            if (stripos($line, $cleanSafePattern) !== false) {
+                                $isSafe = true;
+                                error_log("SAFE PATTERN FOUND - IGNORING: {$pattern} matches safe pattern: {$cleanSafePattern} in {$filePath}");
+                                break;
+                            }
+                            
+                            // Also try as regex if it looks like one
+                            if (strpos($safePattern, '|') !== false || strpos($safePattern, '\\') !== false) {
+                                try {
+                                    if (@preg_match('/' . $safePattern . '/i', $line)) {
+                                        $isSafe = true;
+                                        error_log("SAFE REGEX PATTERN FOUND - IGNORING: {$pattern} matches safe regex: {$safePattern} in {$filePath}");
+                                        break;
+                                    }
+                                } catch (Exception $e) {
+                                    // Invalid regex, continue with string matching
+                                }
+                            }
+                        }
+                    }
+
+                    // Only add to issues if NOT safe
+                    if (!$isSafe) {
+                        error_log("PATTERN FOUND in {$filePath}: {$pattern} at line " . ($lineNumber + 1));
+                        $issues[] = [
+                            'pattern' => $pattern,
+                            'description' => $description,
+                            'line' => $lineNumber + 1,
+                            'severity' => 'critical',
+                            'context' => trim($line)
+                        ];
+                    }
                 }
             }
         }
@@ -1089,21 +1158,44 @@ class SecurityScanner
 
         $issues = [];
 
+        // Get safe content patterns from API
+        $safeContentPatterns = $this->getApiSafeContentPatterns();
+
         // Kiểm tra critical patterns
         foreach ($criticalPatterns as $pattern => $description) {
             if (strpos($content, $pattern) !== false) {
                 $lineNumber = $this->findPatternLineNumber($content, $pattern);
 
-                // Debug logging for pattern detection
-                error_log("CRITICAL PATTERN FOUND in {$filePath}: {$pattern} at line {$lineNumber}");
+                // Check if this matches any safe content patterns (WHITELIST CHECK)
+                $isSafe = false;
+                if (!empty($safeContentPatterns)) {
+                    $contextLine = $this->getLineContentAtNumber($content, $lineNumber);
+                    foreach ($safeContentPatterns as $safePattern) {
+                        // Clean the safe pattern (remove escape slashes)
+                        $cleanSafePattern = str_replace(['\\(', '\\)', '\\\\'], ['(', ')', '\\'], $safePattern);
+                        
+                        // Check exact match or regex match
+                        if (stripos($contextLine, $cleanSafePattern) !== false) {
+                            $isSafe = true;
+                            error_log("SAFE CRITICAL PATTERN - IGNORING: {$pattern} matches safe pattern: {$cleanSafePattern} in {$filePath}");
+                            break;
+                        }
+                    }
+                }
 
-                $issues[] = [
-                    'pattern' => $pattern,
-                    'description' => $description,
-                    'severity' => 'critical',
-                    'line' => $lineNumber,
-                    'context' => $this->getContextAroundPattern($content, $pattern)
-                ];
+                // Only add to issues if NOT safe
+                if (!$isSafe) {
+                    // Debug logging for pattern detection
+                    error_log("CRITICAL PATTERN FOUND in {$filePath}: {$pattern} at line {$lineNumber}");
+
+                    $issues[] = [
+                        'pattern' => $pattern,
+                        'description' => $description,
+                        'severity' => 'critical',
+                        'line' => $lineNumber,
+                        'context' => $this->getContextAroundPattern($content, $pattern)
+                    ];
+                }
             }
         }
 
@@ -1111,13 +1203,34 @@ class SecurityScanner
         foreach ($suspiciousPatterns as $pattern => $description) {
             if (strpos($content, $pattern) !== false) {
                 $lineNumber = $this->findPatternLineNumber($content, $pattern);
-                $issues[] = [
-                    'pattern' => $pattern,
-                    'description' => $description,
-                    'severity' => 'warning',
-                    'line' => $lineNumber,
-                    'context' => $this->getContextAroundPattern($content, $pattern)
-                ];
+
+                // Check if this matches any safe content patterns (WHITELIST CHECK)
+                $isSafe = false;
+                if (!empty($safeContentPatterns)) {
+                    $contextLine = $this->getLineContentAtNumber($content, $lineNumber);
+                    foreach ($safeContentPatterns as $safePattern) {
+                        // Clean the safe pattern (remove escape slashes)
+                        $cleanSafePattern = str_replace(['\\(', '\\)', '\\\\'], ['(', ')', '\\'], $safePattern);
+                        
+                        // Check exact match or regex match
+                        if (stripos($contextLine, $cleanSafePattern) !== false) {
+                            $isSafe = true;
+                            error_log("SAFE SUSPICIOUS PATTERN - IGNORING: {$pattern} matches safe pattern: {$cleanSafePattern} in {$filePath}");
+                            break;
+                        }
+                    }
+                }
+
+                // Only add to issues if NOT safe
+                if (!$isSafe) {
+                    $issues[] = [
+                        'pattern' => $pattern,
+                        'description' => $description,
+                        'severity' => 'warning',
+                        'line' => $lineNumber,
+                        'context' => $this->getContextAroundPattern($content, $pattern)
+                    ];
+                }
             }
         }
 
@@ -1125,14 +1238,35 @@ class SecurityScanner
         foreach ($webshellPatterns as $pattern => $description) {
             if (preg_match($pattern, $content)) {
                 $lineNumber = $this->findPatternLineNumber($content, $pattern);
-                $issues[] = [
-                    'pattern' => $pattern,
-                    'description' => $description,
-                    'severity' => 'critical',
-                    'type' => 'webshell',
-                    'line' => $lineNumber,
-                    'context' => $this->getContextAroundPattern($content, $pattern)
-                ];
+
+                // Check if this matches any safe content patterns (WHITELIST CHECK)
+                $isSafe = false;
+                if (!empty($safeContentPatterns)) {
+                    $contextLine = $this->getLineContentAtNumber($content, $lineNumber);
+                    foreach ($safeContentPatterns as $safePattern) {
+                        // Clean the safe pattern (remove escape slashes)
+                        $cleanSafePattern = str_replace(['\\(', '\\)', '\\\\'], ['(', ')', '\\'], $safePattern);
+                        
+                        // Check exact match or regex match
+                        if (stripos($contextLine, $cleanSafePattern) !== false) {
+                            $isSafe = true;
+                            error_log("SAFE WEBSHELL PATTERN - IGNORING: {$pattern} matches safe pattern: {$cleanSafePattern} in {$filePath}");
+                            break;
+                        }
+                    }
+                }
+
+                // Only add to issues if NOT safe
+                if (!$isSafe) {
+                    $issues[] = [
+                        'pattern' => $pattern,
+                        'description' => $description,
+                        'severity' => 'critical',
+                        'type' => 'webshell',
+                        'line' => $lineNumber,
+                        'context' => $this->getContextAroundPattern($content, $pattern)
+                    ];
+                }
             }
         }
 
