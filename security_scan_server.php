@@ -171,7 +171,8 @@ class ScannerManager
             'priority_files' => $priorityFiles
         ];
 
-        $response = $this->makeApiRequest($url, 'POST', [], json_encode($scanData));
+        // FIX: Sửa lỗi truyền tham số - data phải là scanData, apiKey phải là client api_key
+        $response = $this->makeApiRequest($url, 'POST', $scanData, $client['api_key']);
 
         if ($response['success']) {
             $this->clientManager->updateClient($client['id'], [
@@ -224,7 +225,8 @@ class ScannerManager
         }
         $url .= '?endpoint=status&api_key=' . urlencode($client['api_key']);
 
-        $response = $this->makeApiRequest($url, 'GET', [], null);
+        // FIX: Sửa apiKey từ null thành client api_key
+        $response = $this->makeApiRequest($url, 'GET', [], $client['api_key']);
 
         if ($response['success']) {
             return $response['data'];
@@ -237,13 +239,27 @@ class ScannerManager
     {
         $ch = curl_init();
 
-        // Cấu hình cURL
+        // Cấu hình cURL - tối ưu cho cả HTTP và HTTPS
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, SecurityServerConfig::SCAN_TIMEOUT);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
         curl_setopt($ch, CURLOPT_USERAGENT, 'Hiep Security Server/1.0');
+        
+        // SSL Configuration - tắt verify cho development, có thể bật trong production
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        
+        // HTTP Protocol support
+        curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+        
+        // Handle both HTTP and HTTPS
+        if (strpos($url, 'https://') === 0) {
+            // HTTPS specific options
+            curl_setopt($ch, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+        }
 
         // Headers
         $headers = [
@@ -337,7 +353,8 @@ class ScannerManager
         }
         $url .= '?endpoint=get_file&api_key=' . urlencode($client['api_key']);
 
-        $response = $this->makeApiRequest($url, 'POST', ['file_path' => $filePath], null);
+        // FIX: Sửa apiKey từ null thành client api_key
+        $response = $this->makeApiRequest($url, 'POST', ['file_path' => $filePath], $client['api_key']);
 
         if ($response['success'] && isset($response['data']['content'])) {
             return [
@@ -363,10 +380,11 @@ class ScannerManager
         }
         $url .= '?endpoint=save_file&api_key=' . urlencode($client['api_key']);
 
+        // FIX: Sửa apiKey từ null thành client api_key
         $response = $this->makeApiRequest($url, 'POST', [
             'file_path' => $filePath,
             'content' => $content
-        ], null);
+        ], $client['api_key']);
 
         if ($response['success']) {
             return [
@@ -392,9 +410,10 @@ class ScannerManager
         }
         $url .= '?endpoint=delete_file&api_key=' . urlencode($client['api_key']);
 
+        // FIX: Sửa apiKey từ null thành client api_key
         $response = $this->makeApiRequest($url, 'POST', [
             'file_path' => $filePath
-        ], null);
+        ], $client['api_key']);
 
         if ($response['success'] && isset($response['data']['success']) && $response['data']['success']) {
             return [
@@ -425,9 +444,10 @@ class ScannerManager
         }
         $url .= '?endpoint=quarantine_file&api_key=' . urlencode($client['api_key']);
 
+        // FIX: Sửa apiKey từ null thành client api_key
         $response = $this->makeApiRequest($url, 'POST', [
             'file_path' => $filePath
-        ], null);
+        ], $client['api_key']);
 
         if ($response['success'] && isset($response['data']['success']) && $response['data']['success']) {
             return [
@@ -457,7 +477,8 @@ class ScannerManager
         }
         $url .= '?endpoint=scan_history&api_key=' . urlencode($client['api_key']) . '&limit=' . $limit;
 
-        $response = $this->makeApiRequest($url, 'GET', [], null);
+        // FIX: Sửa apiKey từ null thành client api_key
+        $response = $this->makeApiRequest($url, 'GET', [], $client['api_key']);
 
         if ($response['success']) {
             return $response['data'];

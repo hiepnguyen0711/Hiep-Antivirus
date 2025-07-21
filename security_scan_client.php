@@ -65,7 +65,7 @@ function validateApiRequest()
 function getApiKey()
 {
     // Lấy API key từ header hoặc parameter
-    $headers = getallheaders();
+    $headers = function_exists('getallheaders') ? getallheaders() : array();
 
     if (isset($headers['X-API-Key'])) {
         return $headers['X-API-Key'];
@@ -434,8 +434,8 @@ class SecurityScanner
             $this->suspiciousFiles = [];
             $this->criticalFiles = [];
 
-            // Lấy priority files từ options
-            $priorityFiles = $options['priority_files'] ?? [];
+            // Lấy priority files từ options - PHP 5.6 compatible
+            $priorityFiles = isset($options['priority_files']) ? $options['priority_files'] : array();
             $whitelist = $this->getApiWhitelist();
             // Add API content patterns to enhance detection
             $apiContentPatterns = $this->getApiContentPatterns();
@@ -530,9 +530,9 @@ class SecurityScanner
                     'id' => SecurityClientConfig::CLIENT_NAME, // Use client name as ID
                     'name' => SecurityClientConfig::CLIENT_NAME,
                     'version' => SecurityClientConfig::CLIENT_VERSION,
-                    'domain' => $_SERVER['HTTP_HOST'] ?? 'unknown',
-                    'url' => 'http' . (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 's' : '') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . dirname($_SERVER['SCRIPT_NAME'] ?? ''),
-                    'client_url' => 'http' . (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 's' : '') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . $_SERVER['SCRIPT_NAME'],
+                    'domain' => isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'unknown',
+                    'url' => 'http' . (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 's' : '') . '://' . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost') . dirname(isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : ''),
+                    'client_url' => 'http' . (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 's' : '') . '://' . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost') . (isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : ''),
                     'api_key' => SecurityClientConfig::API_KEY,
                     'scan_time' => time() - $this->scanStartTime,
                     'timestamp' => time()
@@ -546,10 +546,10 @@ class SecurityScanner
             return [
                 'success' => false,
                 'error' => $e->getMessage(),
-                'client_info' => [
+                'client_info' => array(
                     'name' => SecurityClientConfig::CLIENT_NAME,
-                    'domain' => $_SERVER['HTTP_HOST'] ?? 'unknown'
-                ]
+                    'domain' => isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'unknown'
+                )
             ];
         }
     }
@@ -1507,7 +1507,7 @@ class SecurityScanner
         $webshellThreats = [];
 
         foreach ($this->suspiciousFiles as $threat) {
-            $category = $threat['category'] ?? 'warning';
+            $category = isset($threat['category']) ? $threat['category'] : 'warning';
 
             if ($category === 'webshell') {
                 $webshellThreats[] = $threat;
@@ -1601,23 +1601,23 @@ class SecurityScanner
             'used_space' => disk_total_space('.') - disk_free_space('.')
         ];
 
-        return [
+        return array(
             'success' => true,
-            'client_info' => [
+            'client_info' => array(
                 'name' => SecurityClientConfig::CLIENT_NAME,
                 'version' => SecurityClientConfig::CLIENT_VERSION,
-                'domain' => $_SERVER['HTTP_HOST'] ?? 'unknown',
-                'server_ip' => $_SERVER['SERVER_ADDR'] ?? 'unknown',
-                'document_root' => $_SERVER['DOCUMENT_ROOT'] ?? 'unknown'
-            ],
-            'system_info' => [
+                'domain' => isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'unknown',
+                'server_ip' => isset($_SERVER['SERVER_ADDR']) ? $_SERVER['SERVER_ADDR'] : 'unknown',
+                'document_root' => isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : 'unknown'
+            ),
+            'system_info' => array(
                 'php' => $phpInfo,
                 'disk' => $diskInfo,
-                'server' => $_SERVER['SERVER_SOFTWARE'] ?? 'unknown'
-            ],
+                'server' => isset($_SERVER['SERVER_SOFTWARE']) ? $_SERVER['SERVER_SOFTWARE'] : 'unknown'
+            ),
             'last_scan' => $this->getLastScanInfo(),
             'timestamp' => date('Y-m-d H:i:s')
-        ];
+        );
     }
 
     private function getLastScanInfo()
@@ -1660,7 +1660,7 @@ function handleApiRequest()
     validateApiRequest();
 
     // Xử lý endpoint
-    $endpoint = $_GET['endpoint'] ?? 'health';
+    $endpoint = isset($_GET['endpoint']) ? $_GET['endpoint'] : 'health';
 
     switch ($endpoint) {
         case 'health':
@@ -1764,24 +1764,24 @@ function handleScanRequest()
 
 function handleInfoRequest()
 {
-    $info = [
+    $info = array(
         'client_name' => SecurityClientConfig::CLIENT_NAME,
         'client_version' => SecurityClientConfig::CLIENT_VERSION,
-        'domain' => $_SERVER['HTTP_HOST'] ?? 'unknown',
-        'document_root' => $_SERVER['DOCUMENT_ROOT'] ?? 'unknown',
-        'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'unknown',
+        'domain' => isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'unknown',
+        'document_root' => isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : 'unknown',
+        'server_software' => isset($_SERVER['SERVER_SOFTWARE']) ? $_SERVER['SERVER_SOFTWARE'] : 'unknown',
         'php_version' => PHP_VERSION,
         'max_scan_files' => SecurityClientConfig::MAX_SCAN_FILES,
         'max_scan_time' => SecurityClientConfig::MAX_SCAN_TIME,
-        'api_endpoints' => [
+        'api_endpoints' => array(
             'health' => 'Kiểm tra sức khỏe client',
             'status' => 'Thông tin chi tiết client',
             'scan' => 'Thực hiện quét bảo mật',
             'info' => 'Thông tin API',
             'delete_file' => 'Xóa file nguy hiểm'
-        ],
+        ),
         'timestamp' => date('Y-m-d H:i:s')
-    ];
+    );
 
     echo json_encode($info);
 }
@@ -1822,10 +1822,10 @@ function handleDeleteFileRequest()
         parse_str($input, $data);
     }
 
-    $filePath = $data['file_path'] ?? '';
+    $filePath = isset($data['file_path']) ? $data['file_path'] : '';
 
     // More debug info
-    $debugInfo = [
+    $debugInfo = array(
         'timestamp' => date('Y-m-d H:i:s'),
         'method' => $_SERVER['REQUEST_METHOD'],
         'headers' => getallheaders(),
@@ -1834,7 +1834,7 @@ function handleDeleteFileRequest()
         'parsed_data' => $data,
         'file_path' => $filePath,
         'json_error' => json_last_error_msg()
-    ];
+    );
 
     if (SecurityClientConfig::ENABLE_LOGGING) {
         file_put_contents('./logs/delete_requests.log', json_encode($debugInfo) . "\n", FILE_APPEND);
