@@ -23,35 +23,35 @@ class SecurityScannerConfig {
     const SESSION_TIMEOUT = 3600; // 1 giờ
     
     // Directories to exclude from scanning
-    const EXCLUDE_DIRS = [
+    const EXCLUDE_DIRS = array(
         '.git', '.svn', '.hg', '.bzr',
         'node_modules', 'vendor', 'bower_components',
         'cache', 'logs', 'tmp', 'temp', 'uploads',
         'quarantine', 'backup', 'backups'
-    ];
+    );
     
     // Files to exclude from scanning
-    const EXCLUDE_FILES = [
+    const EXCLUDE_FILES = array(
         'security_scan_client.php',
         'security_scan_server.php',
         'scanner_config.php',
         '.htaccess', '.htpasswd',
         'robots.txt', 'sitemap.xml'
-    ];
+    );
     
     // File extensions to scan
-    const SCAN_EXTENSIONS = [
+    const SCAN_EXTENSIONS = array(
         'php', 'php3', 'php4', 'php5', 'php7', 'php8',
         'phtml', 'phps', 'pht', 'phar',
         'inc', 'class', 'module'
-    ];
+    );
     
     // Suspicious file extensions
-    const SUSPICIOUS_EXTENSIONS = [
+    const SUSPICIOUS_EXTENSIONS = array(
         '.php.txt', '.php.bak', '.php.old', '.php.tmp',
         '.php.backup', '.php.orig', '.php.save',
         '.suspected', '.virus', '.malware'
-    ];
+    );
 }
 
 // ==================== SERVER CONFIGURATION ====================
@@ -85,7 +85,7 @@ class SecurityServerConfig {
 class MalwarePatterns {
     
     public static function getCriticalPatterns() {
-        return [
+        return array(
             // Code Execution - Critical
             'eval(' => 'Direct code execution vulnerability',
             'assert(' => 'Code assertion execution',
@@ -126,11 +126,11 @@ class MalwarePatterns {
             'mysql_query(' => 'Direct MySQL query execution',
             'mysqli_query(' => 'MySQLi query execution',
             'pg_query(' => 'PostgreSQL query execution'
-        ];
+        );
     }
     
     public static function getSuspiciousPatterns() {
-        return [
+        return array(
             // File Operations
             'file_get_contents(' => 'File reading operation',
             'fopen(' => 'File handle creation',
@@ -169,13 +169,13 @@ class MalwarePatterns {
             '$_POST[' => 'POST parameter processing',
             '$_REQUEST[' => 'REQUEST parameter processing',
             '$_COOKIE[' => 'Cookie parameter processing'
-        ];
+        );
     }
     
     public static function getWebshellPatterns() {
-        return [
+        return array(
             // Common webshell signatures
-            '/\$_(GET|POST|REQUEST)\s*\[\s*[\'"][^\'\"]*[\'"]\s*\]\s*\(\s*\$_(GET|POST|REQUEST)/i' => 'Dynamic function execution via HTTP parameters',
+            '/\$_(GET|POST|REQUEST)\s*\[\s*[\'\"][^\'\"]*[\'\"]\s*\]\s*\(\s*\$_(GET|POST|REQUEST)/i' => 'Dynamic function execution via HTTP parameters',
             '/eval\s*\(\s*\$_(GET|POST|REQUEST|COOKIE)/i' => 'Direct eval() with user input',
             '/system\s*\(\s*\$_(GET|POST|REQUEST)/i' => 'System command execution via HTTP',
             '/exec\s*\(\s*\$_(GET|POST|REQUEST)/i' => 'Command execution via HTTP parameters',
@@ -196,38 +196,38 @@ class MalwarePatterns {
             
             // Obfuscated patterns
             '/chr\s*\(\s*\d+\s*\)\s*\.\s*chr\s*\(\s*\d+\s*\)/i' => 'Character concatenation obfuscation',
-            '/\\\\x[0-9a-f]{2}/i' => 'Hexadecimal character encoding',
+            '/\\\x[0-9a-f]{2}/i' => 'Hexadecimal character encoding',
             
             // PHP webshell specific
             '/assert\s*\(\s*\$_(GET|POST|REQUEST)/i' => 'Assert function with user input',
-            '/preg_replace.*\/e.*\$_(GET|POST|REQUEST)/i' => 'Preg_replace with eval modifier',
+            '/preg_replace.*/e.*\$_(GET|POST|REQUEST)/i' => 'Preg_replace with eval modifier',
             '/create_function\s*\(.*\$_(GET|POST|REQUEST)/i' => 'Dynamic function creation with user input'
-        ];
+        );
     }
     
     public static function getKnownMalwareSignatures() {
-        return [
+        return array(
             // Known malware MD5 hashes
-            'md5_hashes' => [
+            'md5_hashes' => array(
                 '5d41402abc4b2a76b9719d911017c592' => 'Known malware sample',
                 // Thêm các hash MD5 của malware đã biết
-            ],
+            ),
             
             // Known malware file names
-            'file_names' => [
+            'file_names' => array(
                 'c99.php', 'r57.php', 'wso.php', 'b374k.php',
                 'adminer.php', 'shell.php', 'backdoor.php',
                 'webshell.php', 'cmd.php', 'bypass.php'
-            ],
+            ),
             
             // Suspicious file patterns
-            'file_patterns' => [
+            'file_patterns' => array(
                 '/^[a-f0-9]{32}\.php$/', // MD5 named files
                 '/^[0-9]+\.php$/', // Numeric named files
                 '/^\..*\.php$/', // Hidden PHP files
                 '/^[a-zA-Z]{1,3}\.php$/' // Very short named files
-            ]
-        ];
+            )
+        );
     }
 }
 
@@ -240,7 +240,8 @@ class ScannerUtils {
             return false;
         }
         
-        $whitelist = json_decode(file_get_contents($whitelistFile), true) ?: [];
+        $whitelist = json_decode(file_get_contents($whitelistFile), true);
+        if (!$whitelist) $whitelist = array();
         return isset($whitelist[$filePath]);
     }
     
@@ -256,7 +257,7 @@ class ScannerUtils {
     }
     
     public static function formatFileSize($bytes) {
-        $units = ['B', 'KB', 'MB', 'GB'];
+        $units = array('B', 'KB', 'MB', 'GB');
         $bytes = max($bytes, 0);
         $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
@@ -267,7 +268,7 @@ class ScannerUtils {
     }
     
     public static function getClientIP() {
-        $ipKeys = ['HTTP_CF_CONNECTING_IP', 'HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
+        $ipKeys = array('HTTP_CF_CONNECTING_IP', 'HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR');
         
         foreach ($ipKeys as $key) {
             if (array_key_exists($key, $_SERVER) === true) {
@@ -280,6 +281,6 @@ class ScannerUtils {
             }
         }
         
-        return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        return isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'unknown';
     }
 }
