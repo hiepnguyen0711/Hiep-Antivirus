@@ -246,18 +246,14 @@ class ScannerManager
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Hiep Security Server/1.0');
-        
-        // SSL Configuration - tắt verify cho development, có thể bật trong production
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        
-        // HTTP Protocol support
+        // Sử dụng User-Agent giống trình duyệt để tránh bị chặn
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-        
-        // Handle both HTTP and HTTPS
+
+        // Chỉ set SSL option nếu là HTTPS
         if (strpos($url, 'https://') === 0) {
-            // HTTPS specific options
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
             curl_setopt($ch, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
         }
 
@@ -308,7 +304,6 @@ class ScannerManager
             'response' => $response,
             'error' => $error
         ];
-
 
         if ($error) {
             return [

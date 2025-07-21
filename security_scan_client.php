@@ -29,7 +29,7 @@ class SecurityClientConfig
     const ENABLE_LOGGING = false; // Disable log file creation
 
     // Bảo mật
-    const ALLOWED_IPS = []; // Để trống = cho phép tất cả, hoặc ['IP1', 'IP2']
+    const ALLOWED_IPS = array(); // Để trống = cho phép tất cả, hoặc array('IP1', 'IP2')
     const RATE_LIMIT = 10; // Số request/phút
 }
 
@@ -117,17 +117,21 @@ function checkRateLimit()
     }
 
     $currentTime = time();
-    $requests = [];
+    $requests = array();
 
     if (file_exists($rateFile)) {
         // $content = file_get_contents($rateFile);
-        // $requests = $content ? json_decode($content, true) : [];
+        // $requests = $content ? json_decode($content, true) : array();
     }
 
     // Lọc request trong 1 phút qua
-    $requests = array_filter($requests, function ($time) use ($currentTime) {
-        return ($currentTime - $time) < 60;
-    });
+    $filteredRequests = array();
+    foreach ($requests as $time) {
+        if (($currentTime - $time) < 60) {
+            $filteredRequests[] = $time;
+        }
+    }
+    $requests = $filteredRequests;
 
     // Kiểm tra giới hạn
     if (count($requests) >= SecurityClientConfig::RATE_LIMIT) {
@@ -145,10 +149,10 @@ function checkRateLimit()
 class SecurityScanner
 {
     private $scannedFiles = 0;
-    private $suspiciousFiles = [];
-    private $criticalFiles = [];
+    private $suspiciousFiles = array();
+    private $criticalFiles = array();
     private $scanStartTime;
-    private $scanResults = [];
+    private $scanResults = array();
     private $apiPatterns = null;
 
     public function __construct()
@@ -227,9 +231,9 @@ class SecurityScanner
      */
     private function getFallbackPatterns()
     {
-        return [
+        return array(
             'status' => 'success',
-            'critical_malware_patterns' => [
+            'critical_malware_patterns' => array(
                 'eval(' => 'Code execution vulnerability',
                 'goto ' => 'Control flow manipulation',
                 'base64_decode(' => 'Encoded payload execution',
@@ -238,8 +242,8 @@ class SecurityScanner
                 '$_F=__FILE__;' => 'File system manipulation',
                 'readdir(' => 'Directory traversal attempt',
                 '<?php eval' => 'Direct PHP code injection'
-            ],
-            'suspicious_file_patterns' => [
+            ),
+            'suspicious_file_patterns' => array(
                 '.php.jpg' => 'Disguised PHP file with image extension',
                 '.php.png' => 'Disguised PHP file with image extension',
                 '.php.gif' => 'Disguised PHP file with image extension',
@@ -248,8 +252,8 @@ class SecurityScanner
                 '.php3' => 'Legacy PHP extension',
                 '.php4' => 'Legacy PHP extension',
                 '.php5' => 'Legacy PHP extension'
-            ],
-            'severe_patterns' => [
+            ),
+            'severe_patterns' => array(
                 'move_uploaded_file(' => 'File upload without validation',
                 'exec(' => 'System command execution',
                 'system(' => 'Direct system call',
@@ -257,8 +261,8 @@ class SecurityScanner
                 'passthru(' => 'Command output bypass',
                 'proc_open(' => 'Process creation',
                 'popen(' => 'Pipe command execution'
-            ],
-            'warning_patterns' => [
+            ),
+            'warning_patterns' => array(
                 'file_get_contents(' => 'File read operation',
                 'file_put_contents(' => 'File write operation',
                 'fopen(' => 'File handle creation',
@@ -276,16 +280,16 @@ class SecurityScanner
                 'unlink(' => 'File deletion',
                 'rmdir(' => 'Directory removal',
                 'mkdir(' => 'Directory creation'
-            ],
-            'blacklist' => [
-                'file_names' => ['shell.php', 'backdoor.php', 'webshell.php', 'c99.php', 'r57.php'],
-                'content_patterns' => ['eval\\s*\\(.*\\$_', 'system\\s*\\(.*\\$_', 'exec\\s*\\(.*\\$_']
-            ],
-            'whitelist' => [
-                'framework_files' => ['wp-config.php', 'composer.json', 'package.json'],
-                'safe_directories' => ['wp-admin', 'wp-includes', 'vendor', 'node_modules']
-            ]
-        ];
+            ),
+            'blacklist' => array(
+                'file_names' => array('shell.php', 'backdoor.php', 'webshell.php', 'c99.php', 'r57.php'),
+                'content_patterns' => array('eval\\s*\\(.*\\$_', 'system\\s*\\(.*\\$_', 'exec\\s*\\(.*\\$_')
+            ),
+            'whitelist' => array(
+                'framework_files' => array('wp-config.php', 'composer.json', 'package.json'),
+                'safe_directories' => array('wp-admin', 'wp-includes', 'vendor', 'node_modules')
+            )
+        );
     }
 
     /**
@@ -378,7 +382,7 @@ class SecurityScanner
     private function getApiContentPatterns()
     {
         if (!$this->apiPatterns || !isset($this->apiPatterns['blacklist']['content_patterns'])) {
-            return [];
+            return array();
         }
 
         return $this->apiPatterns['blacklist']['content_patterns'];
@@ -387,7 +391,7 @@ class SecurityScanner
     private function getApiWhitelist()
     {
         if (!$this->apiPatterns || !isset($this->apiPatterns['whitelist']['safe_content_patterns'])) {
-            return [];
+            return array();
         }
 
         return $this->apiPatterns['whitelist']['safe_content_patterns'];
@@ -399,7 +403,7 @@ class SecurityScanner
     private function getApiSafeContentPatterns()
     {
         if (!$this->apiPatterns || !isset($this->apiPatterns['whitelist']['safe_content_patterns'])) {
-            return [];
+            return array();
         }
 
         return $this->apiPatterns['whitelist']['safe_content_patterns'];
@@ -426,13 +430,13 @@ class SecurityScanner
         return '';
     }
 
-    public function performScan($options = [])
+    public function performScan($options = array())
     {
         try {
             // Khởi tạo
             $this->scannedFiles = 0;
-            $this->suspiciousFiles = [];
-            $this->criticalFiles = [];
+            $this->suspiciousFiles = array();
+            $this->criticalFiles = array();
 
             // Lấy priority files từ options - PHP 5.6 compatible
             $priorityFiles = isset($options['priority_files']) ? $options['priority_files'] : array();
@@ -447,7 +451,7 @@ class SecurityScanner
             // Use EXACT patterns from security_scan.php - PROVEN TO WORK
 
             // Critical malware patterns (HIGH SEVERITY - RED) - FROM security_scan.php
-            $criticalPatterns = [
+            $criticalPatterns = array(
                 'eval(' => 'Code execution vulnerability',
                 'goto ' => 'Control flow manipulation',
                 'base64_decode(' => 'Encoded payload execution',
@@ -456,10 +460,10 @@ class SecurityScanner
                 '$_F=__FILE__;' => 'File system manipulation',
                 'readdir(' => 'Directory traversal attempt',
                 '<?php eval' => 'Direct PHP code injection'
-            ];
+            );
 
             // Severe patterns - FROM security_scan.php  
-            $severePatterns = [
+            $severePatterns = array(
                 'move_uploaded_file(' => 'File upload without validation',
                 'exec(' => 'System command execution',
                 'system(' => 'Direct system call',
@@ -467,10 +471,10 @@ class SecurityScanner
                 'passthru(' => 'Command output bypass',
                 'proc_open(' => 'Process creation',
                 'popen(' => 'Pipe command execution'
-            ];
+            );
 
             // Warning patterns - FROM security_scan.php
-            $warningPatterns = [
+            $warningPatterns = array(
                 'file_get_contents(' => 'File read operation',
                 'file_put_contents(' => 'File write operation',
                 'fopen(' => 'File handle creation',
@@ -488,10 +492,10 @@ class SecurityScanner
                 'unlink(' => 'File deletion',
                 'rmdir(' => 'Directory removal',
                 'mkdir(' => 'Directory creation'
-            ];
+            );
 
             // Suspicious file patterns - FROM security_scan.php
-            $suspiciousFilePatterns = [
+            $suspiciousFilePatterns = array(
                 '.php.jpg' => 'Disguised PHP file with image extension',
                 '.php.png' => 'Disguised PHP file with image extension',
                 '.php.gif' => 'Disguised PHP file with image extension',
@@ -500,7 +504,7 @@ class SecurityScanner
                 '.php3' => 'Legacy PHP extension',
                 '.php4' => 'Legacy PHP extension',
                 '.php5' => 'Legacy PHP extension'
-            ];
+            );
 
             // Webshell Detection Patterns
             $webshellPatterns = $this->getWebshellPatterns();
@@ -1740,7 +1744,8 @@ function handleScanRequest()
     $scanner = new SecurityScanner();
 
     // Lấy options từ request
-    $options = json_decode(file_get_contents('php://input'), true) ?: [];
+    $optionsData = json_decode(file_get_contents('php://input'), true);
+    $options = $optionsData ? $optionsData : array();
 
     // Thực hiện scan với priority files
     $result = $scanner->performScan($options);
@@ -1933,7 +1938,7 @@ function handleQuarantineFileRequest()
         $data = $_POST;
     }
 
-    $filePath = $data['file_path'] ?? '';
+    $filePath = isset($data['file_path']) ? $data['file_path'] : '';
 
     if (empty($filePath)) {
         echo json_encode([
@@ -1991,7 +1996,7 @@ function handleQuarantineFileRequest()
 
 function handleScanHistoryRequest()
 {
-    $limit = $_GET['limit'] ?? 10;
+    $limit = isset($_GET['limit']) ? $_GET['limit'] : 10;
     $historyFile = './logs/scan_history.json';
 
     if (!file_exists($historyFile)) {
@@ -2020,8 +2025,8 @@ function handleScanHistoryRequest()
 
 function handleGetFileContentRequest()
 {
-    $filePath = $_GET['file_path'] ?? '';
-    $lines = $_GET['lines'] ?? 50; // Số dòng hiển thị
+    $filePath = isset($_GET['file_path']) ? $_GET['file_path'] : '';
+    $lines = isset($_GET['lines']) ? $_GET['lines'] : 50; // Số dòng hiển thị
 
     if (empty($filePath)) {
         echo json_encode([
@@ -2078,8 +2083,8 @@ function handleWhitelistFileRequest()
         exit;
     }
 
-    $filePath = $_POST['file_path'] ?? '';
-    $reason = $_POST['reason'] ?? 'Manual whitelist';
+    $filePath = isset($_POST['file_path']) ? $_POST['file_path'] : '';
+    $reason = isset($_POST['reason']) ? $_POST['reason'] : 'Manual whitelist';
 
     if (empty($filePath)) {
         echo json_encode([
