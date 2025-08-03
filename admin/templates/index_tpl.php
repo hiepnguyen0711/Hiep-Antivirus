@@ -1,11 +1,42 @@
 <?php
-$count_sp = $d->num_rows("select * from #_sanpham");
-$count_baiviet = $d->num_rows("select * from #_tintuc");
-$count_donhang = $d->num_rows("select * from #_dathang");
-$count_khachhang = $d->num_rows("select * from #_dathang GROUP BY dien_thoai");
+// Temporary fix for missing tables
+try {
+    $count_sp = $d->num_rows("select * from #_sanpham");
+} catch (Exception $e) {
+    $count_sp = 0;
+}
+
+try {
+    $count_baiviet = $d->num_rows("select * from #_tintuc");
+} catch (Exception $e) {
+    $count_baiviet = 0;
+}
+
+try {
+    $count_donhang = $d->num_rows("select * from #_dathang");
+} catch (Exception $e) {
+    $count_donhang = 0;
+}
+
+try {
+    $count_khachhang = $d->num_rows("select * from #_dathang GROUP BY dien_thoai");
+} catch (Exception $e) {
+    $count_khachhang = 0;
+}
+
 // $donhangmoi = $d->o_fet("select * from #_dathang where trangthai_xuly = 0 order by id desc");
-$lienhemoi = $d->o_fet("select * from #_lienhe where trang_thai = 0 and loai_lienhe = 0 order by id desc");
-$khieunaimoi = $d->o_fet("select * from #_lienhe where trang_thai = 0 and loai_lienhe = 1 order by id desc");
+
+try {
+    $lienhemoi = $d->o_fet("select * from #_lienhe where trang_thai = 0 and loai_lienhe = 0 order by id desc");
+} catch (Exception $e) {
+    $lienhemoi = array();
+}
+
+try {
+    $khieunaimoi = $d->o_fet("select * from #_lienhe where trang_thai = 0 and loai_lienhe = 1 order by id desc");
+} catch (Exception $e) {
+    $khieunaimoi = array();
+}
 ?>
 <div class="content-wrapper">
     <!-- Content Header (Page header) -->

@@ -1,0 +1,35 @@
+# ==========================================
+# HIEP SECURITY - SOURCES DIRECTORY PROTECTION
+# ==========================================
+# Bảo vệ thư mục sources/ khỏi truy cập trực tiếp
+# ==========================================
+
+# Ngăn chặn tất cả truy cập trực tiếp
+Order Deny,Allow
+Deny from all
+
+# Chỉ cho phép include từ parent directory
+<Files "*.php">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Ngăn chặn directory listing
+Options -Indexes
+
+# Ngăn chặn execution
+<IfModule mod_php5.c>
+    php_flag engine off
+</IfModule>
+
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+
+<IfModule mod_php8.c>
+    php_flag engine off
+</IfModule>
+
+# Error pages
+ErrorDocument 403 "Access Denied - Hiep Security Protection"
+ErrorDocument 404 "Not Found - Hiep Security Protection"

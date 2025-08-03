@@ -1,0 +1,83 @@
+# ==========================================
+# HIEP SECURITY - CKEDITOR PROTECTION
+# ==========================================
+# Bảo vệ CKEditor khỏi các lỗ hỏng upload và config leak
+# ==========================================
+
+RewriteEngine On
+
+# ==========================================
+# 1. BẢO VỆ CONFIG VÀ SAMPLES
+# ==========================================
+
+# Ngăn chặn truy cập vào config
+<Files "config.js">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Ngăn chặn truy cập vào samples
+<Files "samples/*">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Ngăn chặn truy cập vào build config
+<Files "build-config.js">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# ==========================================
+# 2. NGĂN CHẶN UPLOAD QUA CKEDITOR
+# ==========================================
+
+# Ngăn chặn tất cả upload requests
+RewriteCond %{REQUEST_METHOD} POST
+RewriteCond %{REQUEST_URI} upload [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# Ngăn chặn file browser
+RewriteCond %{QUERY_STRING} CKEditor [NC]
+RewriteCond %{QUERY_STRING} browse [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# ==========================================
+# 3. CHỈ CHO PHÉP CÁC FILE CẦN THIẾT
+# ==========================================
+
+# Chỉ cho phép JS, CSS, và hình ảnh
+<FilesMatch "\.(js|css|png|gif|jpg|jpeg)$">
+    Order Allow,Deny
+    Allow from all
+</FilesMatch>
+
+# Ngăn chặn tất cả file khác
+<FilesMatch "\.">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
+
+# ==========================================
+# 4. HEADERS BẢO MẬT
+# ==========================================
+
+<IfModule mod_headers.c>
+    # Ngăn chặn embedding trong iframe từ domain khác
+    Header always set X-Frame-Options "SAMEORIGIN"
+    
+    # Ngăn chặn MIME sniffing
+    Header always set X-Content-Type-Options "nosniff"
+    
+    # CSP cho CKEditor
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';"
+</IfModule>
+
+# ==========================================
+# 5. NGĂN CHẶN DIRECTORY LISTING
+# ==========================================
+Options -Indexes
+
+# Error pages
+ErrorDocument 403 "CKEditor Access Denied - Hiep Security"
+ErrorDocument 404 "CKEditor File Not Found"

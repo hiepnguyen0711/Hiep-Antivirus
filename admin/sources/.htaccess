@@ -1,0 +1,30 @@
+# HiepSecurity Sources Protection
+# Bảo vệ thư mục sources khỏi truy cập trực tiếp
+
+# Deny all direct access
+Order Deny,Allow
+Deny from all
+
+# Allow only from localhost and admin
+Allow from 127.0.0.1
+Allow from ::1
+
+# Block all file types except PHP (for admin access only)
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7)$">
+    Order Deny,Allow
+    Deny from all
+    # Only allow from admin directory
+    Allow from 127.0.0.1
+</FilesMatch>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+</IfModule>
+
+# Disable PHP execution for uploaded files
+<FilesMatch "\.(jpg|jpeg|png|gif|bmp|txt|doc|docx|pdf|zip|rar)$">
+    ForceType application/octet-stream
+    Header set Content-Disposition attachment
+</FilesMatch>

@@ -1,0 +1,15 @@
+[
+    {
+        "client": {
+            "id": "client_xemay365",
+            "name": "Xemay365 Client",
+            "url": "https:\/\/xemay365.com.vn\/security_scan_client.php",
+            "api_key": "hiep-security-client-2025-change-this-key",
+            "status": "online",
+            "last_scan": "2025-08-03 12:02:33",
+            "last_check": "2025-08-03 12:02:33",
+            "created_at": "2025-01-16 22:30:00"
+        },
+        "scan_data": null
+    }
+]

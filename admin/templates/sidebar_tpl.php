@@ -1,8 +1,11 @@
 <?php
 
 $nav = $d->o_fet("select * from #_module_admin where parent = '0' and hien_thi = 1  order by so_thu_tu ASC");
-$donhangmoi = $d->o_fet("select * from #_dathang where trangthai_xuly = 0 order by id desc");
-$lienhemoi = $d->o_fet("select * from #_lienhe where trang_thai = 0 order by id desc");
+// Temporary comment out - table doesn't exist
+// $donhangmoi = $d->o_fet("select * from #_dathang where trangthai_xuly = 0 order by id desc");
+$donhangmoi = array(); // Empty array as fallback
+// $lienhemoi = $d->o_fet("select * from #_lienhe where trang_thai = 0 order by id desc");
+$lienhemoi = array(); // Empty array as fallback
 ?>
 <aside class="main-sidebar">
     <!-- sidebar: style can be found in sidebar.less -->

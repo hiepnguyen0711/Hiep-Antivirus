@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Scanner System - Hướng Dẫn Cài Đặt</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Prism.js for syntax highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --dark-color: #34495e;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, var(--primary-color), var(--dark-color));
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        
+        .hero-section {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 80px 0;
+            text-align: center;
+        }
+        
+        .hero-section h1 {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        
+        .hero-section p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .section-header {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 2rem 0;
+            margin: 3rem 0 2rem 0;
+            border-left: 5px solid var(--secondary-color);
+        }
+        
+        .section-header h2 {
+            color: var(--primary-color);
+            font-weight: bold;
+            margin: 0;
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            margin-bottom: 2rem;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            font-weight: bold;
+            border: none;
+        }
+        
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            overflow-x: auto;
+            position: relative;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', Consolas, monospace;
+            line-height: 1.4;
+        }
+        
+        .code-block::before {
+            content: attr(data-lang);
+            position: absolute;
+            top: 0.5rem;
+            right: 1rem;
+            background: rgba(255,255,255,0.1);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+        
+        .alert {
+            border: none;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+        
+        .alert-info {
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            color: #0d47a1;
+        }
+        
+        .alert-warning {
+            background: linear-gradient(135deg, #fff3e0, #ffcc02);
+            color: #e65100;
+        }
+        
+        .alert-success {
+            background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
+            color: #1b5e20;
+        }
+        
+        .alert-danger {
+            background: linear-gradient(135deg, #ffebee, #ffcdd2);
+            color: #c62828;
+        }
+        
+        .feature-icon {
+            font-size: 3rem;
+            color: var(--secondary-color);
+            margin-bottom: 1rem;
+        }
+        
+        .step-number {
+            background: var(--secondary-color);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 1rem;
+        }
+        
+        .table-responsive {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .table th {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+        }
+        
+        .sidebar {
+            position: sticky;
+            top: 100px;
+            height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+        
+        .sidebar .nav-link {
+            color: var(--dark-color);
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            margin-bottom: 0.2rem;
+            transition: all 0.3s ease;
+        }
+        
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            background: var(--secondary-color);
+            color: white;
+        }
+        
+        .footer {
+            background: var(--primary-color);
+            color: white;
+            padding: 3rem 0;
+            margin-top: 5rem;
+        }
+        
+        .screenshot-placeholder {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border: 2px dashed #dee2e6;
+            padding: 3rem;
+            text-align: center;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        
+        .architecture-diagram {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            margin: 2rem 0;
+        }
+        
+        .diagram-box {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 0.5rem;
+            display: inline-block;
+            min-width: 150px;
+        }
+        
+        .diagram-arrow {
+            font-size: 2rem;
+            color: var(--secondary-color);
+            margin: 0 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .hero-section h1 {
+                font-size: 2rem;
+            }
+            
+            .sidebar {
+                position: static;
+                height: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="#overview">
+                <i class="fas fa-shield-alt me-2"></i>
+                Security Scanner System
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#overview">Tổng Quan</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#server-setup">Cài Đặt Server</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#client-setup">Cài Đặt Client</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#remediation">Remediation</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#scheduler">Scheduler & Cron Job</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#hosting-panels">Hosting Panels</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#troubleshooting">Troubleshooting</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero-section" id="overview">
+        <div class="container">
+            <h1><i class="fas fa-shield-alt me-3"></i>Security Scanner System</h1>
+            <p class="lead">Hệ thống quét bảo mật tập trung cho nhiều website với khả năng tự động khắc phục và báo cáo email</p>
+            <div class="mt-4">
+                <span class="badge bg-light text-dark me-2 p-2">
+                    <i class="fas fa-server me-1"></i> Quản lý tập trung
+                </span>
+                <span class="badge bg-light text-dark me-2 p-2">
+                    <i class="fas fa-robot me-1"></i> Tự động khắc phục
+                </span>
+                <span class="badge bg-light text-dark me-2 p-2">
+                    <i class="fas fa-envelope me-1"></i> Báo cáo email
+                </span>
+                <span class="badge bg-light text-dark p-2">
+                    <i class="fas fa-clock me-1"></i> Lên lịch tự động
+                </span>
+            </div>
+        </div>
+    </section>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar Navigation -->
+            <div class="col-lg-3 col-xl-2 d-none d-lg-block">
+                <div class="sidebar p-3">
+                    <nav class="nav flex-column">
+                        <a class="nav-link active" href="#overview">
+                            <i class="fas fa-home me-2"></i> Tổng Quan
+                        </a>
+                        <a class="nav-link" href="#architecture">
+                            <i class="fas fa-sitemap me-2"></i> Kiến Trúc
+                        </a>
+                        <a class="nav-link" href="#server-setup">
+                            <i class="fas fa-server me-2"></i> Cài Đặt Server
+                        </a>
+                        <a class="nav-link" href="#client-setup">
+                            <i class="fas fa-desktop me-2"></i> Cài Đặt Client
+                        </a>
+                        <a class="nav-link" href="#connection">
+                            <i class="fas fa-link me-2"></i> Kết Nối
+                        </a>
+                        <a class="nav-link" href="#remediation">
+                            <i class="fas fa-tools me-2"></i> Remediation
+                        </a>
+                        <a class="nav-link" href="#scheduler">
+                            <i class="fas fa-clock me-2"></i> Scheduler & Cron Job
+                        </a>
+                        <a class="nav-link" href="#hosting-panels">
+                            <i class="fas fa-server me-2"></i> Hosting Panels
+                        </a>
+                        <a class="nav-link" href="#troubleshooting">
+                            <i class="fas fa-bug me-2"></i> Troubleshooting
+                        </a>
+                        <a class="nav-link" href="#security">
+                            <i class="fas fa-lock me-2"></i> Bảo Mật
+                        </a>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-lg-9 col-xl-10">
+                <div class="p-4">
+                    
+                    <!-- Architecture Section -->
+                    <section id="architecture" class="mb-5">
+                        <div class="section-header">
+                            <div class="container">
+                                <h2><i class="fas fa-sitemap me-3"></i>Kiến Trúc Hệ Thống</h2>
+                            </div>
+                        </div>
+                        
+                        <div class="architecture-diagram">
+                            <div class="row align-items-center">
+                                <div class="col-md-3">
+                                    <div class="diagram-box">
+                                        <i class="fas fa-server fa-2x mb-2"></i><br>
+                                        <strong>Server</strong><br>
+                                        <small>Quản lý tập trung</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-1 text-center">
+                                    <i class="fas fa-arrows-alt-h diagram-arrow"></i>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="diagram-box">
+                                        <i class="fas fa-globe fa-2x mb-2"></i><br>
+                                        <strong>Website 1</strong><br>
+                                        <small>+ Client</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-1 text-center">
+                                    <i class="fas fa-arrows-alt-h diagram-arrow"></i>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="diagram-box">
+                                        <i class="fas fa-globe fa-2x mb-2"></i><br>
+                                        <strong>Website 2</strong><br>
+                                        <small>+ Client</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-12 text-center">
+                                    <i class="fas fa-arrow-down diagram-arrow"></i>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-12 text-center">
+                                    <div class="diagram-box">
+                                        <i class="fas fa-envelope fa-2x mb-2"></i><br>
+                                        <strong>Email Reports</strong><br>
+                                        <small>Báo cáo tự động</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-4">
+                            <div class="col-md-4">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-server feature-icon"></i>
+                                        <h5>Server Quản Lý</h5>
+                                        <p>Dashboard tập trung, remediation, scheduler và email reporting</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-desktop feature-icon"></i>
+                                        <h5>Client Scanner</h5>
+                                        <p>Đặt trên mỗi website, thực hiện quét và báo cáo về server</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-robot feature-icon"></i>
+                                        <h5>Tự Động Hóa</h5>
+                                        <p>Quét định kỳ, khắc phục tự động và gửi email báo cáo</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Server Setup Section -->
+                    <section id="server-setup" class="mb-5">
+                        <div class="section-header">
+                            <div class="container">
+                                <h2><i class="fas fa-server me-3"></i>Cài Đặt Server (Máy Quản Lý)</h2>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Lưu ý:</strong> Server là nơi quản lý tập trung tất cả các website clients. Chỉ cần cài đặt 1 lần.
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-folder me-2"></i> Files Cần Copy
+                            </div>
+                            <div class="card-body">
+                                <div class="code-block" data-lang="bash">
+server-folder/
+├── security_scan_server.php      # File chính của server
+├── daily_security_scan.php       # Cron job cho scheduler  
+├── data/                          # Thư mục dữ liệu (tự tạo)
+│   ├── clients.json              # Danh sách clients
+│   ├── logs/                     # Logs hệ thống
+│   └── backups/                  # Backup files
+└── config/                       # Cấu hình (tùy chọn)
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-terminal me-2"></i> Bước 1: Tạo Thư Mục
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="code-block" data-lang="bash">
+mkdir -p data/logs data/backups config
+chmod 755 data data/logs data/backups config
+chmod 644 security_scan_server.php daily_security_scan.php
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-envelope me-2"></i> Bước 2: Cấu Hình Email
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="code-block" data-lang="php">
+class EmailConfig
+{
+    const SMTP_USERNAME = 'your-email@gmail.com';
+    const SMTP_PASSWORD = 'your-app-password';
+    const REPORT_EMAIL = 'nguyenvanhiep0711@gmail.com';
+}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="screenshot-placeholder">
+                            <i class="fas fa-image fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">Screenshot: Dashboard Server</h5>
+                            <p class="text-muted">Giao diện quản lý tập trung với danh sách clients và tính năng quét</p>
+                        </div>
+                    </section>
+
+                    <!-- Client Setup Section -->
+                    <section id="client-setup" class="mb-5">
+                        <div class="section-header">
+                            <div class="container">
+                                <h2><i class="fas fa-desktop me-3"></i>Cài Đặt Client (Website Cần Quét)</h2>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Quan trọng:</strong> Mỗi website cần quét phải cài đặt 1 client. Có 2 lựa chọn: Standalone (khuyến nghị) hoặc Regular.
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <i class="fas fa-star me-2"></i> Standalone Client (Khuyến nghị)
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled">
+                                            <li><i class="fas fa-check text-success me-2"></i> Chỉ 1 file duy nhất</li>
+                                            <li><i class="fas fa-check text-success me-2"></i> Không cần dependencies</li>
+                                            <li><i class="fas fa-check text-success me-2"></i> Dễ deploy và maintain</li>
+                                            <li><i class="fas fa-check text-success me-2"></i> Embedded 200+ patterns</li>
+                                        </ul>
+                                        <div class="code-block" data-lang="bash">
+# Copy file standalone
+cp security_scan_client_standalone.php /path/to/website/security_scan_client.php
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-warning">
+                                    <div class="card-header bg-warning text-dark">
+                                        <i class="fas fa-cog me-2"></i> Regular Client
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled">
+                                            <li><i class="fas fa-exclamation text-warning me-2"></i> Cần nhiều files</li>
+                                            <li><i class="fas fa-exclamation text-warning me-2"></i> Cần config folder</li>
+                                            <li><i class="fas fa-check text-success me-2"></i> Có thể customize nhiều hơn</li>
+                                            <li><i class="fas fa-check text-success me-2"></i> Flexible configuration</li>
+                                        </ul>
+                                        <div class="code-block" data-lang="bash">
+website-folder/
+├── security_scan_client.php
+└── config/
+    └── scanner_config.php
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <i class="fas fa-key me-2"></i> Cấu Hình API Key
+                            </div>
+                            <div class="card-body">
+                                <p>Cập nhật thông tin trong file client:</p>
+                                <div class="code-block" data-lang="php">
+class SecurityClientConfig
+{
+    const API_KEY = 'hiep-security-client-2025-change-this-key'; // Thay đổi
+    const CLIENT_NAME = 'website-name';                          // Tên website
+    const CLIENT_VERSION = '2.0';
+
+    // Cấu hình quét
+    const MAX_SCAN_FILES = 999999999;
+    const MAX_SCAN_TIME = 600;
+    const MAX_MEMORY = '512M';
+}
+                                </div>
+
+                                <div class="alert alert-info mt-3">
+                                    <strong>Test client:</strong>
+                                    <div class="code-block" data-lang="bash">
+curl "http://your-website.com/security_scan_client.php?action=health&api_key=your-api-key"
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Connection Section -->
+                    <section id="connection" class="mb-5">
+                        <div class="section-header">
+                            <div class="container">
+                                <h2><i class="fas fa-link me-3"></i>Kết Nối Server và Client</h2>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <div class="step-number">1</div>
+                                        <h5>Thêm Client</h5>
+                                        <p>Truy cập dashboard server và click "**+ Thêm Client**"</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <div class="step-number">2</div>
+                                        <h5>Test Kết Nối</h5>
+                                        <p>Click "**Health**" để kiểm tra kết nối client</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <div class="step-number">3</div>
+                                        <h5>Chạy Scan</h5>
+                                        <p>Click "**Quét**" để thực hiện scan đầu tiên</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <i class="fas fa-plus me-2"></i> Form Thêm Client
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="code-block" data-lang="text">
+Client Name: Website ABC
+Client URL: https://website-abc.com/security_scan_client.php
+API Key: hiep-security-client-2025-change-this-key
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="alert alert-success">
+                                            <strong>Kết quả:</strong>
+                                            <ul class="mb-0">
+                                                <li><i class="fas fa-check text-success me-1"></i> Online: Kết nối thành công</li>
+                                                <li><i class="fas fa-times text-danger me-1"></i> Offline: Kiểm tra URL và API key</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Remediation Section -->
+                    <section id="remediation" class="mb-5">
+                        <div class="section-header">
+                            <div class="container">
+                                <h2><i class="fas fa-tools me-3"></i>Sử Dụng Remediation (Khắc Phục Tự Động)</h2>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-success">
+                            <i class="fas fa-magic me-2"></i>
+                            <strong>Tính năng nổi bật:</strong> Remediation cho phép tự động sửa các lỗ hỏng bảo mật mà không cần can thiệp thủ công.
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Loại Khắc Phục</th>
+                                        <th>Mô Tả</th>
+                                        <th>Mức Độ</th>
+                                        <th>Thời Gian</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Enhanced Shell Detection</strong></td>
+                                        <td>Nâng cấp phát hiện malware với 55+ patterns</td>
+                                        <td><span class="badge bg-danger">Critical</span></td>
+                                        <td>2-3 phút</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>HiepSecurity Class</strong></td>
+                                        <td>Thêm class bảo mật tổng hợp</td>
+                                        <td><span class="badge bg-danger">Critical</span></td>
+                                        <td>3-4 phút</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>CSRF Protection</strong></td>
+                                        <td>Bảo mật .htaccess chống CSRF</td>
+                                        <td><span class="badge bg-danger">Critical</span></td>
+                                        <td>2-3 phút</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>PHP Compatibility</strong></td>
+                                        <td>Sửa lỗi tương thích PHP 7.x+</td>
+                                        <td><span class="badge bg-warning">Warning</span></td>
+                                        <td>1-2 phút</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Admin Security</strong></td>
+                                        <td>Bảo mật admin panel</td>
+                                        <td><span class="badge bg-warning">Warning</span></td>
+                                        <td>1-2 phút</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>File Upload Security</strong></td>
+                                        <td>Bảo mật upload files</td>
+                                        <td><span class="badge bg-danger">Critical</span></td>
+                                        <td>2-3 phút</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-cogs me-2"></i> Quy Trình Khắc Phục
+                                    </div>
+                                    <div class="card-body">
+                                        <ol>
+                                            <li>Chọn fixes cần áp dụng</li>
+                                            <li>Click "Thực hiện khắc phục"</li>
+                                            <li>Hệ thống tự động:
+                                                <ul>
+                                                    <li>Tạo backup file gốc</li>
+                                                    <li>Áp dụng fixes</li>
+                                                    <li>Validate kết quả</li>
+                                                    <li>Rollback nếu có lỗi</li>
+                                                </ul>
+                                            </li>
+                                            <li>Hiển thị kết quả chi tiết</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-shield-alt me-2"></i> Backup & Recovery
+                                    </div>
+                                    <div class="card-body">
+                                        <ul>
+                                            <li><strong>Backup tự động:</strong> <code>filename.hiep_bk_YYYYMMDD_HHMMSS.ext</code></li>
+                                            <li><strong>Vị trí:</strong> Cùng thư mục với file gốc</li>
+                                            <li><strong>Rollback:</strong> Tự động nếu có lỗi</li>
+                                            <li><strong>Manual restore:</strong> Copy backup file về tên gốc</li>
+                                        </ul>
+
+                                        <div class="alert alert-info">
+                                            <strong>Ví dụ backup:</strong><br>
+                                            <code>function.php</code> → <code>function.hiep_bk_20250103_220000.php</code>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Scheduler Section -->
+                    <section id="scheduler" class="mb-5">
+                        <div class="section-header">
+                            <div class="container">
+                                <h2><i class="fas fa-clock me-3"></i>Cấu Hình Scheduler (Lên Lịch Tự Động)</h2>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Tính năng:</strong> Scheduler cho phép hệ thống tự động quét bảo mật và gửi email báo cáo theo lịch định sẵn.
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-cog me-2"></i> Bước 1: Cấu Hình Email
+                                    </div>
+                                    <div class="card-body">
+                                        <p>Cập nhật thông tin email trong <code>security_scan_server.php</code>:</p>
+                                        <div class="code-block" data-lang="php">
+class EmailConfig
+{
+    const SMTP_HOST = 'smtp.gmail.com';
+    const SMTP_PORT = 465;
+    const SMTP_USERNAME = 'your-email@gmail.com';
+    const SMTP_PASSWORD = 'your-app-password';
+    const SMTP_ENCRYPTION = 'ssl';
+
+    const REPORT_EMAIL = 'admin@company.com';
+    const FROM_EMAIL = 'security@company.com';
+    const FROM_NAME = 'Security Scanner System';
+
+    // Danh sách email nhận báo cáo
+    const ADDITIONAL_EMAILS = [
+        'admin@company.com',
+        'security@company.com'
+    ];
+}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-clock me-2"></i> Bước 2: Cấu Hình Thời Gian
+                                    </div>
+                                    <div class="card-body">
+                                        <p>Tùy chỉnh lịch quét trong <code>SchedulerConfig</code>:</p>
+                                        <div class="code-block" data-lang="php">
+class SchedulerConfig
+{
+    const DAILY_SCAN_TIME = '02:00';       // Quét lúc 2:00 AM
+    const WEEKLY_SCAN_DAY = 'sunday';      // Quét tổng hợp Chủ nhật
+    const MONTHLY_REPORT_DAY = 1;          // Báo cáo tháng ngày 1
+
+    const EMAIL_ON_CRITICAL = true;        // Email ngay khi có critical
+    const EMAIL_DAILY_SUMMARY = true;      // Email tóm tắt hàng ngày
+    const EMAIL_WEEKLY_REPORT = true;      // Email báo cáo tuần
+}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <i class="fas fa-terminal me-2"></i> Bước 3: Cài Đặt Cron Job
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Trên Linux/Unix:</strong></p>
+                                <div class="code-block" data-lang="bash">
+# Mở crontab editor
+crontab -e
+
+# Thêm các dòng sau vào cuối file:
+
+# Quét bảo mật hàng ngày lúc 2:00 AM
+0 2 * * * /usr/bin/php /path/to/your/security_scan_server.php?api=run_daily_scan&cron_key=hiep-security-cron-2025-$(date +\%Y-\%m-\%d) >/dev/null 2>&1
+
+# Báo cáo tổng hợp hàng tuần (Chủ nhật 3:00 AM)
+0 3 * * 0 /usr/bin/php /path/to/your/security_scan_server.php?api=send_report >/dev/null 2>&1
+
+# Dọn dẹp logs cũ (hàng tháng)
+0 4 1 * * find /path/to/your/data/logs -name "*.log" -mtime +30 -delete >/dev/null 2>&1
+                                </div>
+
+                                <p><strong>Trên Windows (Task Scheduler):</strong></p>
+                                <div class="code-block" data-lang="batch">
+# Tạo file batch: daily_scan.bat
+@echo off
+cd /d "C:\xampp\htdocs\your-project"
+php security_scan_server.php?api=run_daily_scan&cron_key=hiep-security-cron-2025-%date:~0,4%-%date:~5,2%-%date:~8,2%
+
+# Tạo task trong Task Scheduler:
+# - Tên: Security Daily Scan
+# - Trigger: Daily at 2:00 AM
+# - Action: Start program "C:\path\to\daily_scan.bat"
+                                </div>
+
+                                <div class="alert alert-warning mt-3">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <strong>Quan trọng:</strong> Thay đổi <code>/path/to/your/</code> thành đường dẫn thực tế của project.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mt-4">
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-test-tube me-2"></i> Bước 4: Test Cron Job
+                                    </div>
+                                    <div class="card-body">
+                                        <p>Kiểm tra cron job hoạt động:</p>
+                                        <div class="code-block" data-lang="bash">
+# Test manual
+php security_scan_server.php?api=run_daily_scan&cron_key=hiep-security-cron-2025-$(date +%Y-%m-%d)
+
+# Kiểm tra logs
+tail -f data/logs/scheduler.log
+
+# Test email
+curl "http://your-domain.com/security_scan_server.php?api=test_email&admin_key=hiep-admin-test-2025"
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-envelope me-2"></i> Bước 5: Cấu Hình Email Gmail
+                                    </div>
+                                    <div class="card-body">
+                                        <ol>
+                                            <li>Bật 2-Factor Authentication</li>
+                                            <li>Tạo App Password:
+                                                <ul>
+                                                    <li>Google Account → Security</li>
+                                                    <li>App passwords → Mail</li>
+                                                    <li>Copy password 16 ký tự</li>
+                                                </ul>
+                                            </li>
+                                            <li>Sử dụng App Password trong config</li>
+                                        </ol>
+                                        <div class="alert alert-info">
+                                            <strong>Port 465 với SSL</strong> được khuyến nghị cho Gmail.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-chart-line me-2"></i> Bước 6: Monitoring
+                                    </div>
+                                    <div class="card-body">
+                                        <p>Theo dõi hoạt động scheduler:</p>
+                                        <ul>
+                                            <li><strong>Logs:</strong> <code>data/logs/scheduler.log</code></li>
+                                            <li><strong>Scan results:</strong> <code>data/scan_results/</code></li>
+                                            <li><strong>Email logs:</strong> <code>data/logs/email.log</code></li>
+                                        </ul>
+                                        <div class="code-block" data-lang="bash">
+# Xem logs realtime
+tail -f data/logs/scheduler.log
+
+# Kiểm tra cron job status
+systemctl status cron
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive mt-4">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Loại Scheduler</th>
+                                        <th>Thời Gian</th>
+                                        <th>Mô Tả</th>
+                                        <th>Cron Expression</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Daily Scan</strong></td>
+                                        <td>2:00 AM hàng ngày</td>
+                                        <td>Quét tất cả clients, gửi email nếu có critical threats</td>
+                                        <td><code>0 2 * * *</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Weekly Report</strong></td>
+                                        <td>3:00 AM Chủ nhật</td>
+                                        <td>Báo cáo tổng hợp tuần, thống kê threats</td>
+                                        <td><code>0 3 * * 0</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Monthly Cleanup</strong></td>
+                                        <td>4:00 AM ngày 1</td>
+                                        <td>Dọn dẹp logs cũ, backup data</td>
+                                        <td><code>0 4 1 * *</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Critical Alert</strong></td>
+                                        <td>Realtime</td>
+                                        <td>Gửi email ngay khi phát hiện critical threats</td>
+                                        <td>Triggered</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <!-- Hosting Panels Section -->
+                    <section id="hosting-panels" class="mb-5">
+                        <div class="section-header">
+                            <div class="container">
+                                <h2><i class="fas fa-server me-3"></i>Hướng Dẫn Hosting Panels</h2>
+                                <p class="lead">Hướng dẫn cài đặt chi tiết cho các hosting panel phổ biến</p>
+                            </div>
+                        </div>
+
+                        <div class="container">
+                            <!-- DirectAdmin Tab -->
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <h3><i class="fas fa-cog me-2"></i>DirectAdmin Hosting Panel</h3>
+                                </div>
+                                <div class="card-body">
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        DirectAdmin là hosting panel phổ biến với giao diện đơn giản và dễ sử dụng.
+                                    </div>
+
+                                    <h4>Bước 1: Truy Cập File Manager</h4>
+                                    <ol>
+                                        <li>Đăng nhập vào DirectAdmin panel</li>
+                                        <li>Tìm và click vào <strong>"File Manager"</strong> trong phần <strong>"Advanced Features"</strong></li>
+                                        <li>Chọn domain cần cài đặt từ dropdown list</li>
+                                        <li>Click <strong>"File Manager"</strong> để mở</li>
+                                    </ol>
+
+                                    <h4>Bước 2: Upload Files Server</h4>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h5>Tạo Thư Mục</h5>
+                                            <ol>
+                                                <li>Navigate đến thư mục <code>public_html</code></li>
+                                                <li>Click <strong>"Create Folder"</strong></li>
+                                                <li>Tạo thư mục <code>security-center</code></li>
+                                                <li>Vào thư mục vừa tạo</li>
+                                            </ol>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h5>Upload Files</h5>
+                                            <ol>
+                                                <li>Click <strong>"Upload Files"</strong></li>
+                                                <li>Upload <code>security_scan_server.php</code></li>
+                                                <li>Upload <code>daily_security_scan.php</code></li>
+                                                <li>Click <strong>"Upload"</strong></li>
+                                            </ol>
+                                        </div>
+                                    </div>
+
+                                    <h4>Bước 3: Cấu Hình Cron Jobs</h4>
+                                    <div class="alert alert-warning">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        Thay <code>/home/username/</code> bằng đường dẫn thực tế của bạn
+                                    </div>
+
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered">
+                                            <thead>
+                                                <tr>
+                                                    <th>Loại</th>
+                                                    <th>Thời gian</th>
+                                                    <th>Command</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td>Daily Scan</td>
+                                                    <td>0 2 * * *</td>
+                                                    <td><code>/usr/bin/php /home/username/domains/domain.com/public_html/security-center/daily_security_scan.php daily_scan</code></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Weekly Cleanup</td>
+                                                    <td>0 3 * * 0</td>
+                                                    <td><code>/usr/bin/php /home/username/domains/domain.com/public_html/security-center/daily_security_scan.php cleanup</code></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- cPanel Tab -->
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <h3><i class="fas fa-cogs me-2"></i>cPanel Hosting Panel</h3>
+                                </div>
+                                <div class="card-body">
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        cPanel là hosting panel phổ biến nhất với giao diện thân thiện.
+                                    </div>
+
+                                    <h4>Bước 1: Truy Cập File Manager</h4>
+                                    <ol>
+                                        <li>Đăng nhập vào cPanel</li>
+                                        <li>Tìm <strong>"File Manager"</strong> trong phần <strong>"Files"</strong></li>
+                                        <li>Click <strong>"File Manager"</strong></li>
+                                        <li>Chọn <strong>"Web Root (public_html/www)"</strong></li>
+                                        <li>Click <strong>"Go"</strong></li>
+                                    </ol>
+
+                                    <h4>Bước 2: Upload và Cấu Hình</h4>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h5>Tạo Thư Mục</h5>
+                                            <ol>
+                                                <li>Click <strong>"+ Folder"</strong></li>
+                                                <li>Tạo thư mục <code>security-center</code></li>
+                                                <li>Double-click để mở</li>
+                                                <li>Tạo thư mục <code>data</code>, <code>logs</code>, <code>backups</code></li>
+                                            </ol>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h5>Set Permissions</h5>
+                                            <ol>
+                                                <li>Click chuột phải vào thư mục <code>data</code></li>
+                                                <li>Chọn <strong>"Change Permissions"</strong></li>
+                                                <li>Set: <code>755</code></li>
+                                                <li>Check <strong>"Recurse into subdirectories"</strong></li>
+                                            </ol>
+                                        </div>
+                                    </div>
+
+                                    <h4>Bước 3: Cấu Hình Email</h4>
+                                    <div class="alert alert-success">
+                                        <i class="fas fa-check-circle me-2"></i>
+                                        cPanel hỗ trợ tốt cho email hosting, bạn có thể dùng email của domain
+                                    </div>
+
+                                    <pre><code class="language-php">const ADMIN_EMAIL = 'admin@your-domain.com';
+const SMTP_HOST = 'mail.your-domain.com';
+const SMTP_PORT = 587;
+const SMTP_USERNAME = 'admin@your-domain.com';
+const SMTP_PASSWORD = 'your-email-password';</code></pre>
+
+                                    <h4>Bước 4: Cron Jobs Setup</h4>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered">
+                                            <thead>
+                                                <tr>
+                                                    <th>Field</th>
+                                                    <th>Daily Scan</th>
+                                                    <th>Weekly Cleanup</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td>Minute</td>
+                                                    <td>0</td>
+                                                    <td>0</td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Hour</td>
+                                                    <td>2</td>
+                                                    <td>3</td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Day</td>
+                                                    <td>*</td>
+                                                    <td>*</td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Month</td>
+                                                    <td>*</td>
+                                                    <td>*</td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Weekday</td>
+                                                    <td>*</td>
+                                                    <td>0</td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Command</td>
+                                                    <td><code>/usr/local/bin/php /home/username/public_html/security-center/daily_security_scan.php daily_scan</code></td>
+                                                    <td><code>/usr/local/bin/php /home/username/public_html/security-center/daily_security_scan.php cleanup</code></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Common Troubleshooting -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3><i class="fas fa-wrench me-2"></i>Troubleshooting Chung</h3>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h5>Lỗi PHP Path</h5>
+                                            <p>Thử các path khác nhau:</p>
+                                            <ul>
+                                                <li><code>/usr/bin/php</code></li>
+                                                <li><code>/usr/local/bin/php</code></li>
+                                                <li><code>/opt/cpanel/ea-php74/root/usr/bin/php</code></li>
+                                            </ul>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h5>Lỗi Permission</h5>
+                                            <p>Kiểm tra và fix permissions:</p>
+                                            <pre><code>chmod 755 data/
+chmod 644 *.php
+chown username:username files</code></pre>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-info mt-3">
+                                        <i class="fas fa-lightbulb me-2"></i>
+                                        <strong>Tip:</strong> Luôn test commands trực tiếp qua SSH trước khi setup cron jobs
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Troubleshooting Section -->
+                    <section id="troubleshooting" class="mb-5">
+                        <div class="section-header">
+                            <div class="container">
+                                <h2><i class="fas fa-bug me-3"></i>Troubleshooting</h2>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-exclamation-triangle me-2"></i> Lỗi Thường Gặp
+                                    </div>
+                                    <div class="card-body">
+                                        <h6>1. Client không kết nối được</h6>
+                                        <ul>
+                                            <li>Kiểm tra URL client có đúng không</li>
+                                            <li>Kiểm tra API key có khớp không</li>
+                                            <li>Kiểm tra file client có tồn tại không</li>
+                                        </ul>
+
+                                        <h6>2. Email không gửi được</h6>
+                                        <ul>
+                                            <li>Kiểm tra SMTP settings</li>
+                                            <li>Kiểm tra App Password Gmail</li>
+                                            <li>Kiểm tra firewall port 465/587</li>
+                                        </ul>
+
+                                        <h6>3. Cron job không chạy</h6>
+                                        <ul>
+                                            <li>Kiểm tra crontab syntax</li>
+                                            <li>Kiểm tra đường dẫn PHP</li>
+                                            <li>Kiểm tra permissions</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-tools me-2"></i> Debug Commands
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="code-block" data-lang="bash">
+# Kiểm tra PHP CLI
+php -v
+
+# Test client connection
+curl "http://client-url/security_scan_client.php?action=health&api_key=your-key"
+
+# Test server API
+curl "http://server-url/security_scan_server.php?api=get_clients"
+
+# Kiểm tra cron logs
+grep CRON /var/log/syslog
+
+# Test email
+php -r "mail('test@example.com', 'Test', 'Test message');"
+
+# Kiểm tra permissions
+ls -la data/
+ls -la data/logs/
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Security Section -->
+                    <section id="security" class="mb-5">
+                        <div class="section-header">
+                            <div class="container">
+                                <h2><i class="fas fa-lock me-3"></i>Bảo Mật Hệ Thống</h2>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-danger">
+                            <i class="fas fa-shield-alt me-2"></i>
+                            <strong>Quan trọng:</strong> Thực hiện các bước bảo mật sau để bảo vệ hệ thống.
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-key me-2"></i> Bảo Mật API Keys
+                                    </div>
+                                    <div class="card-body">
+                                        <ol>
+                                            <li><strong>Thay đổi API keys mặc định</strong>
+                                                <div class="code-block" data-lang="php">
+const DEFAULT_API_KEY = 'your-unique-key-2025-' . md5(time());
+                                                </div>
+                                            </li>
+                                            <li><strong>Sử dụng HTTPS</strong> cho tất cả connections</li>
+                                            <li><strong>Giới hạn IP access</strong> nếu có thể</li>
+                                            <li><strong>Rotate keys định kỳ</strong> (3-6 tháng)</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="fas fa-folder-lock me-2"></i> Bảo Mật Files
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="code-block" data-lang="bash">
+# Tạo .htaccess cho data folder
+echo "Deny from all" > data/.htaccess
+
+# Set permissions
+chmod 755 data/
+chmod 644 data/clients.json
+chmod 755 data/logs/
+chmod 644 data/logs/*.log
+
+# Backup quan trọng
+cp security_scan_server.php security_scan_server.backup.php
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5><i class="fas fa-shield-alt me-2"></i>Security Scanner System</h5>
+                    <p>Hệ thống quét bảo mật chuyên nghiệp cho websites Việt Nam</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <h6>Liên Hệ Hỗ Trợ</h6>
+                    <p>
+                        <i class="fas fa-envelope me-2"></i>
+                        <a href="mailto:nguyenvanhiep0711@gmail.com" class="text-white">nguyenvanhiep0711@gmail.com</a>
+                    </p>
+                </div>
+            </div>
+            <hr class="my-4">
+            <div class="text-center">
+                <p>&copy; 2025 Security Scanner System. Phát triển bởi Hiệp Nguyễn.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Prism.js for syntax highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+        
+        // Update active navigation link on scroll
+        window.addEventListener('scroll', function() {
+            const sections = document.querySelectorAll('section[id]');
+            const navLinks = document.querySelectorAll('.sidebar .nav-link');
+            
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop - 150;
+                if (scrollY >= sectionTop) {
+                    current = section.getAttribute('id');
+                }
+            });
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

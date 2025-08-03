@@ -1,0 +1,36 @@
+# HiepSecurity CKEditor Protection
+# Bảo vệ CKEditor khỏi các cuộc tấn công
+
+# Deny access to sensitive files
+<FilesMatch "\.(log|sql|bak|backup|old|tmp|conf|config|ini|md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block PHP execution in uploads
+<FilesMatch "\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options SAMEORIGIN
+</IfModule>
+
+# Block suspicious requests
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Block file injection attempts
+    RewriteCond %{QUERY_STRING} \.\./\.\. [NC,OR]
+    RewriteCond %{QUERY_STRING} (eval\(|base64_decode) [NC]
+    RewriteRule ^(.*)$ - [F,L]
+</IfModule>
+
+# Allow only specific file types for uploads
+<FilesMatch "\.(js|css|png|jpg|jpeg|gif|ico|woff|woff2|ttf|eot|svg)$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>

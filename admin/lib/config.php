@@ -11,7 +11,7 @@ $config = array(
         'servername' => 'localhost',
         'username' => 'root',
         'password' => '',
-        'database' => '2025_hiep_anti_virus'
+        'database' => 'hiep_antivirus'
     ),
     'lang' => array(
         '0' => array(

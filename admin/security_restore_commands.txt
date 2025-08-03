@@ -1,0 +1,86 @@
+# ==========================================
+# HIEP SECURITY - RESTORE COMMANDS
+# ==========================================
+# Commands để restore lại files gốc nếu cần
+# Ngày: 2025-01-03
+# ==========================================
+
+# 1. RESTORE .HTACCESS GỐC
+# Tìm file backup mới nhất và restore
+Get-ChildItem .htaccess.backup_* | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | ForEach-Object { Copy-Item $_.Name .htaccess }
+
+# Hoặc restore thủ công (thay [timestamp] bằng timestamp thực tế)
+copy .htaccess.backup_[timestamp] .htaccess
+
+# 2. RESTORE FUNCTION.PHP
+# Tìm file backup mới nhất và restore
+Get-ChildItem admin\lib\function.php.backup_* | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | ForEach-Object { Copy-Item $_.Name admin\lib\function.php }
+
+# Hoặc restore thủ công
+copy admin\lib\function.php.backup_[timestamp] admin\lib\function.php
+
+# 3. RESTORE CLASS.PHP
+# Tìm file backup mới nhất và restore
+Get-ChildItem admin\lib\class.php.backup_* | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | ForEach-Object { Copy-Item $_.Name admin\lib\class.php }
+
+# Hoặc restore thủ công
+copy admin\lib\class.php.backup_[timestamp] admin\lib\class.php
+
+# 4. RESTORE ADMIN .HTACCESS (nếu có vấn đề)
+# Sử dụng phiên bản minimal
+copy admin\.htaccess.problematic admin\.htaccess
+
+# Hoặc disable hoàn toàn
+ren admin\.htaccess admin\.htaccess.disabled
+
+# 5. KIỂM TRA SAU KHI RESTORE
+# Test website gốc
+# http://localhost/2025/Hiep-Antivirus/
+
+# Test admin
+# http://localhost/2025/Hiep-Antivirus/admin/
+
+# Test file manager
+# http://localhost/2025/Hiep-Antivirus/admin/filemanager/dialog.php?type=1&field_id=hinh_anh&relative_url=1&multiple=0
+
+# 6. XÓA FILES BACKUP (nếu muốn dọn dẹp)
+# CẢNH BÁO: Chỉ xóa khi đã chắc chắn không cần restore
+# Remove-Item .htaccess.backup_*
+# Remove-Item admin\lib\function.php.backup_*
+# Remove-Item admin\lib\class.php.backup_*
+
+# 7. XÓA FILES BÁO CÁO (nếu muốn)
+# Remove-Item admin\security_fix_report.html
+# Remove-Item admin\security_enhancement_report.html
+# Remove-Item admin\security_restore_commands.txt
+
+# ==========================================
+# TROUBLESHOOTING
+# ==========================================
+
+# Nếu website bị lỗi 500:
+# 1. Kiểm tra Apache error log
+# 2. Restore .htaccess gốc
+# 3. Disable admin .htaccess
+
+# Nếu admin không truy cập được:
+# 1. Disable admin .htaccess
+# 2. Kiểm tra session và cookies
+# 3. Clear browser cache
+
+# Nếu file manager không hoạt động:
+# 1. Kiểm tra quyền thư mục
+# 2. Restore filemanager config .htaccess
+# 3. Kiểm tra PHP errors
+
+# ==========================================
+# CONTACT SUPPORT
+# ==========================================
+# Nếu cần hỗ trợ, liên hệ:
+# Email: kythuat@phuongnamvina.vn
+# Phone: (028) 3553 2306
+# Hotline: 0915101017
+
+# ==========================================
+# END RESTORE COMMANDS
+# ==========================================

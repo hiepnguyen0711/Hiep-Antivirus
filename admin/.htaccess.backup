@@ -1,0 +1,200 @@
+# ==========================================
+# HIEP SECURITY - ADMIN CMS PROTECTION
+# ==========================================
+# Tạo bởi: Hiep Security System
+# Ngày: 2025-01-03
+# Mục đích: Bảo vệ admin CMS khỏi các lỗ hỏng bảo mật
+# ==========================================
+
+# Bật RewriteEngine
+RewriteEngine On
+
+# ==========================================
+# 1. BẢO VẸ TRUY CẬP TRỰC TIẾP VÀO BACKEND
+# ==========================================
+
+# Ngăn chặn truy cập trực tiếp vào thư mục sources/
+<Files "sources/*">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Ngăn chặn truy cập trực tiếp vào các file PHP trong sources/
+RewriteCond %{REQUEST_URI} ^/admin/sources/.*\.php$ [NC]
+RewriteRule ^(.*)$ index.php [R=404,L]
+
+# Ngăn chặn truy cập trực tiếp vào lib/
+<Files "lib/*">
+    Order Deny,Allow
+    Deny from all
+    # Cho phép truy cập từ localhost và server
+    Allow from 127.0.0.1
+    Allow from ::1
+</Files>
+
+# ==========================================
+# 2. BẢO VỆ FILE MANAGER
+# ==========================================
+
+# Ngăn chặn truy cập trực tiếp vào filemanager mà không qua session
+RewriteCond %{REQUEST_URI} ^/admin/filemanager/ [NC]
+RewriteCond %{HTTP_REFERER} !^https?://[^/]+/admin/ [NC]
+RewriteRule ^(.*)$ ../index.php [R=403,L]
+
+# Ngăn chặn upload các file nguy hiểm
+<FilesMatch "\.(php|php3|php4|php5|phtml|pl|py|jsp|asp|sh|cgi|exe|bat|com|scr|vbs|js|jar|war)$">
+    <IfModule mod_rewrite.c>
+        RewriteEngine On
+        RewriteCond %{REQUEST_URI} filemanager/
+        RewriteRule ^(.*)$ - [F,L]
+    </IfModule>
+</FilesMatch>
+
+# ==========================================
+# 3. BẢO VỆ CKEDITOR
+# ==========================================
+
+# Ngăn chặn truy cập vào config và samples của CKEditor
+<Files "ckeditor/config.js">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+<Files "ckeditor/samples/*">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Ngăn chặn upload qua CKEditor
+RewriteCond %{REQUEST_URI} ckeditor.*upload [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# ==========================================
+# 4. CHỐNG CSRF VÀ XSS
+# ==========================================
+
+# Thêm headers bảo mật
+<IfModule mod_headers.c>
+    # Chống XSS
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    # Chống clickjacking
+    Header always set X-Frame-Options "SAMEORIGIN"
+    
+    # Chống MIME sniffing
+    Header always set X-Content-Type-Options "nosniff"
+    
+    # Referrer Policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # Content Security Policy
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self';"
+</IfModule>
+
+# ==========================================
+# 5. NGĂN CHẶN DIRECTORY LISTING
+# ==========================================
+Options -Indexes
+
+# ==========================================
+# 6. BẢO VỆ FILES NHẠY CẢM
+# ==========================================
+
+# Ngăn chặn truy cập vào file config
+<Files "config.php">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+<Files "config.json">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Ngăn chặn truy cập vào file log
+<FilesMatch "\.(log|txt)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
+
+# Ngăn chặn truy cập vào file backup
+<FilesMatch "\.(bak|backup|old|tmp|save)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
+
+# ==========================================
+# 7. GIỚI HẠN UPLOAD FILE
+# ==========================================
+
+# Giới hạn kích thước file upload (50MB)
+LimitRequestBody 52428800
+
+# Ngăn chặn execution của file PHP trong thư mục upload
+<Directory "public/files/">
+    <FilesMatch "\.php$">
+        Order Deny,Allow
+        Deny from all
+    </FilesMatch>
+</Directory>
+
+# ==========================================
+# 8. RATE LIMITING (Nếu có mod_evasive)
+# ==========================================
+<IfModule mod_evasive24.c>
+    DOSHashTableSize    2048
+    DOSPageCount        10
+    DOSPageInterval     1
+    DOSSiteCount        50
+    DOSSiteInterval     1
+    DOSBlockingPeriod   600
+</IfModule>
+
+# ==========================================
+# 9. CHỐNG HOTLINKING
+# ==========================================
+RewriteCond %{HTTP_REFERER} !^$
+RewriteCond %{HTTP_REFERER} !^https?://[^/]+/admin/ [NC]
+RewriteCond %{REQUEST_URI} \.(jpg|jpeg|png|gif|css|js)$ [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# ==========================================
+# 10. BẮT BUỘC HTTPS (Tùy chọn)
+# ==========================================
+# Uncomment để bắt buộc HTTPS
+# RewriteCond %{HTTPS} off
+# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ==========================================
+# 11. NGĂN CHẶN USER AGENTS ĐỘC HẠI
+# ==========================================
+RewriteCond %{HTTP_USER_AGENT} (libwww-perl|wget|python|nikto|curl|scan|java|winhttp|clshttp|loader) [NC,OR]
+RewriteCond %{HTTP_USER_AGENT} (%0A|%0D|%27|%3C|%3E|%00) [NC,OR]
+RewriteCond %{HTTP_USER_AGENT} (;|<|>|'|"|\)|\(|%0A|%0D|%22|%27|%28|%3C|%3E|%00).*(libwww-perl|wget|python|nikto|curl|scan|java|winhttp|HTTrack|clshttp|archiver|loader|email|harvest|extract|grab|miner) [NC]
+RewriteRule .* - [F,L]
+
+# ==========================================
+# 12. NGĂN CHẶN SQL INJECTION VÀ XSS TRONG URL
+# ==========================================
+RewriteCond %{QUERY_STRING} (\<|%3C).*script.*(\>|%3E) [NC,OR]
+RewriteCond %{QUERY_STRING} GLOBALS(=|\[|\%[0-9A-Z]{0,2}) [OR]
+RewriteCond %{QUERY_STRING} _REQUEST(=|\[|\%[0-9A-Z]{0,2}) [OR]
+RewriteCond %{QUERY_STRING} concat.*\( [NC,OR]
+RewriteCond %{QUERY_STRING} union.*select.*\( [NC,OR]
+RewriteCond %{QUERY_STRING} union.*all.*select.* [NC,OR]
+RewriteCond %{QUERY_STRING} \-[sdcr].*(allow_url_include|allow_url_fopen|safe_mode|disable_functions|auto_prepend_file) [NC]
+RewriteRule .* - [F,L]
+
+# ==========================================
+# 13. BACKUP VÀ MAINTENANCE
+# ==========================================
+
+# Ngăn chặn truy cập vào file backup
+<FilesMatch "(backup|dump|sql|database)\.(sql|gz|zip|tar|bz2)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
+
+# ==========================================
+# END HIEP SECURITY PROTECTION
+# ==========================================

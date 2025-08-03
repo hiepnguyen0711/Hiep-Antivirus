@@ -27,7 +27,7 @@ class SecurityServerConfig
     const SERVER_VERSION = '1.0';
     const DEFAULT_API_KEY = 'hiep-security-client-2025-change-this-key';
     const MAX_CONCURRENT_SCANS = 10;
-    const SCAN_TIMEOUT = 300; // 5 phút
+    const SCAN_TIMEOUT = 3000; // 50 phút
 }
 
 // ==================== CLIENT MANAGER ====================
@@ -54,6 +54,11 @@ class ClientManager
 
         $content = file_get_contents($this->clientsFile);
         return json_decode($content, true) ?: [];
+    }
+
+    public function getAllClients()
+    {
+        return $this->getClients();
     }
 
     public function saveClients($clients)
@@ -214,6 +219,76 @@ class ScannerManager
         }
 
         return $results;
+    }
+
+    public function deployAdminSecurity($client)
+    {
+        // Xử lý URL
+        $baseUrl = rtrim($client['url'], '/');
+        if (strpos($baseUrl, 'security_scan_client.php') !== false) {
+            $baseUrl = dirname($baseUrl);
+        }
+
+        $url = $baseUrl . '/security_scan_client.php?endpoint=deploy_admin_security&api_key=' . urlencode($client['api_key']);
+
+        // Chuẩn bị dữ liệu bản vá bảo mật
+        $securityFiles = $this->getAdminSecurityFiles();
+
+        $deployData = [
+            'action' => 'deploy_admin_security',
+            'files' => $securityFiles,
+            'verify_before' => true,
+            'backup_existing' => true
+        ];
+
+        $response = $this->makeApiRequest($url, 'POST', $deployData, $client['api_key']);
+
+        if ($response['success']) {
+            $this->clientManager->updateClient($client['id'], [
+                'admin_security_deployed' => date('Y-m-d H:i:s'),
+                'admin_security_version' => '1.0'
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Admin security patches deployed successfully',
+                'details' => $response['data'] ?? []
+            ];
+        } else {
+            return [
+                'success' => false,
+                'error' => $response['error'] ?? 'Failed to deploy admin security',
+                'details' => $response['data'] ?? []
+            ];
+        }
+    }
+
+    private function getAdminSecurityFiles()
+    {
+        $files = [];
+
+        // Đọc các file bảo mật từ thư mục admin
+        $securityFiles = [
+            'admin/.htaccess',
+            'admin/security_patches.php',
+            'admin/sources/.htaccess',
+            'admin/filemanager/.htaccess',
+            'admin/filemanager/security_config.php',
+            'admin/ckeditor/.htaccess',
+            'admin/lib/.htaccess'
+        ];
+
+        foreach ($securityFiles as $filePath) {
+            if (file_exists($filePath)) {
+                $files[basename($filePath)] = [
+                    'path' => $filePath,
+                    'content' => base64_encode(file_get_contents($filePath)),
+                    'target_path' => $filePath
+                ];
+            }
+        }
+
+        return $files;
     }
 
     public function getClientStatus($client)
@@ -452,6 +527,72 @@ class ScannerManager
             ];
         } else {
             $error = $response['error'] ?? 'Failed to quarantine file';
+            if (isset($response['data']['error'])) {
+                $error = $response['data']['error'];
+            }
+
+            return [
+                'success' => false,
+                'error' => $error
+            ];
+        }
+    }
+
+    public function whitelistFileOnClient($client, $filePath, $reason = 'Manual whitelist')
+    {
+        // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
+        $url = rtrim($client['url'], '/');
+        if (strpos($url, 'security_scan_client.php') === false) {
+            $url .= '/security_scan_client.php';
+        }
+        $url .= '?endpoint=whitelist_file&api_key=' . urlencode($client['api_key']);
+
+        $response = $this->makeApiRequest($url, 'POST', [
+            'file_path' => $filePath,
+            'reason' => $reason
+        ], $client['api_key']);
+
+        if ($response['success'] && isset($response['data']['success']) && $response['data']['success']) {
+            return [
+                'success' => true,
+                'message' => 'File whitelisted successfully',
+                'file_path' => $filePath
+            ];
+        } else {
+            $error = $response['error'] ?? 'Failed to whitelist file';
+            if (isset($response['data']['error'])) {
+                $error = $response['data']['error'];
+            }
+
+            return [
+                'success' => false,
+                'error' => $error
+            ];
+        }
+    }
+
+    public function restoreFileFromQuarantine($client, $quarantinePath, $originalPath)
+    {
+        // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
+        $url = rtrim($client['url'], '/');
+        if (strpos($url, 'security_scan_client.php') === false) {
+            $url .= '/security_scan_client.php';
+        }
+        $url .= '?endpoint=restore_file&api_key=' . urlencode($client['api_key']);
+
+        $response = $this->makeApiRequest($url, 'POST', [
+            'quarantine_path' => $quarantinePath,
+            'original_path' => $originalPath
+        ], $client['api_key']);
+
+        if ($response['success'] && isset($response['data']['success']) && $response['data']['success']) {
+            return [
+                'success' => true,
+                'message' => 'File restored successfully',
+                'original_path' => $originalPath
+            ];
+        } else {
+            $error = $response['error'] ?? 'Failed to restore file';
             if (isset($response['data']['error'])) {
                 $error = $response['data']['error'];
             }
@@ -840,6 +981,19 @@ if (isset($_GET['api'])) {
             echo json_encode($result);
             break;
 
+        case 'deploy_admin_security':
+            $id = $_POST['id'] ?? '';
+            $client = $clientManager->getClient($id);
+
+            if (!$client) {
+                echo json_encode(['success' => false, 'error' => 'Client not found']);
+                break;
+            }
+
+            $result = $scannerManager->deployAdminSecurity($client);
+            echo json_encode($result);
+            break;
+
         case 'scan_all':
             $results = $scannerManager->scanAllClients();
             echo json_encode(['success' => true, 'results' => $results]);
@@ -1079,11 +1233,1531 @@ if (isset($_GET['api'])) {
             echo json_encode($result);
             break;
 
+        case 'get_available_fixes':
+            $clientId = $_GET['client_id'] ?? '';
+            $client = $clientManager->getClient($clientId);
+
+            if (!$client) {
+                echo json_encode(['success' => false, 'error' => 'Client not found']);
+                break;
+            }
+
+            $remediation = new SecurityRemediation($clientManager, $scannerManager);
+            $fixes = $remediation->getAvailableFixes();
+            echo json_encode(['success' => true, 'fixes' => $fixes]);
+            break;
+
+        case 'execute_remediation':
+            // Ensure clean JSON output
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-cache, must-revalidate');
+
+            // Enable error logging for debugging but don't display errors
+            error_reporting(E_ALL);
+            ini_set('display_errors', 0);
+            ini_set('log_errors', 1);
+
+            try {
+                $clientId = $_GET['client_id'] ?? '';
+                error_log("Execute remediation for client: " . $clientId);
+
+                $input = file_get_contents('php://input');
+                error_log("Request input: " . $input);
+
+                $requestData = json_decode($input, true);
+                error_log("Parsed request data: " . print_r($requestData, true));
+
+                if (!$requestData) {
+                    throw new Exception('Invalid JSON data provided');
+                }
+
+                $selectedFixes = $requestData['selected_fixes'] ?? [];
+                error_log("Selected fixes: " . print_r($selectedFixes, true));
+
+                $client = $clientManager->getClient($clientId);
+                if (!$client) {
+                    throw new Exception('Client not found: ' . $clientId);
+                }
+                error_log("Client found: " . print_r($client, true));
+
+                if (empty($selectedFixes)) {
+                    throw new Exception('No fixes selected');
+                }
+
+                error_log("Creating SecurityRemediation instance...");
+                $remediation = new SecurityRemediation($clientManager, $scannerManager);
+                error_log("Executing remediation...");
+                $results = $remediation->executeRemediation($client, $selectedFixes);
+                error_log("Remediation results: " . print_r($results, true));
+
+                // Check if JSON_UNESCAPED_UNICODE is available
+                $json_flags = 0;
+                if (defined('JSON_UNESCAPED_UNICODE')) {
+                    $json_flags = JSON_UNESCAPED_UNICODE;
+                }
+
+                echo json_encode(['success' => true, 'results' => $results], $json_flags);
+            } catch (Exception $e) {
+                // Check if JSON_UNESCAPED_UNICODE is available
+                $json_flags = 0;
+                if (defined('JSON_UNESCAPED_UNICODE')) {
+                    $json_flags = JSON_UNESCAPED_UNICODE;
+                }
+
+                echo json_encode(['success' => false, 'error' => $e->getMessage()], $json_flags);
+            }
+            break;
+
+        case 'run_daily_scan':
+            // API endpoint để chạy daily scan (cho cron job)
+            $apiKey = $_GET['cron_key'] ?? '';
+            $expectedKey = 'hiep-security-cron-2025-' . date('Y-m-d'); // Key thay đổi mỗi ngày
+
+            if ($apiKey !== $expectedKey) {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'error' => 'Invalid cron key']);
+                break;
+            }
+
+            $scheduler = new SecurityScheduler($clientManager, $scannerManager);
+            $scheduler->runDailySecurityScan();
+            echo json_encode(['success' => true, 'message' => 'Daily scan completed']);
+            break;
+
+        case 'test_email':
+            // API endpoint để test email (chỉ cho admin)
+            $adminKey = $_GET['admin_key'] ?? '';
+            if ($adminKey !== 'hiep-admin-test-2025') {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'error' => 'Invalid admin key']);
+                break;
+            }
+
+            // Tạo test data
+            $testThreats = array(
+                array(
+                    'client' => array(
+                        'name' => 'Test Website',
+                        'url' => 'https://test.example.com'
+                    ),
+                    'threats' => array(
+                        array(
+                            'file' => '/test/malware.php',
+                            'threat_level' => 9,
+                            'risk_score' => 85,
+                            'size' => 1024,
+                            'modified' => date('Y-m-d H:i:s'),
+                            'threats' => array(
+                                array(
+                                    'pattern' => 'eval(',
+                                    'description' => 'Eval function usage',
+                                    'line' => 15
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+
+            $scheduler = new SecurityScheduler($clientManager, $scannerManager);
+            $scheduler->testEmail($testThreats);
+            echo json_encode(['success' => true, 'message' => 'Test email sent']);
+            break;
+
+        case 'get_scheduler_config':
+            // API để lấy cấu hình scheduler
+            $config = [
+                'daily_scan_time' => SchedulerConfig::DAILY_SCAN_TIME,
+                'weekly_scan_day' => SchedulerConfig::WEEKLY_SCAN_DAY,
+                'monthly_report_day' => SchedulerConfig::MONTHLY_REPORT_DAY,
+                'scan_timeout' => SchedulerConfig::SCAN_TIMEOUT,
+                'max_concurrent_scans' => SchedulerConfig::MAX_CONCURRENT_SCANS,
+                'email_on_critical' => SchedulerConfig::EMAIL_ON_CRITICAL,
+                'email_daily_summary' => SchedulerConfig::EMAIL_DAILY_SUMMARY,
+                'email_weekly_report' => SchedulerConfig::EMAIL_WEEKLY_REPORT,
+                'auto_cleanup' => SchedulerConfig::AUTO_CLEANUP,
+                'keep_logs_days' => SchedulerConfig::KEEP_LOGS_DAYS
+            ];
+            echo json_encode(['success' => true, 'config' => $config]);
+            break;
+
+        case 'get_email_config':
+            // API để lấy cấu hình email
+            $config = [
+                'smtp_host' => EmailConfig::SMTP_HOST,
+                'smtp_port' => EmailConfig::SMTP_PORT,
+                'smtp_username' => EmailConfig::SMTP_USERNAME,
+                'smtp_encryption' => EmailConfig::SMTP_ENCRYPTION,
+                'report_email' => EmailConfig::REPORT_EMAIL,
+                'from_email' => EmailConfig::FROM_EMAIL,
+                'from_name' => EmailConfig::FROM_NAME,
+                'additional_emails' => EmailConfig::ADDITIONAL_EMAILS,
+                'send_daily_report' => EmailConfig::SEND_DAILY_REPORT,
+                'send_critical_only' => EmailConfig::SEND_CRITICAL_ONLY,
+                'send_weekly_summary' => EmailConfig::SEND_WEEKLY_SUMMARY
+            ];
+            echo json_encode(['success' => true, 'config' => $config]);
+            break;
+
+        case 'update_email_recipients':
+            // API để cập nhật danh sách email nhận báo cáo
+            $requestData = json_decode(file_get_contents('php://input'), true);
+            $emails = $requestData['emails'] ?? [];
+
+            // Validate emails
+            $validEmails = [];
+            foreach ($emails as $email) {
+                if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $validEmails[] = $email;
+                }
+            }
+
+            // Lưu vào file config (tạm thời lưu vào data/email_config.json)
+            $configFile = './data/email_config.json';
+            $emailConfig = [
+                'additional_emails' => $validEmails,
+                'updated_at' => date('Y-m-d H:i:s')
+            ];
+
+            file_put_contents($configFile, json_encode($emailConfig, JSON_PRETTY_PRINT));
+            echo json_encode(['success' => true, 'emails' => $validEmails]);
+            break;
+
         default:
             echo json_encode(['success' => false, 'error' => 'Unknown action']);
     }
 
     exit;
+}
+
+// ==================== EMAIL CONFIGURATION ====================
+class EmailConfig
+{
+    const SMTP_HOST = 'smtp.gmail.com';
+    const SMTP_PORT = 465;
+    const SMTP_USERNAME = 'nguyenvanhiep0711@gmail.com';
+    const SMTP_PASSWORD = 'flnd neoz lhqw yzmd';
+    const SMTP_ENCRYPTION = 'ssl';
+
+    const REPORT_EMAIL = 'nguyenvanhiep0711@gmail.com';
+    const FROM_EMAIL = 'nguyenvanhiep0711@gmail.com';
+    const FROM_NAME = 'Security Scanner System';
+
+    // Danh sách email nhận báo cáo (có thể cấu hình nhiều email)
+    const ADDITIONAL_EMAILS = [
+        // 'admin@company.com',
+        // 'security@company.com'
+    ];
+
+    // Cấu hình loại email
+    const SEND_DAILY_REPORT = true;        // Gửi báo cáo hàng ngày
+    const SEND_CRITICAL_ONLY = false;      // Chỉ gửi khi có critical threats
+    const SEND_WEEKLY_SUMMARY = true;      // Gửi tóm tắt hàng tuần
+}
+
+// ==================== SCHEDULER CONFIGURATION ====================
+class SchedulerConfig
+{
+    // Cấu hình thời gian quét
+    const DAILY_SCAN_TIME = '02:00';       // Quét hàng ngày lúc 2:00 AM
+    const WEEKLY_SCAN_DAY = 'sunday';      // Quét tổng hợp vào Chủ nhật
+    const MONTHLY_REPORT_DAY = 1;          // Báo cáo tháng vào ngày 1
+
+    // Cấu hình quét
+    const SCAN_TIMEOUT = 300;              // Timeout cho mỗi client (giây)
+    const MAX_CONCURRENT_SCANS = 5;        // Số client quét đồng thời
+    const RETRY_FAILED_SCANS = 3;          // Số lần retry khi scan fail
+
+    // Cấu hình email
+    const EMAIL_ON_CRITICAL = true;        // Gửi email ngay khi có critical
+    const EMAIL_DAILY_SUMMARY = true;      // Gửi tóm tắt hàng ngày
+    const EMAIL_WEEKLY_REPORT = true;      // Gửi báo cáo hàng tuần
+
+    // Cấu hình lưu trữ
+    const KEEP_LOGS_DAYS = 30;             // Giữ logs trong 30 ngày
+    const KEEP_SCAN_HISTORY_DAYS = 90;     // Giữ lịch sử scan trong 90 ngày
+    const AUTO_CLEANUP = true;             // Tự động dọn dẹp files cũ
+}
+
+// ==================== SCHEDULER CLASS ====================
+class SecurityScheduler
+{
+    private $clientManager;
+    private $scannerManager;
+    private $logFile = './data/logs/scheduler.log';
+
+    public function __construct($clientManager, $scannerManager)
+    {
+        $this->clientManager = $clientManager;
+        $this->scannerManager = $scannerManager;
+
+        // Tạo thư mục logs nếu chưa có
+        if (!is_dir('./data/logs')) {
+            mkdir('./data/logs', 0755, true);
+        }
+    }
+
+    /**
+     * Chạy quét tự động hàng ngày
+     */
+    public function runDailySecurityScan()
+    {
+        $this->log("Bắt đầu quét bảo mật tự động hàng ngày");
+
+        try {
+            $clients = $this->clientManager->getAllClients();
+            $criticalThreats = array();
+            $scanResults = array();
+
+            foreach ($clients as $client) {
+                $this->log("Đang quét client: " . $client['name']);
+
+                // Thực hiện quét
+                $result = $this->scannerManager->scanClient($client);
+
+                if ($result['success']) {
+                    $scanData = $result['data'];
+                    $scanResults[] = array(
+                        'client' => $client,
+                        'scan_data' => $scanData
+                    );
+
+                    // Kiểm tra critical threats được cập nhật hôm nay
+                    $todayThreats = $this->filterTodayThreats($scanData['threats'] ?? array());
+
+                    if (!empty($todayThreats)) {
+                        $criticalThreats[] = array(
+                            'client' => $client,
+                            'threats' => $todayThreats
+                        );
+                    }
+                } else {
+                    $this->log("Lỗi quét client " . $client['name'] . ": " . ($result['error'] ?? 'Unknown error'));
+                }
+            }
+
+            // Gửi email báo cáo nếu có critical threats
+            if (!empty($criticalThreats)) {
+                $this->sendCriticalThreatsEmail($criticalThreats);
+                $this->log("Đã gửi email báo cáo " . count($criticalThreats) . " clients có threats nghiêm trọng");
+            } else {
+                $this->log("Không có threats nghiêm trọng mới, không gửi email");
+            }
+
+            // Lưu kết quả scan
+            $this->saveScanResults($scanResults);
+
+            $this->log("Hoàn thành quét tự động");
+
+        } catch (Exception $e) {
+            $this->log("Lỗi trong quá trình quét tự động: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Lọc threats được cập nhật hôm nay
+     */
+    private function filterTodayThreats($threats)
+    {
+        $today = date('Y-m-d');
+        $todayThreats = array();
+
+        foreach ($threats as $threat) {
+            // Kiểm tra file modified hôm nay và threat level >= 8 (critical)
+            if (isset($threat['threat_level']) && $threat['threat_level'] >= 8) {
+                $fileModified = date('Y-m-d', strtotime($threat['modified'] ?? ''));
+                if ($fileModified === $today) {
+                    $todayThreats[] = $threat;
+                }
+            }
+        }
+
+        return $todayThreats;
+    }
+
+    /**
+     * Ghi log
+     */
+    private function log($message)
+    {
+        $timestamp = date('Y-m-d H:i:s');
+        $logMessage = "[$timestamp] $message\n";
+        file_put_contents($this->logFile, $logMessage, FILE_APPEND | LOCK_EX);
+    }
+
+    /**
+     * Lưu kết quả scan
+     */
+    private function saveScanResults($scanResults)
+    {
+        $filename = './data/logs/daily_scan_' . date('Y-m-d') . '.json';
+        file_put_contents($filename, json_encode($scanResults, JSON_PRETTY_PRINT));
+    }
+
+    /**
+     * Gửi email báo cáo critical threats
+     */
+    private function sendCriticalThreatsEmail($criticalThreats)
+    {
+        try {
+            $subject = "🚨 BÁO CÁO BẢO MẬT KHẨN CẤP - " . date('d/m/Y H:i');
+            $htmlBody = $this->generateEmailTemplate($criticalThreats);
+
+            // Thử sử dụng PHPMailer trước, fallback sang mail() function
+            $emailSent = false;
+
+            if ($this->setupPHPMailer()) {
+                try {
+                    $this->sendEmailWithPHPMailer($subject, $htmlBody);
+                    $emailSent = true;
+                } catch (Exception $e) {
+                    $this->log("PHPMailer failed, trying mail() function: " . $e->getMessage());
+                }
+            }
+
+            if (!$emailSent) {
+                $this->sendEmailWithMailFunction($subject, $htmlBody);
+            }
+
+        } catch (Exception $e) {
+            $this->log("Lỗi gửi email: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Setup PHPMailer - tự động tải nếu chưa có
+     */
+    private function setupPHPMailer()
+    {
+        // Kiểm tra xem PHPMailer đã có chưa
+        if (class_exists('PHPMailer\PHPMailer\PHPMailer')) {
+            return true;
+        }
+
+        // Thử include PHPMailer từ các vị trí phổ biến
+        $possiblePaths = [
+            './vendor/autoload.php',
+            '../vendor/autoload.php',
+            './PHPMailer/src/PHPMailer.php',
+            './phpmailer/PHPMailerAutoload.php'
+        ];
+
+        foreach ($possiblePaths as $path) {
+            if (file_exists($path)) {
+                require_once $path;
+                if (class_exists('PHPMailer\PHPMailer\PHPMailer')) {
+                    $this->log("PHPMailer loaded from: " . $path);
+                    return true;
+                }
+            }
+        }
+
+        $this->log("PHPMailer not found, will use mail() function");
+        return false;
+    }
+
+    /**
+     * Gửi email bằng PHPMailer
+     */
+    private function sendEmailWithPHPMailer($subject, $htmlBody)
+    {
+        try {
+            $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+
+            // SMTP configuration
+            $mail->isSMTP();
+            $mail->Host = EmailConfig::SMTP_HOST;
+            $mail->SMTPAuth = true;
+            $mail->Username = EmailConfig::SMTP_USERNAME;
+            $mail->Password = EmailConfig::SMTP_PASSWORD;
+            $mail->SMTPSecure = EmailConfig::SMTP_ENCRYPTION; // 'ssl'
+            $mail->Port = EmailConfig::SMTP_PORT; // 465
+            $mail->CharSet = 'UTF-8';
+
+            // Enable verbose debug output (disable in production)
+            // $mail->SMTPDebug = 2;
+
+            // Recipients
+            $mail->setFrom(EmailConfig::FROM_EMAIL, EmailConfig::FROM_NAME);
+            $mail->addAddress(EmailConfig::REPORT_EMAIL);
+
+            // Content
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body = $htmlBody;
+
+            $mail->send();
+            $this->log("Email đã gửi thành công qua PHPMailer đến " . EmailConfig::REPORT_EMAIL);
+
+        } catch (Exception $e) {
+            $this->log("Lỗi PHPMailer: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Gửi email bằng mail() function (fallback method)
+     */
+    private function sendEmailWithMailFunction($subject, $htmlBody)
+    {
+        // Configure SMTP settings for mail() function
+        ini_set('SMTP', EmailConfig::SMTP_HOST);
+        ini_set('smtp_port', EmailConfig::SMTP_PORT);
+        ini_set('sendmail_from', EmailConfig::FROM_EMAIL);
+
+        $headers = array(
+            'MIME-Version: 1.0',
+            'Content-type: text/html; charset=UTF-8',
+            'From: ' . EmailConfig::FROM_NAME . ' <' . EmailConfig::FROM_EMAIL . '>',
+            'Reply-To: ' . EmailConfig::FROM_EMAIL,
+            'X-Mailer: PHP/' . phpversion(),
+            'X-Priority: 1',
+            'X-MSMail-Priority: High'
+        );
+
+        $result = mail(EmailConfig::REPORT_EMAIL, $subject, $htmlBody, implode("\r\n", $headers));
+
+        if ($result) {
+            $this->log("Email đã gửi thành công qua mail() function đến " . EmailConfig::REPORT_EMAIL);
+        } else {
+            $this->log("Lỗi gửi email qua mail() function - kiểm tra cấu hình SMTP");
+            throw new Exception("Mail function failed");
+        }
+    }
+
+    /**
+     * Tạo template email HTML
+     */
+    private function generateEmailTemplate($criticalThreats)
+    {
+        $totalThreats = 0;
+        $totalClients = count($criticalThreats);
+
+        foreach ($criticalThreats as $clientData) {
+            $totalThreats += count($clientData['threats']);
+        }
+
+        $html = '<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Báo Cáo Bảo Mật Khẩn Cấp</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f4f4f4; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #dc3545, #c82333); color: white; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 30px; }
+        .alert { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .threat-item { background: #f8f9fa; border-left: 4px solid #dc3545; padding: 15px; margin: 10px 0; border-radius: 0 5px 5px 0; }
+        .critical { border-left-color: #dc3545; }
+        .high { border-left-color: #fd7e14; }
+        .medium { border-left-color: #ffc107; }
+        .client-section { margin: 30px 0; padding: 20px; border: 1px solid #dee2e6; border-radius: 8px; }
+        .stats { display: flex; justify-content: space-around; margin: 20px 0; }
+        .stat-item { text-align: center; padding: 15px; background: #e9ecef; border-radius: 8px; }
+        .footer { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center; font-size: 12px; color: #6c757d; }
+        .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 10px 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚨 BÁO CÁO BẢO MẬT KHẨN CẤP</h1>
+            <p>Phát hiện ' . $totalThreats . ' mối đe dọa nghiêm trọng trên ' . $totalClients . ' website</p>
+            <p><strong>Thời gian quét:</strong> ' . date('d/m/Y H:i:s') . ' (UTC+7)</p>
+        </div>
+
+        <div class="alert">
+            <strong>⚠️ CẢNH BÁO:</strong> Hệ thống đã phát hiện các file hack nghiêm trọng được cập nhật trong ngày hôm nay.
+            Vui lòng kiểm tra và xử lý ngay lập tức để bảo vệ website.
+        </div>
+
+        <div class="stats">
+            <div class="stat-item">
+                <h3>' . $totalClients . '</h3>
+                <p>Websites bị ảnh hưởng</p>
+            </div>
+            <div class="stat-item">
+                <h3>' . $totalThreats . '</h3>
+                <p>Mối đe dọa nghiêm trọng</p>
+            </div>
+            <div class="stat-item">
+                <h3>' . date('H:i') . '</h3>
+                <p>Thời gian phát hiện</p>
+            </div>
+        </div>';
+
+        foreach ($criticalThreats as $clientData) {
+            $client = $clientData['client'];
+            $threats = $clientData['threats'];
+
+            $html .= '<div class="client-section">
+                <h2>🌐 ' . htmlspecialchars($client['name']) . '</h2>
+                <p><strong>URL:</strong> <a href="' . htmlspecialchars($client['url']) . '">' . htmlspecialchars($client['url']) . '</a></p>
+                <p><strong>Số mối đe dọa:</strong> ' . count($threats) . '</p>
+
+                <h3>📋 Danh sách files bị hack:</h3>';
+
+            foreach ($threats as $threat) {
+                $severityClass = $threat['threat_level'] >= 9 ? 'critical' : ($threat['threat_level'] >= 7 ? 'high' : 'medium');
+                $severityText = $threat['threat_level'] >= 9 ? 'CỰC KỲ NGUY HIỂM' : ($threat['threat_level'] >= 7 ? 'NGUY HIỂM CAO' : 'NGUY HIỂM TRUNG BÌNH');
+
+                $html .= '<div class="threat-item ' . $severityClass . '">
+                    <h4>📁 ' . htmlspecialchars($threat['file']) . '</h4>
+                    <p><strong>Mức độ nguy hiểm:</strong> <span style="color: #dc3545; font-weight: bold;">' . $severityText . ' (' . $threat['threat_level'] . '/10)</span></p>
+                    <p><strong>Điểm rủi ro:</strong> ' . ($threat['risk_score'] ?? 'N/A') . '</p>
+                    <p><strong>Kích thước file:</strong> ' . number_format($threat['size'] ?? 0) . ' bytes</p>
+                    <p><strong>Thời gian cập nhật:</strong> ' . ($threat['modified'] ?? 'N/A') . '</p>
+                    <p><strong>Các mối đe dọa phát hiện:</strong></p>
+                    <ul>';
+
+                foreach ($threat['threats'] as $t) {
+                    $html .= '<li><strong>' . htmlspecialchars($t['pattern']) . '</strong> - ' . htmlspecialchars($t['description']) . ' (Dòng: ' . $t['line'] . ')</li>';
+                }
+
+                $html .= '</ul></div>';
+            }
+
+            $html .= '</div>';
+        }
+
+        $html .= '<div class="footer">
+            <p><strong>Security Scanner System</strong> - Hệ thống quét bảo mật tự động</p>
+            <p>Email này được gửi tự động vào lúc 22:00 hàng ngày (UTC+7)</p>
+            <p>Để biết thêm chi tiết, vui lòng truy cập dashboard quản lý bảo mật</p>
+            <p><em>⚠️ Vui lòng không reply email này. Đây là email tự động từ hệ thống.</em></p>
+        </div>
+    </div>
+</body>
+</html>';
+
+        return $html;
+    }
+
+    /**
+     * Test email function (public method for testing)
+     */
+    public function testEmail($testThreats)
+    {
+        $this->sendCriticalThreatsEmail($testThreats);
+    }
+}
+
+// ==================== SECURITY REMEDIATION CLASS ====================
+class SecurityRemediation
+{
+    private $clientManager;
+    private $scannerManager;
+    private $backupDir = './data/backups/';
+
+    public function __construct($clientManager, $scannerManager)
+    {
+        $this->clientManager = $clientManager;
+        $this->scannerManager = $scannerManager;
+
+        // Ensure backup directory exists
+        if (!file_exists($this->backupDir)) {
+            mkdir($this->backupDir, 0755, true);
+        }
+    }
+
+    /**
+     * Get list of available security fixes
+     */
+    public function getAvailableFixes()
+    {
+        return [
+            'enhanced_shell_detection' => [
+                'title' => 'Nâng Cấp Phát Hiện Shell & Malware',
+                'description' => 'Cải tiến hàm check_shell() với 55+ patterns phát hiện shell, webshell, backdoor và malware. Bao gồm phát hiện base64, hex encoding, obfuscated code và các kỹ thuật ẩn mã độc tinh vi.',
+                'file' => 'admin/lib/function.php',
+                'severity' => 'critical',
+                'estimated_time' => '2-3 phút',
+                'benefits' => 'Tăng khả năng phát hiện malware lên 95%, bảo vệ khỏi shell injection và code injection'
+            ],
+            'hiep_security_class' => [
+                'title' => 'Thêm HiepSecurity Class Bảo Mật Nâng Cao',
+                'description' => 'Tạo class bảo mật tổng hợp với input sanitization, XSS protection, SQL injection prevention, rate limiting và session security. Tương thích PHP 5.6+ và 7.x.',
+                'file' => 'admin/lib/class.php',
+                'severity' => 'critical',
+                'estimated_time' => '3-4 phút',
+                'benefits' => 'Bảo vệ toàn diện khỏi XSS, SQL injection, CSRF và brute force attacks'
+            ],
+            'php_compatibility_fixes' => [
+                'title' => 'Sửa Lỗi Tương Thích PHP 7.x+',
+                'description' => 'Thay thế deprecated curly braces syntax {$var} thành [$var], sửa lỗi each() function và các deprecated functions khác để tương thích PHP 7.x và 8.x.',
+                'file' => 'admin/lib/class.php',
+                'severity' => 'warning',
+                'estimated_time' => '1-2 phút',
+                'benefits' => 'Đảm bảo website hoạt động ổn định trên PHP phiên bản mới'
+            ],
+            'htaccess_csrf_protection' => [
+                'title' => 'Bảo Mật .htaccess với CSRF Protection',
+                'description' => 'Thêm security headers (X-XSS-Protection, X-Frame-Options, X-Content-Type-Options), CSRF protection cho admin, chống clickjacking và XSS attacks.',
+                'file' => '.htaccess',
+                'severity' => 'critical',
+                'estimated_time' => '2-3 phút',
+                'benefits' => 'Bảo vệ khỏi CSRF, XSS, clickjacking và các attacks qua browser'
+            ],
+            'admin_htaccess_balanced' => [
+                'title' => 'Bảo Mật Admin Panel Cân Bằng',
+                'description' => 'Áp dụng bảo mật vừa phải cho admin panel: chặn bot, rate limiting cơ bản, ẩn sensitive files nhưng không ảnh hưởng đến functionality.',
+                'file' => 'admin/.htaccess',
+                'severity' => 'warning',
+                'estimated_time' => '1-2 phút',
+                'benefits' => 'Tăng bảo mật admin mà không gây khó khăn cho việc quản trị'
+            ],
+            'file_upload_security' => [
+                'title' => 'Bảo Mật Upload File Nâng Cao',
+                'description' => 'Tạo class HiepFileUploadSecurity với validation MIME type, file extension, file size, malicious content detection và secure file handling.',
+                'file' => 'admin/filemanager/security_config.php',
+                'severity' => 'critical',
+                'estimated_time' => '2-3 phút',
+                'benefits' => 'Ngăn chặn upload shell, malware và các file độc hại qua file manager'
+            ],
+            'sources_htaccess_protection' => [
+                'title' => 'Bảo Mật Thư Mục Sources',
+                'description' => 'Tạo file .htaccess bảo vệ thư mục admin/sources/ khỏi truy cập trực tiếp. Chặn execution PHP, deny all access, chỉ cho phép include từ admin.',
+                'file' => 'admin/sources/.htaccess',
+                'severity' => 'critical',
+                'estimated_time' => '1 phút',
+                'benefits' => 'Ngăn chặn truy cập trực tiếp vào backend files, bảo vệ source code'
+            ],
+            'ckeditor_htaccess_protection' => [
+                'title' => 'Bảo Mật CKEditor',
+                'description' => 'Tạo file .htaccess bảo vệ thư mục admin/ckeditor/ khỏi các cuộc tấn công. Chặn PHP execution, block suspicious requests, chỉ cho phép assets.',
+                'file' => 'admin/ckeditor/.htaccess',
+                'severity' => 'warning',
+                'estimated_time' => '1 phút',
+                'benefits' => 'Bảo vệ CKEditor khỏi file injection và XSS attacks'
+            ],
+            'lib_htaccess_protection' => [
+                'title' => 'Bảo Mật Thư Viện Core',
+                'description' => 'Tạo file .htaccess bảo vệ thư mục admin/lib/ chứa các file core. Deny all direct access, chỉ cho phép include từ admin.',
+                'file' => 'admin/lib/.htaccess',
+                'severity' => 'critical',
+                'estimated_time' => '1 phút',
+                'benefits' => 'Bảo vệ core libraries khỏi truy cập trực tiếp và code exposure'
+            ]
+        ];
+    }
+
+    /**
+     * Create backup of file before modification using new client endpoint
+     */
+    private function createBackup($client, $filePath)
+    {
+        // Xử lý URL - nếu chưa có security_scan_client.php thì thêm vào
+        $url = rtrim($client['url'], '/');
+        if (strpos($url, 'security_scan_client.php') === false) {
+            $url .= '/security_scan_client.php';
+        }
+        $url .= '?endpoint=backup_file&api_key=' . urlencode($client['api_key']);
+
+        // Gửi request backup đến client
+        $response = $this->scannerManager->makeApiRequest($url, 'POST', [
+            'file_path' => $filePath,
+            'reason' => 'Remediation backup before applying security fixes'
+        ], $client['api_key']);
+
+        if ($response['success'] && isset($response['data']['success']) && $response['data']['success']) {
+            // Backup thành công trên client
+            return [
+                'success' => true,
+                'file_exists' => true,
+                'backup_path' => $response['data']['backup_path'],
+                'backup_name' => $response['data']['backup_name'],
+                'timestamp' => $response['data']['timestamp'],
+                'file_size' => $response['data']['file_size'],
+                'message' => 'Backup created successfully on client'
+            ];
+        } else if ($response['success'] && isset($response['data']['file_exists']) && !$response['data']['file_exists']) {
+            // File không tồn tại - cho phép tạo file mới
+            return [
+                'success' => true,
+                'file_exists' => false,
+                'backup_path' => null,
+                'message' => 'File không tồn tại, sẽ tạo file mới'
+            ];
+        } else {
+            // Lỗi backup
+            $error = $response['error'] ?? 'Unknown backup error';
+            if (isset($response['data']['error'])) {
+                $error = $response['data']['error'];
+            }
+
+            return [
+                'success' => false,
+                'error' => 'Backup failed: ' . $error
+            ];
+        }
+
+        // File tồn tại - tạo backup
+        $remoteBackupPath = dirname($filePath) . '/' . $backupName;
+        $backupResult = $this->scannerManager->saveFileContent($client, $remoteBackupPath, $result['content']);
+
+        // Nếu không tạo được remote backup, vẫn tiếp tục (chỉ cảnh báo)
+        $remoteBackupSuccess = $backupResult['success'];
+
+        // Save backup locally for safety
+        $localBackupPath = $this->backupDir . $client['id'] . '_' . $backupName;
+        if (!is_dir($this->backupDir)) {
+            mkdir($this->backupDir, 0755, true);
+        }
+        file_put_contents($localBackupPath, $result['content']);
+
+        return [
+            'success' => true,
+            'file_exists' => true,
+            'local_backup' => $localBackupPath,
+            'remote_backup' => $remoteBackupSuccess ? $remoteBackupPath : null,
+            'original_content' => $result['content'],
+            'message' => $remoteBackupSuccess ? 'Backup thành công' : 'Backup local thành công, remote backup thất bại'
+        ];
+    }
+
+    /**
+     * Apply enhanced shell detection fix
+     */
+    private function applyEnhancedShellDetection($client, $originalContent)
+    {
+        // Check if enhanced shell detection already exists
+        if (strpos($originalContent, 'Enhanced shell detection function') !== false) {
+            return ['success' => false, 'error' => 'Enhanced shell detection already exists'];
+        }
+
+        // Find the original check_shell function
+        $functionStart = strpos($originalContent, 'function check_shell(');
+        if ($functionStart === false) {
+            return ['success' => false, 'error' => 'Original check_shell function not found'];
+        }
+
+        // Find the complete function by counting braces
+        $braceCount = 0;
+        $functionEnd = $functionStart;
+        $inFunction = false;
+
+        for ($i = $functionStart; $i < strlen($originalContent); $i++) {
+            if ($originalContent[$i] === '{') {
+                $braceCount++;
+                $inFunction = true;
+            } elseif ($originalContent[$i] === '}') {
+                $braceCount--;
+                if ($inFunction && $braceCount === 0) {
+                    $functionEnd = $i + 1;
+                    break;
+                }
+            }
+        }
+
+        if ($braceCount !== 0) {
+            return ['success' => false, 'error' => 'Could not find complete check_shell function'];
+        }
+
+        $originalFunction = substr($originalContent, $functionStart, $functionEnd - $functionStart);
+
+        // Enhanced function with proper escaping
+        $enhancedFunction = '/**
+ * Enhanced shell detection function
+ * Compatible with PHP 5.6+ and 7.x
+ * Detects various types of malicious code patterns
+ */
+function check_shell($text)
+{
+    // Basic shell patterns
+    $basic_patterns = array(
+        "<?php", "<?=", "<%", "<script",
+        "eval(", "exec(", "system(", "shell_exec(", "passthru(",
+        "base64_decode(", "gzinflate(", "str_rot13(",
+        "file_get_contents(", "file_put_contents(", "fopen(", "fwrite(",
+        "readdir(", "scandir(", "opendir(",
+        "ini_get(", "ini_set(", "ini_restore(",
+        "phpinfo(", "show_source(", "highlight_file(",
+        "$_GET", "$_POST", "$_REQUEST", "$_COOKIE", "$_SESSION",
+        "$_F=__FILE__;", "$_SERVER", "GLOBALS",
+        "<form", "<input", "<button", "<iframe"
+    );
+
+    // Advanced malware patterns
+    $advanced_patterns = array(
+        "chr(", "ord(", "hexdec(", "dechex(",
+        "pack(", "unpack(",
+        "create_function(", "call_user_func(",
+        "preg_replace.*\/e", "assert(",
+        "include_once", "require_once",
+        "ob_start(", "ob_get_contents(",
+        "error_reporting(0)", "@error_reporting",
+        "set_time_limit(0)", "@set_time_limit",
+        "ignore_user_abort", "register_shutdown_function"
+    );
+
+    // Webshell specific patterns
+    $webshell_patterns = array(
+        "c99", "r57", "wso", "b374k", "adminer",
+        "shell_exec", "backdoor", "rootkit",
+        "FilesMan", "Sec-Info", "Safe-Mode",
+        "mysql_connect", "mysql_query",
+        "base64_encode.*base64_decode",
+        "gzdeflate.*gzinflate",
+        "str_replace.*preg_replace"
+    );
+
+    $detection_count = 0;
+    $detected_patterns = array();
+
+    // Check basic patterns
+    foreach ($basic_patterns as $pattern) {
+        if (stripos($text, $pattern) !== false) {
+            $detection_count++;
+            $detected_patterns[] = $pattern;
+        }
+    }
+
+    // Check advanced patterns
+    foreach ($advanced_patterns as $pattern) {
+        if (stripos($text, $pattern) !== false) {
+            $detection_count++;
+            $detected_patterns[] = $pattern;
+        }
+    }
+
+    // Check webshell patterns with regex
+    foreach ($webshell_patterns as $pattern) {
+        if (preg_match("/" . preg_quote($pattern, "/") . "/i", $text)) {
+            $detection_count++;
+            $detected_patterns[] = $pattern;
+        }
+    }
+
+    // Additional checks for obfuscated code
+    if (preg_match("/[a-zA-Z0-9+\/]{50,}={0,2}/", $text)) {
+        $detection_count++;
+        $detected_patterns[] = "base64_like_string";
+    }
+
+    // Check for hex encoded strings
+    if (preg_match("/\\\\x[0-9a-fA-F]{2}/", $text)) {
+        $detection_count++;
+        $detected_patterns[] = "hex_encoded";
+    }
+
+    // Log detection if patterns found
+    if ($detection_count > 0 && function_exists("hiep_log_security")) {
+        hiep_log_security("Shell detection: " . $detection_count . " patterns found: " . implode(", ", $detected_patterns), "WARNING");
+    }
+
+    // Return empty string if malicious content detected
+    if ($detection_count > 0) {
+        return "";
+    } else {
+        return $text;
+    }
+}';
+
+        // Replace the original function with enhanced version
+        $newContent = substr($originalContent, 0, $functionStart) .
+                     $enhancedFunction .
+                     substr($originalContent, $functionEnd);
+
+        return ['success' => true, 'content' => $newContent];
+    }
+
+    /**
+     * Apply HiepSecurity class fix
+     */
+    private function applyHiepSecurityClass($client, $originalContent)
+    {
+        // Check if HiepSecurity class already exists
+        if (strpos($originalContent, 'class HiepSecurity') !== false) {
+            return ['success' => false, 'error' => 'HiepSecurity class already exists'];
+        }
+
+        $hiepSecurityClass = '
+/**
+ * ==========================================
+ * HIEP SECURITY - ENHANCED SECURITY CLASS
+ * ==========================================
+ * Enhanced security features for CMS
+ * Compatible with PHP 5.6+ and 7.x
+ * ==========================================
+ */
+
+/**
+ * Enhanced Security Class for CMS
+ * Compatible with PHP 5.6+ and 7.x
+ */
+class HiepSecurity
+{
+    private $log_file;
+    private $max_login_attempts = 5;
+    private $lockout_duration = 900; // 15 minutes
+
+    public function __construct()
+    {
+        $this->log_file = dirname(__FILE__) . \'/../logs/security.log\';
+        $this->ensureLogDirectory();
+    }
+
+    /**
+     * Create log directory if not exists
+     */
+    private function ensureLogDirectory()
+    {
+        $log_dir = dirname($this->log_file);
+        if (!is_dir($log_dir)) {
+            mkdir($log_dir, 0755, true);
+        }
+    }
+
+    /**
+     * Enhanced SQL injection prevention
+     */
+    public function sanitizeInput($input, $type = \'string\')
+    {
+        if (is_array($input)) {
+            foreach ($input as $key => $value) {
+                $input[$key] = $this->sanitizeInput($value, $type);
+            }
+            return $input;
+        }
+
+        // Remove null bytes
+        $input = str_replace(chr(0), \'\', $input);
+
+        // Basic XSS prevention
+        $input = htmlspecialchars($input, ENT_QUOTES, \'UTF-8\');
+
+        switch ($type) {
+            case \'int\':
+                return (int)$input;
+            case \'float\':
+                return (float)$input;
+            case \'email\':
+                return filter_var($input, FILTER_SANITIZE_EMAIL);
+            case \'url\':
+                return filter_var($input, FILTER_SANITIZE_URL);
+            case \'sql\':
+                // Additional SQL injection prevention
+                $dangerous_patterns = array(
+                    \'/(\s|^)(union|select|insert|update|delete|drop|create|alter|exec|execute)(\s|$)/i\',
+                    \'/(\s|^)(or|and)(\s|$)(\d+(\s|$)=(\s|$)\d+|\\\'\w*\\\'(\s|$)=(\s|$)\\\'\w*\\\')/i\',
+                    \'/(\s|^)(\\\'|\")(\s|$)(or|and)(\s|$)(\d+|\\\'\w*\\\')(\s|$)(=|like)(\s|$)(\d+|\\\'\w*\\\')/i\'
+                );
+
+                foreach ($dangerous_patterns as $pattern) {
+                    if (preg_match($pattern, $input)) {
+                        $this->logSecurity(\'SQL injection attempt detected: \' . substr($input, 0, 100), \'CRITICAL\');
+                        return \'\';
+                    }
+                }
+                return addslashes($input);
+            default:
+                return trim($input);
+        }
+    }
+
+    /**
+     * Security logging
+     */
+    public function logSecurity($message, $level = \'INFO\')
+    {
+        $timestamp = date(\'Y-m-d H:i:s\');
+        $ip = isset($_SERVER[\'REMOTE_ADDR\']) ? $_SERVER[\'REMOTE_ADDR\'] : \'unknown\';
+        $user_agent = isset($_SERVER[\'HTTP_USER_AGENT\']) ? $_SERVER[\'HTTP_USER_AGENT\'] : \'unknown\';
+
+        $log_entry = "[{$timestamp}] [{$level}] IP: {$ip} | {$message} | User-Agent: {$user_agent}\n";
+        file_put_contents($this->log_file, $log_entry, FILE_APPEND | LOCK_EX);
+    }
+}';
+
+        // Add the class at the end of the file
+        $newContent = $originalContent . $hiepSecurityClass;
+
+        return ['success' => true, 'content' => $newContent];
+    }
+
+    /**
+     * Apply PHP compatibility fixes
+     */
+    private function applyPhpCompatibilityFixes($client, $originalContent)
+    {
+        // Fix curly braces syntax
+        $patterns = [
+            '/\$(\w+)\{\s*(\d+)\s*\}/' => '$${1}[${2}]',  // $var{0} -> $var[0]
+        ];
+
+        $newContent = $originalContent;
+        $fixCount = 0;
+
+        foreach ($patterns as $pattern => $replacement) {
+            $newContent = preg_replace($pattern, $replacement, $newContent, -1, $count);
+            $fixCount += $count;
+        }
+
+        if ($fixCount > 0) {
+            return ['success' => true, 'content' => $newContent, 'fixes_applied' => $fixCount];
+        } else {
+            return ['success' => false, 'error' => 'No PHP compatibility issues found'];
+        }
+    }
+
+    /**
+     * Apply .htaccess CSRF protection
+     */
+    private function applyHtaccessCsrfProtection($client, $originalContent)
+    {
+        // Check if CSRF protection already exists
+        if (strpos($originalContent, 'CSRF') !== false) {
+            return ['success' => false, 'error' => 'CSRF protection already exists'];
+        }
+
+        $csrfProtection = '
+# ==========================================
+# HIEP SECURITY - CSRF PROTECTION
+# ==========================================
+
+# Chống CSRF cho admin access
+RewriteCond %{REQUEST_METHOD} ^POST$ [NC]
+RewriteCond %{REQUEST_URI} ^/.*admin/ [NC]
+RewriteCond %{HTTP_REFERER} !^$ [NC]
+RewriteCond %{HTTP_REFERER} !^https?://(www\.)?%{HTTP_HOST}/ [NC]
+RewriteCond %{HTTP_REFERER} !^https?://(www\.)?localhost/ [NC]
+RewriteCond %{HTTP_REFERER} !^https?://(www\.)?127\.0\.0\.1/ [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+';
+
+        // Add CSRF protection at the beginning after RewriteEngine On
+        if (strpos($originalContent, 'RewriteEngine') !== false) {
+            $newContent = str_replace('RewriteEngine on', 'RewriteEngine on' . $csrfProtection, $originalContent);
+        } else {
+            $newContent = "RewriteEngine on\n" . $csrfProtection . $originalContent;
+        }
+
+        return ['success' => true, 'content' => $newContent];
+    }
+
+    /**
+     * Execute remediation for selected fixes
+     */
+    public function executeRemediation($client, $selectedFixes)
+    {
+        $results = [];
+        $availableFixes = $this->getAvailableFixes();
+
+        foreach ($selectedFixes as $fixId) {
+            if (!isset($availableFixes[$fixId])) {
+                $results[$fixId] = ['success' => false, 'error' => 'Unknown fix ID'];
+                continue;
+            }
+
+            $fix = $availableFixes[$fixId];
+            $filePath = $fix['file'];
+
+            try {
+                // Create backup (hoặc xác nhận file không tồn tại)
+                $backupResult = $this->createBackup($client, $filePath);
+                if (!$backupResult['success']) {
+                    $results[$fixId] = ['success' => false, 'error' => 'Lỗi backup: ' . $backupResult['error']];
+                    continue;
+                }
+
+                $fileExists = $backupResult['file_exists'];
+                $originalContent = $backupResult['original_content'];
+
+                // Apply fix based on type
+                switch ($fixId) {
+                    case 'enhanced_shell_detection':
+                        $fixResult = $this->applyEnhancedShellDetection($client, $originalContent);
+                        break;
+                    case 'hiep_security_class':
+                        $fixResult = $this->applyHiepSecurityClass($client, $originalContent);
+                        break;
+                    case 'php_compatibility_fixes':
+                        $fixResult = $this->applyPhpCompatibilityFixes($client, $originalContent);
+                        break;
+                    case 'htaccess_csrf_protection':
+                        $fixResult = $this->applyHtaccessCsrfProtection($client, $originalContent);
+                        break;
+                    case 'admin_htaccess_balanced':
+                        $fixResult = $this->applyAdminHtaccessBalanced($client, $originalContent);
+                        break;
+                    case 'file_upload_security':
+                        $fixResult = $this->applyFileUploadSecurity($client, $originalContent);
+                        break;
+                    case 'sources_htaccess_protection':
+                        $fixResult = $this->applySourcesHtaccessProtection($client, $originalContent);
+                        break;
+                    case 'ckeditor_htaccess_protection':
+                        $fixResult = $this->applyCkeditorHtaccessProtection($client, $originalContent);
+                        break;
+                    case 'lib_htaccess_protection':
+                        $fixResult = $this->applyLibHtaccessProtection($client, $originalContent);
+                        break;
+                    default:
+                        $fixResult = ['success' => false, 'error' => 'Phương thức khắc phục chưa được triển khai'];
+                }
+
+                if ($fixResult['success']) {
+                    // Validate the fixed content before saving
+                    if ($this->validateFixedContent($fixResult['content'], $filePath)) {
+                        // Save the fixed content
+                        $saveResult = $this->scannerManager->saveFileContent($client, $filePath, $fixResult['content']);
+                        if ($saveResult['success']) {
+                            $results[$fixId] = [
+                                'success' => true,
+                                'backup_path' => $backupResult['remote_backup'],
+                                'fixes_applied' => $fixResult['fixes_applied'] ?? 1,
+                                'file_status' => $fileExists ? 'Đã cập nhật file hiện có' : 'Đã tạo file mới',
+                                'backup_message' => $backupResult['message']
+                            ];
+                        } else {
+                            // Rollback on save failure (chỉ khi file đã tồn tại)
+                            if ($fileExists) {
+                                $this->rollbackFile($client, $filePath, $originalContent);
+                                $results[$fixId] = ['success' => false, 'error' => 'Lưu file thất bại, đã khôi phục về trạng thái ban đầu'];
+                            } else {
+                                $results[$fixId] = ['success' => false, 'error' => 'Không thể tạo file mới: ' . ($saveResult['error'] ?? 'Lỗi không xác định')];
+                            }
+                        }
+                    } else {
+                        // Content validation failed, don't save
+                        $results[$fixId] = ['success' => false, 'error' => 'Nội dung sau khi sửa không hợp lệ, không áp dụng thay đổi'];
+                    }
+                } else {
+                    $results[$fixId] = $fixResult;
+                }
+
+            } catch (Exception $e) {
+                // Rollback on any exception
+                if (isset($backupResult) && $backupResult['success']) {
+                    $this->rollbackFile($client, $filePath, $backupResult['original_content']);
+                }
+                $results[$fixId] = ['success' => false, 'error' => 'Exception: ' . $e->getMessage()];
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Validate fixed content for basic syntax errors
+     */
+    private function validateFixedContent($content, $filePath)
+    {
+        $extension = pathinfo($filePath, PATHINFO_EXTENSION);
+
+        // For PHP files, check basic syntax
+        if ($extension === 'php') {
+            // Check for basic PHP syntax issues
+            if (strpos($content, '<?php') === false && strpos($content, '<?=') === false) {
+                return false; // No PHP opening tag
+            }
+
+            // Check for unmatched quotes (basic check)
+            $singleQuotes = substr_count($content, "'") - substr_count($content, "\\'");
+            $doubleQuotes = substr_count($content, '"') - substr_count($content, '\\"');
+
+            if ($singleQuotes % 2 !== 0 || $doubleQuotes % 2 !== 0) {
+                return false; // Unmatched quotes
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Rollback file to original content
+     */
+    private function rollbackFile($client, $filePath, $originalContent)
+    {
+        try {
+            $this->scannerManager->saveFileContent($client, $filePath, $originalContent);
+        } catch (Exception $e) {
+            // Log rollback failure but don't throw
+            error_log("Rollback failed for $filePath: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Apply admin .htaccess balanced security
+     */
+    private function applyAdminHtaccessBalanced($client, $originalContent)
+    {
+        // Check if balanced protection already exists
+        if (strpos($originalContent, 'HiepSecurity Balanced') !== false) {
+            return ['success' => false, 'error' => 'Admin .htaccess balanced protection already exists'];
+        }
+
+        $balancedHtaccess = '# HiepSecurity Balanced Admin Protection
+# Moderate security without breaking functionality
+
+# Deny access to sensitive files
+<FilesMatch "\.(log|sql|bak|backup|old|tmp)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Basic bot protection
+RewriteEngine On
+RewriteCond %{HTTP_USER_AGENT} ^$ [OR]
+RewriteCond %{HTTP_USER_AGENT} (bot|crawler|spider) [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# Rate limiting (basic)
+RewriteCond %{REMOTE_ADDR} !^127\.0\.0\.1$
+RewriteCond %{REQUEST_METHOD} POST
+RewriteCond %{THE_REQUEST} \s[A-Z]{3,9}\s/.*\sHTTP/
+RewriteRule ^(.*)$ - [E=RATE_LIMITED:1]
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options SAMEORIGIN
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Original content below
+';
+
+        $newContent = $balancedHtaccess . "\n" . $originalContent;
+        return ['success' => true, 'content' => $newContent, 'fixes_applied' => 1];
+    }
+
+    /**
+     * Apply file upload security enhancement
+     */
+    private function applyFileUploadSecurity($client, $originalContent)
+    {
+        // Check if file upload security already exists
+        if (strpos($originalContent, 'HiepFileUploadSecurity') !== false) {
+            return ['success' => false, 'error' => 'File upload security already exists'];
+        }
+
+        // Check if original content starts with <?php
+        $hasPhpTag = (strpos(trim($originalContent), '<?php') === 0);
+
+        $securityConfig = ($hasPhpTag ? '' : '<?php' . "\n") . '/**
+ * HiepFileUploadSecurity - Enhanced File Upload Security
+ * Compatible with PHP 5.6+ and 7.x
+ */
+
+class HiepFileUploadSecurity
+{
+    private static $allowedTypes = [
+        "image/jpeg", "image/png", "image/gif", "image/webp",
+        "application/pdf", "text/plain", "application/zip"
+    ];
+
+    private static $allowedExtensions = [
+        "jpg", "jpeg", "png", "gif", "webp", "pdf", "txt", "zip"
+    ];
+
+    private static $maxFileSize = 5242880; // 5MB
+
+    public static function validateUpload($file)
+    {
+        if (!isset($file["tmp_name"]) || !is_uploaded_file($file["tmp_name"])) {
+            return ["success" => false, "error" => "Invalid file upload"];
+        }
+
+        // Check file size
+        if ($file["size"] > self::$maxFileSize) {
+            return ["success" => false, "error" => "File too large"];
+        }
+
+        // Check extension
+        $extension = strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
+        if (!in_array($extension, self::$allowedExtensions)) {
+            return ["success" => false, "error" => "File type not allowed"];
+        }
+
+        // Check MIME type
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mimeType = finfo_file($finfo, $file["tmp_name"]);
+        finfo_close($finfo);
+
+        if (!in_array($mimeType, self::$allowedTypes)) {
+            return ["success" => false, "error" => "MIME type not allowed"];
+        }
+
+        // Check for malicious content
+        $content = file_get_contents($file["tmp_name"]);
+        if (self::containsMaliciousCode($content)) {
+            return ["success" => false, "error" => "Malicious content detected"];
+        }
+
+        return ["success" => true];
+    }
+
+    private static function containsMaliciousCode($content)
+    {
+        $patterns = [
+            "/<\?php/i", "/eval\s*\(/i", "/exec\s*\(/i", "/system\s*\(/i",
+            "/shell_exec\s*\(/i", "/base64_decode\s*\(/i", "/<script/i"
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $content)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+// Usage example:
+// $result = HiepFileUploadSecurity::validateUpload($_FILES["upload"]);
+// if (!$result["success"]) { die($result["error"]); }
+
+' . $originalContent;
+
+        return ['success' => true, 'content' => $securityConfig, 'fixes_applied' => 1];
+    }
+
+    /**
+     * Apply sources .htaccess protection
+     */
+    private function applySourcesHtaccessProtection($client, $originalContent)
+    {
+        // Check if sources protection already exists
+        if (strpos($originalContent, 'HiepSecurity Sources Protection') !== false) {
+            return ['success' => false, 'error' => 'Sources .htaccess protection already exists'];
+        }
+
+        $sourcesHtaccess = '# HiepSecurity Sources Protection
+# Bảo vệ thư mục sources khỏi truy cập trực tiếp
+
+# Deny all direct access
+Order Deny,Allow
+Deny from all
+
+# Allow only from localhost and admin
+Allow from 127.0.0.1
+Allow from ::1
+
+# Block all file types except PHP (for admin access only)
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7)$">
+    Order Deny,Allow
+    Deny from all
+    # Only allow from admin directory
+    Allow from 127.0.0.1
+</FilesMatch>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+</IfModule>
+
+# Disable PHP execution for uploaded files
+<FilesMatch "\.(jpg|jpeg|png|gif|bmp|txt|doc|docx|pdf|zip|rar)$">
+    ForceType application/octet-stream
+    Header set Content-Disposition attachment
+</FilesMatch>';
+
+        return ['success' => true, 'content' => $sourcesHtaccess, 'fixes_applied' => 1];
+    }
+
+    /**
+     * Apply CKEditor .htaccess protection
+     */
+    private function applyCkeditorHtaccessProtection($client, $originalContent)
+    {
+        // Check if CKEditor protection already exists
+        if (strpos($originalContent, 'HiepSecurity CKEditor Protection') !== false) {
+            return ['success' => false, 'error' => 'CKEditor .htaccess protection already exists'];
+        }
+
+        $ckeditorHtaccess = '# HiepSecurity CKEditor Protection
+# Bảo vệ CKEditor khỏi các cuộc tấn công
+
+# Deny access to sensitive files
+<FilesMatch "\.(log|sql|bak|backup|old|tmp|conf|config|ini|md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block PHP execution in uploads
+<FilesMatch "\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options SAMEORIGIN
+</IfModule>
+
+# Block suspicious requests
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Block file injection attempts
+    RewriteCond %{QUERY_STRING} \.\./\.\. [NC,OR]
+    RewriteCond %{QUERY_STRING} (eval\(|base64_decode) [NC]
+    RewriteRule ^(.*)$ - [F,L]
+</IfModule>
+
+# Allow only specific file types for uploads
+<FilesMatch "\.(js|css|png|jpg|jpeg|gif|ico|woff|woff2|ttf|eot|svg)$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>';
+
+        return ['success' => true, 'content' => $ckeditorHtaccess, 'fixes_applied' => 1];
+    }
+
+    /**
+     * Apply lib .htaccess protection
+     */
+    private function applyLibHtaccessProtection($client, $originalContent)
+    {
+        // Check if lib protection already exists
+        if (strpos($originalContent, 'HiepSecurity Lib Protection') !== false) {
+            return ['success' => false, 'error' => 'Lib .htaccess protection already exists'];
+        }
+
+        $libHtaccess = '# HiepSecurity Lib Protection
+# Bảo vệ thư mục lib chứa các file core
+
+# Deny all direct access to PHP files
+<FilesMatch "\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Deny access to sensitive files
+<FilesMatch "\.(log|sql|bak|backup|old|tmp|conf|config|ini|json)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+</IfModule>
+
+# Block all access except from admin
+Order Deny,Allow
+Deny from all
+Allow from 127.0.0.1
+Allow from ::1';
+
+        return ['success' => true, 'content' => $libHtaccess, 'fixes_applied' => 1];
+    }
 }
 
 // ==================== WEB INTERFACE ====================
@@ -1098,50 +2772,53 @@ if (isset($_GET['api'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- jQuery MUST be loaded before Bootstrap -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
     <style>
         :root {
-            /* Modern Color Palette */
-            --primary-blue: #4A90E2;
-            --light-blue: #E8F4FD;
-            --soft-blue: #B8DCF2;
-            --dark-blue: #2C5282;
-            --accent-blue: #63B3ED;
+            /* Medical/Hospital Theme Color Palette */
+            --primary-blue: #2563eb;
+            --light-blue: #eff6ff;
+            --soft-blue: #dbeafe;
+            --dark-blue: #1d4ed8;
+            --accent-blue: #3b82f6;
 
             /* Severity Colors */
-            --critical-red: #DC3545;
-            --priority-color: #9333ea;
-            --priority-light: #faf5ff;
-            --priority-border: #e9d5ff;
-            --critical-bg: #FEF2F2;
-            --critical-border: #FECACA;
+            --critical-red: #dc2626;
+            --priority-color: #2563eb;
+            --priority-light: #eff6ff;
+            --priority-border: #dbeafe;
+            --critical-bg: #fef2f2;
+            --critical-border: #fecaca;
 
-            --warning-yellow: #F59E0B;
-            --warning-bg: #FFFBEB;
-            --warning-border: #FED7AA;
+            --warning-yellow: #d97706;
+            --warning-bg: #fffbeb;
+            --warning-border: #fed7aa;
 
-            --info-blue: #3B82F6;
-            --info-bg: #EFF6FF;
-            --info-border: #DBEAFE;
+            --info-blue: #2563eb;
+            --info-bg: #eff6ff;
+            --info-border: #dbeafe;
 
-            /* Neutral Colors */
-            --bg-primary: #FAFBFC;
-            --bg-secondary: #F7F9FB;
-            --bg-card: #FFFFFF;
-            --border-light: #E2E8F0;
-            --border-medium: #CBD5E0;
+            /* Medical White/Clean Colors */
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-card: #ffffff;
+            --border-light: #e5e7eb;
+            --border-medium: #d1d5db;
 
-            --text-primary: #1F2937;
-            --text-secondary: #6B7280;
-            --text-muted: #9CA3AF;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --text-muted: #9ca3af;
 
-            /* Shadows */
-            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            /* Medical-themed Shadows with Blue Tint */
+            --shadow-sm: 0 1px 2px 0 rgba(37, 99, 235, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(37, 99, 235, 0.08);
+            --shadow-lg: 0 10px 15px -3px rgba(37, 99, 235, 0.1);
+            --shadow-xl: 0 20px 25px -5px rgba(37, 99, 235, 0.12);
         }
 
         * {
@@ -1152,10 +2829,11 @@ if (isset($_GET['api'])) {
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f1f5f9 100%);
             min-height: 100vh;
             color: var(--text-primary);
             line-height: 1.6;
+            overflow-x: hidden;
         }
 
         /* Hero Section */
@@ -1201,7 +2879,7 @@ if (isset($_GET['api'])) {
         .main-container {
             max-width: 1600px;
             margin: -60px auto 0;
-            padding: 0 20px;
+            padding: 0 20px 40px;
             position: relative;
             z-index: 10;
         }
@@ -1450,6 +3128,16 @@ if (isset($_GET['api'])) {
             color: white;
         }
 
+        .btn-remediate {
+            background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+            color: white;
+        }
+
+        .btn-remediate:hover {
+            background: linear-gradient(135deg, #7C3AED, #6D28D9);
+            transform: translateY(-1px);
+        }
+
         .btn-info {
             background: linear-gradient(135deg, var(--info-blue), #2563EB);
             color: white;
@@ -1515,6 +3203,41 @@ if (isset($_GET['api'])) {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             gap: 20px;
+            position: relative;
+        }
+
+        /* Collapsible Threat Cards */
+        .threats-container.collapsed .threat-card:nth-child(n+6) {
+            display: none;
+        }
+
+        .show-all-threats-btn {
+            grid-column: 1 / -1;
+            justify-self: center;
+            margin-top: 20px;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        .show-all-threats-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+        }
+
+        .show-all-threats-btn i {
+            margin-left: 8px;
+            transition: transform 0.3s ease;
+        }
+
+        .show-all-threats-btn.expanded i {
+            transform: rotate(180deg);
         }
 
         .threat-card {
@@ -1876,6 +3599,7 @@ if (isset($_GET['api'])) {
             border-radius: 12px;
             padding: 12px 16px;
             font-size: 14px;
+            transition: all 0.3s ease;
             transition: all 0.3s ease;
         }
 
@@ -2712,7 +4436,9 @@ if (isset($_GET['api'])) {
         }
 
         .client-info-cell {
-            /* Client info styling */
+            padding: 12px;
+            border-radius: 8px;
+            background: var(--bg-card);
         }
 
         .client-name {
@@ -3144,6 +4870,572 @@ if (isset($_GET['api'])) {
             text-transform: uppercase;
             letter-spacing: 0.3px;
         }
+
+        /* ==================== HIEP FUTURISTIC MODAL STYLES ==================== */
+
+        .hiep-futuristic-modal {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%);
+            border: 1px solid rgba(37, 99, 235, 0.15);
+            border-radius: 24px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow:
+                0 25px 50px -12px rgba(37, 99, 235, 0.15),
+                0 0 0 1px rgba(37, 99, 235, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.8);
+            /* overflow: hidden; */
+            position: relative;
+            height: auto !important;
+        }
+
+        .hiep-modal-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .hiep-bg-particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background:
+                radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.04) 0%, transparent 50%),
+                radial-gradient(circle at 40% 60%, rgba(5, 150, 105, 0.03) 0%, transparent 50%);
+            animation: hiepParticleFloat 20s ease-in-out infinite;
+        }
+
+        .hiep-bg-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image:
+                linear-gradient(rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: hiepGridMove 30s linear infinite;
+        }
+
+        @keyframes hiepParticleFloat {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            33% { transform: translate(30px, -30px) rotate(120deg); }
+            66% { transform: translate(-20px, 20px) rotate(240deg); }
+        }
+
+        @keyframes hiepGridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+
+        /* Modal Header */
+        .hiep-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 32px 40px 24px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, rgba(147, 51, 234, 0.05) 100%);
+        }
+
+        .hiep-header-content {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .hiep-header-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #3b82f6 0%, #9333ea 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            color: white;
+            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3);
+            animation: hiepIconPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes hiepIconPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 40px rgba(59, 130, 246, 0.4); }
+        }
+
+        .hiep-header-text h2,
+        .hiep-modal-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1e293b !important;
+            margin: 0;
+            letter-spacing: -0.5px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .hiep-modal-subtitle {
+            color: rgba(148, 163, 184, 0.8);
+            font-size: 16px;
+            margin: 4px 0 0 0;
+            font-weight: 400;
+        }
+
+        .hiep-close-btn {
+            width: 48px;
+            height: 48px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 12px;
+            color: #ef4444;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .hiep-close-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.4);
+            transform: scale(1.05);
+        }
+
+        /* Modal Body */
+        .hiep-modal-body {
+            padding: 40px;
+            min-height: 400px;
+        }
+
+        /* Loading State */
+        .hiep-loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px;
+            gap: 32px;
+        }
+
+        .hiep-loading-spinner {
+            position: relative;
+            width: 120px;
+            height: 120px;
+        }
+
+        .hiep-spinner-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 3px solid transparent;
+            border-radius: 50%;
+            animation: hiepSpinnerRotate 2s linear infinite;
+        }
+
+        .hiep-spinner-ring:nth-child(1) {
+            border-top-color: #3b82f6;
+            animation-duration: 2s;
+        }
+
+        .hiep-spinner-ring:nth-child(2) {
+            border-right-color: #9333ea;
+            animation-duration: 3s;
+            animation-direction: reverse;
+        }
+
+        .hiep-spinner-ring:nth-child(3) {
+            border-bottom-color: #10b981;
+            animation-duration: 4s;
+        }
+
+        @keyframes hiepSpinnerRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hiep-loading-text {
+            text-align: center;
+        }
+
+        .hiep-loading-text h3 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #ffffff;
+            margin: 0 0 8px 0;
+        }
+
+        .hiep-loading-text p {
+            font-size: 16px;
+            color: rgba(148, 163, 184, 0.8);
+            margin: 0;
+        }
+
+        /* Content State */
+        .hiep-content-container {
+            animation: hiepFadeInUp 0.6s ease-out;
+        }
+
+        @keyframes hiepFadeInUp {
+            0% { opacity: 0; transform: translateY(30px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .hiep-info-banner {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 24px;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            border-radius: 16px;
+            margin-bottom: 32px;
+        }
+
+        .hiep-banner-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .hiep-banner-text h4 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #ffffff;
+            margin: 0 0 4px 0;
+        }
+
+        .hiep-banner-text p {
+            font-size: 14px;
+            color: rgba(148, 163, 184, 0.8);
+            margin: 0;
+        }
+
+        /* Bento Grid Layout */
+        .hiep-bento-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .hiep-fix-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(51, 65, 85, 0.8) 100%);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hiep-fix-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #3b82f6 0%, #9333ea 50%, #10b981 100%);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .hiep-fix-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(59, 130, 246, 0.3);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .hiep-fix-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .hiep-fix-card.selected {
+            border-color: rgba(59, 130, 246, 0.5);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%);
+        }
+
+        .hiep-fix-card.selected::before {
+            transform: scaleX(1);
+        }
+
+        .hiep-fix-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .hiep-fix-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #ffffff;
+            margin: 0;
+        }
+
+        .hiep-severity-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .hiep-severity-critical {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .hiep-severity-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .hiep-fix-description {
+            color: rgba(148, 163, 184, 0.9);
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .hiep-fix-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: rgba(148, 163, 184, 0.7);
+        }
+
+        .hiep-fix-checkbox {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 20px;
+            height: 20px;
+            accent-color: #3b82f6;
+        }
+
+        /* Select All */
+        .hiep-select-all {
+            padding: 20px 24px;
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 12px;
+            margin-bottom: 32px;
+        }
+
+        .hiep-checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .hiep-checkbox {
+            width: 18px;
+            height: 18px;
+            accent-color: #3b82f6;
+        }
+
+        .hiep-checkbox-label {
+            color: #ffffff;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        /* Results State */
+        .hiep-results-container {
+            animation: hiepFadeInUp 0.6s ease-out;
+        }
+
+        .hiep-results-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .hiep-results-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: white;
+        }
+
+        .hiep-results-header h3 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #ffffff;
+            margin: 0;
+        }
+
+        .hiep-results-content {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        /* Modal Footer */
+        .hiep-modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 16px;
+            padding: 24px 40px 32px;
+            border-top: 1px solid rgba(148, 163, 184, 0.1);
+            background: linear-gradient(90deg, rgba(30, 41, 59, 0.5) 0%, rgba(51, 65, 85, 0.5) 100%);
+        }
+
+        /* Futuristic Buttons */
+        .hiep-btn {
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
+            text-decoration: none;
+        }
+
+        .hiep-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .hiep-btn:hover::before {
+            left: 100%;
+        }
+
+        .hiep-btn-secondary {
+            background: rgba(71, 85, 105, 0.8);
+            color: #e2e8f0;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .hiep-btn-secondary:hover {
+            background: rgba(71, 85, 105, 1);
+            border-color: rgba(148, 163, 184, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .hiep-btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            border: 1px solid rgba(59, 130, 246, 0.5);
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .hiep-btn-primary:hover {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        .hiep-btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: 1px solid rgba(16, 185, 129, 0.5);
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .hiep-btn-success:hover {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .hiep-modal-header {
+                padding: 24px 20px 16px;
+            }
+
+            .hiep-header-content {
+                gap: 16px;
+            }
+
+            .hiep-header-icon {
+                width: 48px;
+                height: 48px;
+                font-size: 20px;
+            }
+
+            .hiep-header-text h2 {
+                font-size: 20px;
+            }
+
+            .hiep-modal-subtitle {
+                font-size: 14px;
+            }
+
+            .hiep-modal-body {
+                padding: 24px 20px;
+            }
+
+            .hiep-bento-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .hiep-fix-card {
+                padding: 20px;
+            }
+
+            .hiep-modal-footer {
+                padding: 16px 20px 24px;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .hiep-btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Animation for modal entrance */
+        .modal.fade .hiep-futuristic-modal {
+            transform: scale(0.8) translateY(-50px);
+            opacity: 0;
+        }
+
+        .modal.show .hiep-futuristic-modal {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+            transition: all 0.3s ease-out;
+        }
     </style>
 </head>
 
@@ -3259,67 +5551,7 @@ if (isset($_GET['api'])) {
                 <!-- Clients will be loaded here -->
             </div>
         </div>
-
-
-        <div class="card-body" id="priorityFilesContent" style="display: none;">
-            <div class="row">
-                <div class="col-md-8">
-                    <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-file-code me-1"></i>Priority File Patterns
-                        </label>
-                        <div class="priority-files-input-container">
-                            <input type="text"
-                                class="form-control priority-files-input"
-                                id="priorityFileInput"
-                                placeholder="Nhập tên file hoặc pattern (vd: *.php, shell.php, config.*)">
-                            <div class="input-suggestions" id="patternSuggestions"></div>
-                        </div>
-                        <div class="priority-files-tags" id="priorityFilesTags"></div>
-                        <small class="form-text text-muted">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Các file này sẽ được ưu tiên quét trước. Hỗ trợ wildcard (*) và regex patterns.
-                        </small>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="priority-stats">
-                        <div class="stat-item">
-                            <div class="stat-value" id="priorityFilesCount">0</div>
-                            <div class="stat-label">Priority Files</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value" id="priorityScore">0</div>
-                            <div class="stat-label">Priority Score</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Common Patterns Quick Add -->
-            <div class="common-patterns mt-3">
-                <label class="form-label">
-                    <i class="fas fa-magic me-1"></i>Common Suspicious Patterns
-                </label>
-                <div class="pattern-buttons">
-                    <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('shell.php')">
-                        <i class="fas fa-bug me-1"></i>shell.php
-                    </button>
-                    <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('*.php.txt')">
-                        <i class="fas fa-file-code me-1"></i>*.php.txt
-                    </button>
-                    <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('config.php')">
-                        <i class="fas fa-cog me-1"></i>config.php
-                    </button>
-                    <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('upload*.php')">
-                        <i class="fas fa-upload me-1"></i>upload*.php
-                    </button>
-                    <button class="btn btn-outline-warning btn-sm" onclick="addCommonPattern('admin*.php')">
-                        <i class="fas fa-user-shield me-1"></i>admin*.php
-                    </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="addCommonPattern('eval*.php')">
-                        <i class="fas fa-exclamation-triangle me-1"></i>eval*.php
-                    </button>
+                   
                 </div>
             </div>
         </div>
@@ -3488,11 +5720,112 @@ if (isset($_GET['api'])) {
         </div>
     </div>
 
+    <!-- HIEP FUTURISTIC SECURITY REMEDIATION MODAL -->
+    <div class="modal fade" id="remediationModal" tabindex="-1">
+        <div class="modal-dialog modal-xl ">
+            <div class="modal-content hiep-futuristic-modal ">
+                <!-- Animated Background -->
+                <div class="hiep-modal-bg">
+                    <div class="hiep-bg-particles"></div>
+                    <div class="hiep-bg-grid"></div>
+                </div>
+
+                <!-- Header -->
+                <div class="hiep-modal-header">
+                    <div class="hiep-header-content">
+                        <div class="hiep-header-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <div class="hiep-header-text">
+                            <h2 class="hiep-modal-title text-dark" >Security Remediation Center</h2>
+                            <p class="hiep-modal-subtitle">Advanced threat mitigation & system hardening</p>
+                        </div>
+                    </div>
+                    <button type="button" class="hiep-close-btn" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Body -->
+                <div class="hiep-modal-body">
+                    <!-- Loading State -->
+                    <div id="remediationLoading" class="hiep-loading-container" style="display: none;">
+                        <div class="hiep-loading-spinner">
+                            <div class="hiep-spinner-ring"></div>
+                            <div class="hiep-spinner-ring"></div>
+                            <div class="hiep-spinner-ring"></div>
+                        </div>
+                        <div class="hiep-loading-text">
+                            <h3>Analyzing Security Vulnerabilities</h3>
+                            <p>Scanning for available remediation options...</p>
+                        </div>
+                    </div>
+
+                    <!-- Content State -->
+                    <div id="remediationContent" class="hiep-content-container" style="display: none;">
+                        <div class="hiep-info-banner">
+                            <div class="hiep-banner-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <div class="hiep-banner-text">
+                                <h4>Security Fixes Available</h4>
+                                <p>Select the remediation methods you want to apply to strengthen your system security</p>
+                            </div>
+                        </div>
+
+                        <!-- Bento Grid Layout for Fixes -->
+                        <div id="fixesList" class="hiep-bento-grid ">
+                            <!-- Available fixes will be loaded here -->
+                        </div>
+
+                        <!-- Select All Option -->
+                        <div class="hiep-select-all">
+                            <div class="hiep-checkbox-container">
+                                <input class="hiep-checkbox" type="checkbox" id="selectAllFixes">
+                                <label class="hiep-checkbox-label" for="selectAllFixes">
+                                    <span class="hiep-checkbox-text">Select All Fixes</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Results State -->
+                    <div id="remediationResults" class="hiep-results-container" style="display: none;">
+                        <div class="hiep-results-header">
+                            <div class="hiep-results-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <h3>Remediation Results</h3>
+                        </div>
+                        <div id="resultsContent" class="hiep-results-content">
+                            <!-- Results will be shown here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="hiep-modal-footer">
+                    <button type="button" class="hiep-btn hiep-btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Cancel
+                    </button>
+                    <button type="button" class="hiep-btn hiep-btn-primary" id="executeRemediationBtn" onclick="executeRemediation()" style="display: none;">
+                        <i class="fas fa-rocket me-2"></i>Execute Remediation
+                    </button>
+                    <button type="button" class="hiep-btn hiep-btn-success" id="refreshAfterRemediationBtn" onclick="refreshAfterRemediation()" style="display: none;">
+                        <i class="fas fa-sync me-2"></i>Rescan System
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let clients = [];
         let currentScanResults = [];
         let currentMultiClientResults = [];
         let currentClientId = null;
+        let currentRemediationClientId = null;
+        let availableFixes = {};
 
         // Initialize with sample data if no clients exist
         function initializeSampleData() {
@@ -3546,9 +5879,11 @@ if (isset($_GET['api'])) {
 
         // Load clients
         function loadClients() {
+            console.log('Loading clients...');
             fetch('?api=get_clients')
                 .then(response => response.json())
                 .then(data => {
+                    console.log('Clients data received:', data);
                     // Ensure data is an array
                     if (Array.isArray(data)) {
                         clients = data;
@@ -3558,6 +5893,7 @@ if (isset($_GET['api'])) {
                         clients = [];
                         console.error('Invalid clients data:', data);
                     }
+                    console.log('Clients loaded:', clients);
                     renderClients();
                     updateStats();
                 })
@@ -3607,6 +5943,10 @@ if (isset($_GET['api'])) {
                         </button>
                         <button class="btn-modern btn-info" onclick="viewClient('${client.id}')">
                             <i class="fas fa-eye"></i> Xem
+                        </button>
+                        
+                        <button class="btn-modern btn-remediate" onclick="showRemediationModal('${client.id}')">
+                            <i class="fas fa-tools"></i> Khắc phục
                         </button>
                         <button class="btn-modern btn-danger" onclick="deleteClient('${client.id}')">
                             <i class="fas fa-trash"></i> Xóa
@@ -3813,7 +6153,7 @@ if (isset($_GET['api'])) {
             mainThreatCount.textContent = `${sortedFiles.length} files`;
 
             // Populate main threats container
-            threatsContainer.innerHTML = sortedFiles.map(file => {
+            const threatCards = sortedFiles.map(file => {
                 const severity = getSeverityLevel(file);
                 const ageInfo = getAgeInfo(file.metadata?.modified_time);
                 const timeInfo = getTimeInfo(file.metadata?.modified_time);
@@ -3892,7 +6232,22 @@ if (isset($_GET['api'])) {
                         </div>
                     </div>
                 `;
-            }).join('');
+            });
+
+            // Set up collapsible functionality
+            threatsContainer.innerHTML = threatCards.join('');
+
+            // Add show all button if there are more than 5 cards
+            if (threatCards.length > 5) {
+                threatsContainer.classList.add('collapsed');
+                const showAllBtn = document.createElement('button');
+                showAllBtn.className = 'show-all-threats-btn';
+                showAllBtn.innerHTML = 'Xem tất cả <i class="fas fa-chevron-down"></i>';
+                showAllBtn.onclick = toggleAllThreats;
+                threatsContainer.appendChild(showAllBtn);
+            } else {
+                threatsContainer.classList.remove('collapsed');
+            }
 
             // Populate recent threats sidebar
             if (recentThreats.length > 0) {
@@ -4690,6 +7045,150 @@ if (isset($_GET['api'])) {
             });
         }
 
+        function deployAdminSecurity(clientId) {
+            const client = clients.find(c => c.id === clientId);
+
+            if (!client) {
+                Swal.fire('Lỗi!', 'Không tìm thấy client.', 'error');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Triển khai bảo mật Admin',
+                html: `
+                    <div style="text-align: left;">
+                        <p>Bạn có muốn triển khai các bản vá bảo mật cho Admin CMS không?</p>
+                        <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                            <h5 style="color: #0c5460; margin: 0 0 10px 0;">
+                                <i class="fas fa-shield-alt"></i> Các bản vá sẽ được triển khai:
+                            </h5>
+                            <ul style="margin: 0; padding-left: 20px; color: #0c5460;">
+                                <li>File .htaccess bảo mật cho admin/</li>
+                                <li>Bảo vệ thư mục sources/ khỏi truy cập trực tiếp</li>
+                                <li>Bảo mật File Manager và CKEditor</li>
+                                <li>CSRF Protection và validation upload</li>
+                                <li>Rate limiting và access control</li>
+                            </ul>
+                        </div>
+                        <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin: 10px 0;">
+                            <p style="margin: 0; color: #856404;">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Lưu ý:</strong> Hệ thống sẽ tự động backup files hiện tại trước khi áp dụng bản vá.
+                            </p>
+                        </div>
+                        <p><strong>Client:</strong> ${client.name}</p>
+                        <p><strong>URL:</strong> ${client.url}</p>
+                    </div>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Triển khai',
+                cancelButtonText: 'Hủy',
+                width: 600
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Show loading
+                    Swal.fire({
+                        title: 'Đang triển khai...',
+                        html: `
+                            <div style="text-align: center;">
+                                <p>Đang triển khai bản vá bảo mật cho: <strong>${client.name}</strong></p>
+                                <div style="margin: 20px 0;">
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                             role="progressbar" style="width: 100%"></div>
+                                    </div>
+                                </div>
+                                <p style="color: #6c757d; font-size: 14px;">
+                                    Quá trình này có thể mất vài phút...
+                                </p>
+                            </div>
+                        `,
+                        allowOutsideClick: false,
+                        showConfirmButton: false,
+                        willOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    // Call deploy API
+                    const formData = new FormData();
+                    formData.append('id', clientId);
+
+                    fetch('?api=deploy_admin_security', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Triển khai thành công!',
+                                html: `
+                                    <div style="text-align: left;">
+                                        <p>Bản vá bảo mật đã được triển khai thành công cho <strong>${client.name}</strong></p>
+                                        <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                                            <h5 style="color: #155724; margin: 0 0 10px 0;">
+                                                <i class="fas fa-check-circle"></i> Đã hoàn thành:
+                                            </h5>
+                                            <ul style="margin: 0; padding-left: 20px; color: #155724;">
+                                                <li>Upload các file .htaccess bảo mật</li>
+                                                <li>Cài đặt security patches PHP</li>
+                                                <li>Cấu hình bảo vệ File Manager</li>
+                                                <li>Backup files gốc</li>
+                                            </ul>
+                                        </div>
+                                        <p style="color: #28a745; font-weight: bold;">
+                                            <i class="fas fa-shield-check"></i>
+                                            Admin CMS của bạn đã được bảo mật!
+                                        </p>
+                                    </div>
+                                `,
+                                confirmButtonText: 'Tuyệt vời!',
+                                width: 600
+                            });
+
+                            // Refresh client list
+                            loadClients();
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Triển khai thất bại!',
+                                html: `
+                                    <div style="text-align: left;">
+                                        <p>Không thể triển khai bản vá bảo mật cho <strong>${client.name}</strong></p>
+                                        <div style="background: #f8d7da; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                                            <h5 style="color: #721c24; margin: 0 0 10px 0;">
+                                                <i class="fas fa-exclamation-triangle"></i> Lỗi:
+                                            </h5>
+                                            <p style="margin: 0; color: #721c24;">${data.error}</p>
+                                        </div>
+                                        <p style="color: #dc3545;">
+                                            Vui lòng kiểm tra kết nối và thử lại sau.
+                                        </p>
+                                    </div>
+                                `,
+                                confirmButtonText: 'Đóng',
+                                width: 600
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Lỗi kết nối!',
+                            text: 'Không thể kết nối tới server để triển khai bản vá.',
+                            confirmButtonText: 'Đóng'
+                        });
+                        console.error('Deploy admin security error:', error);
+                    });
+                }
+            });
+        }
+
         // Priority Files Functions
         let priorityFiles = JSON.parse(localStorage.getItem('priorityFiles')) || [];
 
@@ -4900,51 +7399,87 @@ if (isset($_GET['api'])) {
         let currentEditingFile = null;
         let currentEditingClientId = null;
 
-        // Initialize Monaco Editor
+        // Initialize Monaco Editor with DOM safety checks
         function initMonacoEditor() {
+            const editorElement = document.getElementById('monacoEditor');
+            if (!editorElement) {
+                console.warn('Monaco Editor container not found, retrying...');
+                setTimeout(initMonacoEditor, 100);
+                return;
+            }
+
+            // Check if editor already exists
+            if (monacoEditor) {
+                console.log('Monaco Editor already initialized');
+                return;
+            }
+
             require.config({
                 paths: {
                     vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs'
                 }
             });
+
             require(['vs/editor/editor.main'], function() {
-                monacoEditor = monaco.editor.create(document.getElementById('monacoEditor'), {
-                    value: '',
-                    language: 'php',
-                    theme: 'vs-dark',
-                    fontSize: 14,
-                    fontFamily: 'JetBrains Mono, Monaco, "Courier New", monospace',
-                    lineNumbers: 'on',
-                    roundedSelection: false,
-                    scrollBeyondLastLine: false,
-                    readOnly: false,
-                    automaticLayout: true,
-                    minimap: {
-                        enabled: true
-                    },
-                    folding: true,
-                    wordWrap: 'on',
-                    bracketMatching: 'always',
-                    autoIndent: 'full',
-                    formatOnPaste: true,
-                    formatOnType: true
-                });
+                try {
+                    // Double check element still exists
+                    const editorContainer = document.getElementById('monacoEditor');
+                    if (!editorContainer) {
+                        console.error('Monaco Editor container disappeared during initialization');
+                        return;
+                    }
 
-                // Update cursor position
-                monacoEditor.onDidChangeCursorPosition(function(e) {
-                    document.getElementById('cursorPosition').textContent =
-                        `Line ${e.position.lineNumber}, Column ${e.position.column}`;
-                });
+                    // Check if container has proper dimensions
+                    if (editorContainer.offsetWidth === 0 || editorContainer.offsetHeight === 0) {
+                        console.warn('Monaco Editor container has no dimensions, retrying...');
+                        setTimeout(initMonacoEditor, 200);
+                        return;
+                    }
 
-                // Auto-save on Ctrl+S
-                monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
-                    saveCode();
-                });
+                    monacoEditor = monaco.editor.create(editorContainer, {
+                        value: '',
+                        language: 'php',
+                        theme: 'vs-dark',
+                        fontSize: 14,
+                        fontFamily: 'JetBrains Mono, Monaco, "Courier New", monospace',
+                        lineNumbers: 'on',
+                        roundedSelection: false,
+                        scrollBeyondLastLine: false,
+                        readOnly: false,
+                        automaticLayout: true,
+                        minimap: {
+                            enabled: true
+                        },
+                        folding: true,
+                        wordWrap: 'on',
+                        bracketMatching: 'always',
+                        autoIndent: 'full',
+                        formatOnPaste: true,
+                        formatOnType: true
+                    });
 
-                // Find with Ctrl+F
-                monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, function() {
-                    findInCode();
-                });
+                    // Update cursor position with safety check
+                    monacoEditor.onDidChangeCursorPosition(function(e) {
+                        const cursorElement = document.getElementById('cursorPosition');
+                        if (cursorElement) {
+                            cursorElement.textContent = `Line ${e.position.lineNumber}, Column ${e.position.column}`;
+                        }
+                    });
+
+                    // Add keyboard shortcuts
+                    monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
+                        saveCode();
+                    });
+
+                    monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, function() {
+                        findInCode();
+                    });
+
+                    console.log('Monaco Editor initialized successfully');
+                } catch (error) {
+                    console.error('Error initializing Monaco Editor:', error);
+                    monacoEditor = null;
+                }
             });
         }
 
@@ -6347,10 +8882,376 @@ if (isset($_GET['api'])) {
             }
         }
 
+        // Toggle show all threats
+        function toggleAllThreats() {
+            const threatsContainer = document.getElementById('threatsContainer');
+            const showAllBtn = threatsContainer.querySelector('.show-all-threats-btn');
+
+            if (threatsContainer.classList.contains('collapsed')) {
+                // Expand
+                threatsContainer.classList.remove('collapsed');
+                showAllBtn.innerHTML = 'Thu gọn <i class="fas fa-chevron-up"></i>';
+                showAllBtn.classList.add('expanded');
+            } else {
+                // Collapse
+                threatsContainer.classList.add('collapsed');
+                showAllBtn.innerHTML = 'Xem tất cả <i class="fas fa-chevron-down"></i>';
+                showAllBtn.classList.remove('expanded');
+
+                // Scroll to top of threats container
+                threatsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
         // Initialize Monaco Editor when DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
-            initMonacoEditor();
+            // Don't initialize immediately, wait for modal to be shown
+            console.log('DOM ready, Monaco Editor will be initialized when needed');
         });
+
+        // Initialize Monaco Editor when modal is shown
+        $(document).on('shown.bs.modal', '#fileEditorModal', function() {
+            console.log('File editor modal shown, initializing Monaco Editor...');
+            setTimeout(initMonacoEditor, 100);
+        });
+
+        // Cleanup Monaco Editor when modal is hidden
+        $(document).on('hidden.bs.modal', '#fileEditorModal', function() {
+            if (monacoEditor) {
+                console.log('Disposing Monaco Editor...');
+                monacoEditor.dispose();
+                monacoEditor = null;
+            }
+        });
+
+        // ==================== SECURITY REMEDIATION FUNCTIONS ====================
+
+        /**
+         * Show remediation modal for a client
+         */
+        function showRemediationModal(clientId) {
+            console.log('showRemediationModal called with clientId:', clientId);
+            console.log('Available clients:', clients);
+
+            currentRemediationClientId = clientId;
+            const client = clients.find(c => c.id === clientId);
+
+            if (!client) {
+                console.error('Client not found for ID:', clientId);
+                Swal.fire('Lỗi!', 'Không tìm thấy client.', 'error');
+                return;
+            }
+
+            console.log('Found client:', client);
+
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('remediationModal'));
+            modal.show();
+
+            // Reset modal state
+            document.getElementById('remediationLoading').style.display = 'block';
+            document.getElementById('remediationContent').style.display = 'none';
+            document.getElementById('remediationResults').style.display = 'none';
+            document.getElementById('executeRemediationBtn').style.display = 'none';
+            document.getElementById('refreshAfterRemediationBtn').style.display = 'none';
+
+            // Load available fixes
+            loadAvailableFixes(clientId);
+        }
+
+        /**
+         * Load available fixes for a client
+         */
+        function loadAvailableFixes(clientId) {
+            fetch(`?api=get_available_fixes&client_id=${clientId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        availableFixes = data.fixes;
+                        renderFixesList();
+
+                        document.getElementById('remediationLoading').style.display = 'none';
+                        document.getElementById('remediationContent').style.display = 'block';
+                        document.getElementById('executeRemediationBtn').style.display = 'inline-block';
+                    } else {
+                        Swal.fire('Lỗi!', data.error || 'Không thể tải danh sách khắc phục.', 'error');
+                        document.getElementById('remediationLoading').style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading fixes:', error);
+                    Swal.fire('Lỗi!', 'Lỗi kết nối khi tải danh sách khắc phục.', 'error');
+                    document.getElementById('remediationLoading').style.display = 'none';
+                });
+        }
+
+        /**
+         * Render fixes list in futuristic bento grid layout
+         */
+        function renderFixesList() {
+            const fixesList = document.getElementById('fixesList');
+            fixesList.innerHTML = '';
+
+            Object.entries(availableFixes).forEach(([fixId, fix]) => {
+                const severityClass = fix.severity === 'critical' ? 'hiep-severity-critical' : 'hiep-severity-warning';
+
+                const fixCard = document.createElement('div');
+                fixCard.className = 'hiep-fix-card';
+                fixCard.setAttribute('data-fix-id', fixId);
+
+                fixCard.innerHTML = `
+                    <input class="hiep-fix-checkbox fix-checkbox" type="checkbox" value="${fixId}" id="fix_${fixId}">
+
+                    <div class="hiep-fix-header">
+                        <h3 class="hiep-fix-title">${fix.title}</h3>
+                        <span class="hiep-severity-badge ${severityClass}">${fix.severity}</span>
+                    </div>
+
+                    <div class="hiep-fix-description">
+                        ${fix.description}
+                    </div>
+
+                    <div class="hiep-fix-meta">
+                        <span><i class="fas fa-file me-1"></i>${fix.file}</span>
+                        <span><i class="fas fa-clock me-1"></i>${fix.estimated_time}</span>
+                    </div>
+                `;
+
+                // Add click handler for card selection
+                fixCard.addEventListener('click', function(e) {
+                    if (e.target.type !== 'checkbox') {
+                        const checkbox = this.querySelector('.hiep-fix-checkbox');
+                        checkbox.checked = !checkbox.checked;
+                        this.classList.toggle('selected', checkbox.checked);
+                        updateExecuteButtonState();
+                    }
+                });
+
+                // Add change handler for checkbox
+                const checkbox = fixCard.querySelector('.hiep-fix-checkbox');
+                checkbox.addEventListener('change', function() {
+                    fixCard.classList.toggle('selected', this.checked);
+                    updateExecuteButtonState();
+                });
+
+                fixesList.appendChild(fixCard);
+            });
+
+            // Add select all functionality
+            const selectAllCheckbox = document.getElementById('selectAllFixes');
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', function() {
+                    const checkboxes = document.querySelectorAll('.fix-checkbox');
+                    const cards = document.querySelectorAll('.hiep-fix-card');
+
+                    checkboxes.forEach((cb, index) => {
+                        cb.checked = this.checked;
+                        cards[index].classList.toggle('selected', this.checked);
+                    });
+
+                    updateExecuteButtonState();
+                });
+            }
+
+            updateExecuteButtonState();
+        }
+
+        /**
+         * Update execute button state based on selected fixes
+         */
+        function updateExecuteButtonState() {
+            const selectedFixes = document.querySelectorAll('.fix-checkbox:checked');
+            const executeBtn = document.getElementById('executeRemediationBtn');
+
+            if (selectedFixes.length > 0) {
+                executeBtn.style.display = 'inline-flex';
+                executeBtn.innerHTML = `<i class="fas fa-rocket me-2"></i>Execute ${selectedFixes.length} Fix${selectedFixes.length > 1 ? 'es' : ''}`;
+            } else {
+                executeBtn.style.display = 'none';
+            }
+        }
+
+        /**
+         * Execute selected remediation fixes
+         */
+        function executeRemediation() {
+            const selectedFixes = Array.from(document.querySelectorAll('.fix-checkbox:checked'))
+                .map(cb => cb.value);
+
+            if (selectedFixes.length === 0) {
+                Swal.fire('Cảnh báo!', 'Vui lòng chọn ít nhất một mục để khắc phục.', 'warning');
+                return;
+            }
+
+            // Confirm with user
+            Swal.fire({
+                title: 'Xác nhận khắc phục',
+                html: `
+                    <p>Bạn đã chọn <strong>${selectedFixes.length}</strong> mục để khắc phục.</p>
+                    <p class="text-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Hệ thống sẽ tự động tạo backup trước khi thực hiện.
+                    </p>
+                    <p>Bạn có chắc chắn muốn tiếp tục?</p>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Thực hiện',
+                cancelButtonText: 'Hủy',
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#dc3545'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    performRemediation(selectedFixes);
+                }
+            });
+        }
+
+        /**
+         * Perform the actual remediation
+         */
+        function performRemediation(selectedFixes) {
+            // Show loading
+            Swal.fire({
+                title: 'Đang thực hiện khắc phục...',
+                html: 'Vui lòng đợi trong khi hệ thống khắc phục các lỗ hỏng bảo mật.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            // Send remediation request
+            fetch(`?api=execute_remediation&client_id=${currentRemediationClientId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    selected_fixes: selectedFixes
+                })
+            })
+            .then(response => {
+                // Check if response is ok
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                // Get response text first to check if it's valid JSON
+                return response.text();
+            })
+            .then(text => {
+                Swal.close();
+
+                try {
+                    // Try to parse as JSON
+                    const data = JSON.parse(text);
+
+                    if (data.success) {
+                        displayRemediationResults(data.results);
+                    } else {
+                        Swal.fire('Lỗi!', data.error || 'Không thể thực hiện khắc phục.', 'error');
+                    }
+                } catch (jsonError) {
+                    // If JSON parsing fails, show the raw response
+                    console.error('Invalid JSON response:', text);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Lỗi phản hồi từ server!',
+                        html: `
+                            <div class="text-start">
+                                <p>Server trả về phản hồi không hợp lệ:</p>
+                                <pre style="max-height: 200px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px;">${text.substring(0, 1000)}${text.length > 1000 ? '...' : ''}</pre>
+                            </div>
+                        `,
+                        width: '600px'
+                    });
+                }
+            })
+            .catch(error => {
+                Swal.close();
+                console.error('Error performing remediation:', error);
+                Swal.fire('Lỗi!', 'Lỗi kết nối khi thực hiện khắc phục: ' + error.message, 'error');
+            });
+        }
+
+        /**
+         * Display remediation results
+         */
+        function displayRemediationResults(results) {
+            const resultsContent = document.getElementById('resultsContent');
+            resultsContent.innerHTML = '';
+
+            let successCount = 0;
+            let failureCount = 0;
+
+            Object.entries(results).forEach(([fixId, result]) => {
+                const fix = availableFixes[fixId];
+                const isSuccess = result.success;
+
+                if (isSuccess) successCount++;
+                else failureCount++;
+
+                const resultItem = document.createElement('div');
+                resultItem.className = `alert alert-${isSuccess ? 'success' : 'danger'}`;
+                resultItem.innerHTML = `
+                    <div class="d-flex align-items-start">
+                        <i class="fas fa-${isSuccess ? 'check-circle' : 'times-circle'} me-2 mt-1"></i>
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">${fix.title}</h6>
+                            ${isSuccess ?
+                                `<p class="mb-1">Khắc phục thành công!</p>
+                                 ${result.backup_path ? `<small class="text-muted">Backup: ${result.backup_path}</small>` : ''}
+                                 ${result.fixes_applied ? `<br><small class="text-muted">Đã áp dụng: ${result.fixes_applied} thay đổi</small>` : ''}` :
+                                `<p class="mb-0 text-danger">Lỗi: ${result.error}</p>`
+                            }
+                        </div>
+                    </div>
+                `;
+                resultsContent.appendChild(resultItem);
+            });
+
+            // Show summary
+            const summary = document.createElement('div');
+            summary.className = 'alert alert-info mt-3';
+            summary.innerHTML = `
+                <h6><i class="fas fa-chart-bar me-2"></i>Tổng kết:</h6>
+                <p class="mb-0">
+                    <span class="text-success"><i class="fas fa-check me-1"></i>Thành công: ${successCount}</span> |
+                    <span class="text-danger"><i class="fas fa-times me-1"></i>Thất bại: ${failureCount}</span>
+                </p>
+            `;
+            resultsContent.appendChild(summary);
+
+            // Hide content and show results
+            document.getElementById('remediationContent').style.display = 'none';
+            document.getElementById('remediationResults').style.display = 'block';
+            document.getElementById('executeRemediationBtn').style.display = 'none';
+            document.getElementById('refreshAfterRemediationBtn').style.display = 'inline-block';
+
+            // Show success message
+            if (successCount > 0) {
+                Swal.fire({
+                    title: 'Hoàn thành!',
+                    html: `Đã khắc phục thành công <strong>${successCount}</strong> lỗ hỏng bảo mật.`,
+                    icon: 'success',
+                    confirmButtonText: 'OK'
+                });
+            }
+        }
+
+        /**
+         * Refresh scan after remediation
+         */
+        function refreshAfterRemediation() {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('remediationModal'));
+            modal.hide();
+
+            // Scan the client again
+            scanClient(currentRemediationClientId);
+        }
     </script>
 </body>
 

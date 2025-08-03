@@ -81,45 +81,6 @@ function getthoigiandang($ngaydang)
     }
     return $thoigian . ' trước';
 }
-
-function thoigiandang($ngaydang)
-{
-    // Nếu là chuỗi định dạng ngày (ví dụ: "2025-05-14 14:56:47"), chuyển sang timestamp
-    if (!is_numeric($ngaydang)) {
-        $ngaydang = strtotime($ngaydang);
-        if ($ngaydang === false) return 'Không xác định thời gian';
-    }
-
-    // Lấy thời gian hiện tại và tính khoảng cách
-    $current_time = time();
-    $diff = abs($current_time - $ngaydang);
-
-    // Tính toán các đơn vị thời gian
-    $years = floor($diff / (365 * 24 * 60 * 60));
-    $months = floor(($diff % (365 * 24 * 60 * 60)) / (30 * 24 * 60 * 60));
-    $days = floor(($diff % (30 * 24 * 60 * 60)) / (24 * 60 * 60));
-    $hours = floor(($diff % (24 * 60 * 60)) / (60 * 60));
-    $minutes = floor(($diff % (60 * 60)) / 60);
-    $seconds = $diff % 60;
-
-    // Xây dựng chuỗi kết quả
-    $thoigian = '';
-    if ($years > 0) {
-        $thoigian = $years . ' năm';
-    } elseif ($months > 0) {
-        $thoigian = $months . ' tháng';
-    } elseif ($days > 0) {
-        $thoigian = $days . ' ngày';
-    } elseif ($hours > 0) {
-        $thoigian = $hours . ' giờ';
-    } elseif ($minutes > 0) {
-        $thoigian = $minutes . ' phút';
-    } else {
-        $thoigian = $seconds . ' giây';
-    }
-
-    return $thoigian . ' trước';
-}
 function catchuoi($text, $n = 80)
 {
     // string is shorter than n, return as is
@@ -210,315 +171,113 @@ function check_ptram($giacu, $giamoi)
 
 
 
-//upload_file - HIEP SECURITY ENHANCED VERSION
+//upload_file
 function Uploadfile($file, $type, $folder, $name)
 {
-    // Validate input parameters
-    if (empty($file) || empty($type) || empty($folder) || empty($name)) {
-        error_log("Uploadfile: Invalid parameters provided");
-        return false;
-    }
+    if (isset($_FILES[$file]) && !$_FILES[$file]['error']) {
+        $error = 0;
+        $duoi = explode('.', $_FILES[$file]['name']); // tách chuỗi khi gặp dấu .
+        $duoi = $duoi[(count($duoi) - 1)]; //lấy ra đuôi file
 
-    // Check if file was uploaded
-    if (!isset($_FILES[$file]) || $_FILES[$file]['error'] !== UPLOAD_ERR_OK) {
-        error_log("Uploadfile: File upload error - " . ($_FILES[$file]['error'] ?? 'No file'));
-        return false;
-    }
-
-    $uploaded_file = $_FILES[$file];
-
-    // Security validation
-    $security_result = HiepSecureUpload::validateUpload($uploaded_file, $type);
-    if (!$security_result['success']) {
-        error_log("Uploadfile: Security validation failed - " . $security_result['error']);
-        return false;
-    }
-
-    // Get safe file extension
-    $safe_extension = HiepSecureUpload::getSafeExtension($uploaded_file['name']);
-    if (!$safe_extension) {
-        error_log("Uploadfile: Invalid file extension");
-        return false;
-    }
-
-    // Generate secure filename
-    $secure_filename = HiepSecureUpload::generateSecureFilename($name, $safe_extension);
-
-    // Check if file exists and generate unique name
-    $final_filename = $secure_filename;
-    $counter = 1;
-    while (file_exists($folder . $final_filename)) {
-        $final_filename = pathinfo($secure_filename, PATHINFO_FILENAME) . '-' . $counter . '.' . $safe_extension;
-        $counter++;
-        if ($counter > 999) {
-            error_log("Uploadfile: Too many file conflicts");
-            return false;
+        $file_type = $_FILES[$file]["type"];
+        $file_size = $_FILES[$file]["size"];
+        $limit_size = 2000000;
+        if ($type == 'file') {
+            $limit_size = 5000000;
         }
-    }
-
-    // Create directory if not exists
-    if (!is_dir($folder)) {
-        if (!mkdir($folder, 0755, true)) {
-            error_log("Uploadfile: Cannot create upload directory");
-            return false;
-        }
-    }
-
-    // Move uploaded file
-    if (move_uploaded_file($uploaded_file['tmp_name'], $folder . $final_filename)) {
-        // Set secure permissions
-        chmod($folder . $final_filename, 0644);
-
-        // Log successful upload
-        error_log("Uploadfile: Successfully uploaded - " . $final_filename);
-
-        return $final_filename;
-    } else {
-        error_log("Uploadfile: Failed to move uploaded file");
-        return false;
-    }
-}
-
-/**
- * HIEP SECURE UPLOAD CLASS
- * Enhanced security for file uploads
- */
-class HiepSecureUpload
-{
-    // Whitelist of safe MIME types
-    private static $safe_mime_types = array(
-        'images' => array(
-            'image/jpeg',
-            'image/png',
-            'image/gif',
-            'image/webp',
-            'image/svg+xml'
-        ),
-        'file' => array(
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'audio/mpeg',
-            'video/mp4',
-            'text/plain'
-        )
-    );
-
-    // Whitelist of safe extensions
-    private static $safe_extensions = array(
-        'images' => array('jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'),
-        'file' => array('pdf', 'doc', 'docx', 'xls', 'xlsx', 'mp3', 'mp4', 'txt')
-    );
-
-    // Dangerous patterns in file content
-    private static $malicious_patterns = array(
-        '/<\?php/i',
-        '/eval\s*\(/i',
-        '/base64_decode\s*\(/i',
-        '/exec\s*\(/i',
-        '/system\s*\(/i',
-        '/shell_exec\s*\(/i',
-        '/passthru\s*\(/i',
-        '/file_get_contents\s*\(/i',
-        '/fopen\s*\(/i',
-        '/fwrite\s*\(/i',
-        '/include\s*\(/i',
-        '/require\s*\(/i'
-    );
-
-    /**
-     * Validate uploaded file
-     */
-    public static function validateUpload($file, $type)
-    {
-        // Check file size
-        $max_size = ($type === 'file') ? 5242880 : 2097152; // 5MB for files, 2MB for images
-        if ($file['size'] > $max_size) {
-            return array('success' => false, 'error' => 'File too large');
-        }
-
-        // Get real MIME type
-        $real_mime = self::getRealMimeType($file['tmp_name']);
-        if (!$real_mime) {
-            return array('success' => false, 'error' => 'Cannot determine file type');
-        }
-
-        // Check MIME type whitelist
-        if (!in_array($real_mime, self::$safe_mime_types[$type])) {
-            return array('success' => false, 'error' => 'Invalid file type: ' . $real_mime);
-        }
-
-        // Check extension
-        $extension = self::getSafeExtension($file['name']);
-        if (!in_array($extension, self::$safe_extensions[$type])) {
-            return array('success' => false, 'error' => 'Invalid file extension');
-        }
-
-        // Check for malicious content
-        if (self::containsMaliciousContent($file['tmp_name'])) {
-            return array('success' => false, 'error' => 'Malicious content detected');
-        }
-
-        // Check for double extensions
-        if (self::hasDoubleExtension($file['name'])) {
-            return array('success' => false, 'error' => 'Double extension detected');
-        }
-
-        return array('success' => true);
-    }
-
-    /**
-     * Get real MIME type using finfo
-     */
-    private static function getRealMimeType($file_path)
-    {
-        if (function_exists('finfo_open')) {
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $mime = finfo_file($finfo, $file_path);
-            finfo_close($finfo);
-            return $mime;
-        }
-        return false;
-    }
-
-    /**
-     * Get safe file extension
-     */
-    public static function getSafeExtension($filename)
-    {
-        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        // Remove any non-alphanumeric characters
-        $extension = preg_replace('/[^a-z0-9]/', '', $extension);
-        return $extension;
-    }
-
-    /**
-     * Generate secure filename
-     */
-    public static function generateSecureFilename($name, $extension)
-    {
-        // Sanitize name
-        $safe_name = preg_replace('/[^a-zA-Z0-9_-]/', '', $name);
-        $safe_name = substr($safe_name, 0, 50); // Limit length
-
-        if (empty($safe_name)) {
-            $safe_name = 'file_' . time();
-        }
-
-        return $safe_name . '.' . $extension;
-    }
-
-    /**
-     * Check for malicious content in file
-     */
-    private static function containsMaliciousContent($file_path)
-    {
-        $content = file_get_contents($file_path, false, null, 0, 8192); // Read first 8KB
-        if ($content === false) {
-            return true; // Assume malicious if can't read
-        }
-
-        foreach (self::$malicious_patterns as $pattern) {
-            if (preg_match($pattern, $content)) {
-                return true;
+        if ($file_size < $limit_size) {
+            if ($type == 'images') {
+                if ($file_type == 'image/svg' || $file_type == 'image/webp' || $file_type == 'image/jpg' || $file_type == 'image/png' || $file_type == 'image/jpeg' || $file_type == 'image/gif') {
+                    $error = $error + 0;
+                } else {
+                    $error = $error + 1;
+                }
+            } elseif ($type == 'file') {
+                if ($file_type == 'audio/mpeg' || 'video/mp4' || $file_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || $file_type == 'application/vnd.ms-excel' || $file_type == 'application/pdf' || $file_type == 'application/msword' || $file_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                    $error = $error + 0;
+                } else {
+                    $error = $error + 1;
+                }
             }
+            if ($error == 0) {
+                $file_name = $name . '.' . $duoi;
+                if (file_exists($folder . $file_name) == 0) {
+                    $file_name_news = $file_name;
+                } else {
+                    $file_name_news = $name . '-' . rand(1, 999) . '.' . $duoi;
+                }
+
+                if (move_uploaded_file($_FILES[$file]['tmp_name'], $folder . $file_name_news)) {
+                    return $file_name_news;
+                } else {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        } else {
+            return false;
         }
-
+    } else {
         return false;
-    }
-
-    /**
-     * Check for double extensions
-     */
-    private static function hasDoubleExtension($filename)
-    {
-        return preg_match('/\.(php|phtml|php3|php4|php5|asp|aspx|jsp)\./i', $filename);
     }
 }
 function multiple_Uploadfile($file, $type, $folder, $name)
 {
-    // Validate input parameters
-    if (empty($file) || empty($type) || empty($folder) || empty($name)) {
-        error_log("multiple_Uploadfile: Invalid parameters provided");
-        return '';
-    }
-
-    // Check if files array exists
-    if (!isset($_FILES[$file]['name']) || !is_array($_FILES[$file]['name'])) {
-        error_log("multiple_Uploadfile: No files uploaded");
-        return '';
-    }
-
     $total = count($_FILES[$file]['name']);
-    $uploaded_files = array();
-
+    //return $_FILES[$file]['tmp_name'][1];
+    $list_file = '';
     for ($i = 0; $i < $total; $i++) {
-        // Skip empty files
-        if (empty($_FILES[$file]['name'][$i]) || $_FILES[$file]['error'][$i] !== UPLOAD_ERR_OK) {
-            continue;
-        }
 
-        // Create file array for validation
-        $current_file = array(
-            'name' => $_FILES[$file]['name'][$i],
-            'type' => $_FILES[$file]['type'][$i],
-            'tmp_name' => $_FILES[$file]['tmp_name'][$i],
-            'size' => $_FILES[$file]['size'][$i],
-            'error' => $_FILES[$file]['error'][$i]
-        );
+        if ($_FILES[$file]['name'][$i] != '' && !$_FILES[$file][$i]['error']) {
+            $error = 0;
+            $duoi = explode('.', $_FILES[$file]['name'][$i]); // tách chuỗi khi gặp dấu .
+            $duoi = $duoi[(count($duoi) - 1)]; //lấy ra đuôi file
 
-        // Security validation using HiepSecureUpload
-        $security_result = HiepSecureUpload::validateUpload($current_file, $type);
-        if (!$security_result['success']) {
-            error_log("multiple_Uploadfile: Security validation failed for file $i - " . $security_result['error']);
-            continue;
-        }
-
-        // Get safe extension
-        $safe_extension = HiepSecureUpload::getSafeExtension($current_file['name']);
-        if (!$safe_extension) {
-            error_log("multiple_Uploadfile: Invalid extension for file $i");
-            continue;
-        }
-
-        // Generate secure filename
-        $base_name = $name . '-' . ($i + 1);
-        $secure_filename = HiepSecureUpload::generateSecureFilename($base_name, $safe_extension);
-
-        // Ensure unique filename
-        $final_filename = $secure_filename;
-        $counter = 1;
-        while (file_exists($folder . $final_filename)) {
-            $final_filename = pathinfo($secure_filename, PATHINFO_FILENAME) . '-' . $counter . '.' . $safe_extension;
-            $counter++;
-            if ($counter > 999) {
-                error_log("multiple_Uploadfile: Too many file conflicts for file $i");
-                continue 2; // Skip to next file
+            $file_type = $_FILES[$file]["type"][$i];
+            $file_size = $_FILES[$file]["size"][$i];
+            $limit_size = 2000000;
+            if ($type == 'file') {
+                $limit_size = 5000000;
             }
-        }
-
-        // Create directory if not exists
-        if (!is_dir($folder)) {
-            if (!mkdir($folder, 0755, true)) {
-                error_log("multiple_Uploadfile: Cannot create upload directory");
-                continue;
+            if ($file_size < $limit_size) {
+                if ($type == 'images') {
+                    if ($file_type == 'image/svg' || $file_type == 'image/webp' || 'image/jpg' || $file_type == 'image/png' || $file_type == 'image/jpeg' || $file_type == 'image/gif') {
+                        $error = $error + 0;
+                    } else {
+                        $error = $error + 1;
+                    }
+                } elseif ($type == 'file') {
+                    if ($file_type == 'audio/mpeg' || 'video/mp4' || $file_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || $file_type == 'application/vnd.ms-excel' || $file_type == 'application/pdf' || $file_type == 'application/msword' || $file_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                        $error = $error + 0;
+                    } else {
+                        $error = $error + 1;
+                    }
+                }
+                if ($error == 0) {
+                    $file_name = $name . '-' . rand(1, 999) . '.' . $duoi;
+                    if (file_exists($folder . $file_name) == 0) {
+                        $file_name_news = $file_name;
+                    } else {
+                        $file_name_news = $i . '-' . $file_name;
+                    }
+                    if (move_uploaded_file($_FILES[$file]['tmp_name'][$i], $folder . $file_name_news)) {
+                        $list_file .= $file_name_news . ',';
+                    } else {
+                        $list_file .= '';
+                    }
+                } else {
+                    $list_file .= '';
+                }
+            } else {
+                $list_file .= '';
             }
-        }
-
-        // Move uploaded file
-        if (move_uploaded_file($current_file['tmp_name'], $folder . $final_filename)) {
-            // Set secure permissions
-            chmod($folder . $final_filename, 0644);
-            $uploaded_files[] = $final_filename;
-            error_log("multiple_Uploadfile: Successfully uploaded - " . $final_filename);
         } else {
-            error_log("multiple_Uploadfile: Failed to move file $i");
+            $list_file .= '';
         }
     }
-
-    return implode(',', $uploaded_files);
+    $list_file = trim($list_file, ',');
+    return $list_file;
 }
 /**
  * Enhanced shell detection function
@@ -599,7 +358,7 @@ function check_shell($text)
     }
 
     // Check for hex encoded strings
-    if (preg_match('/\\\\x[0-9a-fA-F]{2}/', $text)) {
+    if (preg_match('/\x[0-9a-fA-F]{2}/', $text)) {
         $detection_count++;
         $detected_patterns[] = 'hex_encoded';
     }
@@ -615,72 +374,14 @@ function check_shell($text)
     } else {
         return $text;
     }
-}
 
-/**
- * Enhanced file upload security check
- * Compatible with PHP 5.6+ and 7.x
- */
-function check_file_upload_security($filename, $content = null)
-{
-    $security_issues = array();
-
-    // Check filename
-    $dangerous_extensions = array(
-        'php', 'php3', 'php4', 'php5', 'phtml', 'phps',
-        'asp', 'aspx', 'jsp', 'jspx',
-        'pl', 'py', 'rb', 'sh', 'bat', 'cmd',
-        'exe', 'com', 'scr', 'msi',
-        'js', 'vbs', 'jar', 'war',
-        'htaccess', 'htpasswd'
-    );
-
-    $file_ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-
-    if (in_array($file_ext, $dangerous_extensions)) {
-        $security_issues[] = 'dangerous_extension';
+    
+    if ($j > 0) {
+        $chuoi = "";
+    } else {
+        $chuoi = $text;
     }
-
-    // Check for double extensions
-    if (preg_match('/\.(php|phtml|php3|php4|php5)\./i', $filename)) {
-        $security_issues[] = 'double_extension';
-    }
-
-    // Check for null bytes
-    if (strpos($filename, "\0") !== false) {
-        $security_issues[] = 'null_byte';
-    }
-
-    // Check content if provided
-    if ($content !== null) {
-        if (check_shell($content) === "") {
-            $security_issues[] = 'malicious_content';
-        }
-    }
-
-    return empty($security_issues) ? true : $security_issues;
-}
-
-/**
- * Security logging function
- * Compatible with PHP 5.6+ and 7.x
- */
-function hiep_log_security($message, $level = 'INFO')
-{
-    $log_file = dirname(__FILE__) . '/../logs/security.log';
-    $log_dir = dirname($log_file);
-
-    // Create log directory if not exists
-    if (!is_dir($log_dir)) {
-        mkdir($log_dir, 0755, true);
-    }
-
-    $timestamp = date('Y-m-d H:i:s');
-    $ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'unknown';
-    $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : 'unknown';
-
-    $log_entry = "[{$timestamp}] [{$level}] IP: {$ip} | {$message} | User-Agent: {$user_agent}\n";
-    file_put_contents($log_file, $log_entry, FILE_APPEND | LOCK_EX);
+    return $chuoi;
 }
 function doi_ngay($date)
 {
@@ -943,162 +644,36 @@ function msv_Check_Login($user)
 
 function normalizeChars($str)
 {
-    // Đảm bảo chuỗi là UTF-8
-    $str = mb_convert_encoding($str, 'UTF-8', 'auto');
+    $unicode = array(
+        'a' => 'á|à|ả|ã|ạ|ă|ắ|ặ|ằ|ẳ|ẵ|â|ấ|ầ|ẩ|ẫ|ậ|à|á|ạ|ả',
+        'd' => 'đ',
+        'e' => 'é|è|ẻ|ẽ|ẹ|ê|ế|ề|ể|ễ|ệ|é|ẹ|ẽ|è|ẻ',
+        'i' => 'í|ì|ỉ|ĩ|ị|ĩ|ì',
+        'o' => 'ó|ò|ỏ|õ|ọ|ô|ố|ồ|ổ|ỗ|ộ|ơ|ớ|ờ|ở|ỡ|ợ|ọ|ò|ó|õ',
+        'u' => 'ú|ù|ủ|ũ|ụ|ư|ứ|ừ|ử|ữ|ự|ù|ú',
+        'y' => 'ý|ỳ|ỷ|ỹ|ỵ|ỷ',
+        'A' => 'Á|À|Ả|Ã|Ạ|Ă|Ắ|Ặ|Ằ|Ẳ|Ẵ|Â|Ấ|Ầ|Ẩ|Ẫ|Ậ',
+        'D' => 'Đ',
+        'E' => 'É|È|Ẻ|Ẽ|Ẹ|Ê|Ế|Ề|Ể|Ễ|Ệ',
+        'I' => 'Í|Ì|Ỉ|Ĩ|Ị',
+        'O' => 'Ó|Ò|Ỏ|Õ|Ọ|Ô|Ố|Ồ|Ổ|Ỗ|Ộ|Ơ|Ớ|Ờ|Ở|Ỡ|Ợ',
+        'U' => 'Ú|Ù|Ủ|Ũ|Ụ|Ư|Ứ|Ừ|Ử|Ữ|Ự',
+        'Y' => 'Ý|Ỳ|Ỷ|Ỹ|Ỵ',
+    );
 
-    // Danh sách các ký tự có dấu và tương ứng không dấu
-    $unicodeMap = [
-        'á' => 'a',
-        'à' => 'a',
-        'ả' => 'a',
-        'ã' => 'a',
-        'ạ' => 'a',
-        'ă' => 'a',
-        'ắ' => 'a',
-        'ặ' => 'a',
-        'ằ' => 'a',
-        'ẳ' => 'a',
-        'ẵ' => 'a',
-        'â' => 'a',
-        'ấ' => 'a',
-        'ầ' => 'a',
-        'ẩ' => 'a',
-        'ẫ' => 'a',
-        'ậ' => 'a',
-        'é' => 'e',
-        'è' => 'e',
-        'ẻ' => 'e',
-        'ẽ' => 'e',
-        'ẹ' => 'e',
-        'ê' => 'e',
-        'ế' => 'e',
-        'ề' => 'e',
-        'ể' => 'e',
-        'ễ' => 'e',
-        'ệ' => 'e',
-        'í' => 'i',
-        'ì' => 'i',
-        'ỉ' => 'i',
-        'ĩ' => 'i',
-        'ị' => 'i',
-        'ó' => 'o',
-        'ò' => 'o',
-        'ỏ' => 'o',
-        'õ' => 'o',
-        'ọ' => 'o',
-        'ô' => 'o',
-        'ố' => 'o',
-        'ồ' => 'o',
-        'ổ' => 'o',
-        'ỗ' => 'o',
-        'ộ' => 'o',
-        'ơ' => 'o',
-        'ớ' => 'o',
-        'ờ' => 'o',
-        'ở' => 'o',
-        'ỡ' => 'o',
-        'ợ' => 'o',
-        'ú' => 'u',
-        'ù' => 'u',
-        'ủ' => 'u',
-        'ũ' => 'u',
-        'ụ' => 'u',
-        'ư' => 'u',
-        'ứ' => 'u',
-        'ừ' => 'u',
-        'ử' => 'u',
-        'ữ' => 'u',
-        'ự' => 'u',
-        'ý' => 'y',
-        'ỳ' => 'y',
-        'ỷ' => 'y',
-        'ỹ' => 'y',
-        'ỵ' => 'y',
-        'đ' => 'd',
-        'Á' => 'A',
-        'À' => 'A',
-        'Ả' => 'A',
-        'Ã' => 'A',
-        'Ạ' => 'A',
-        'Ă' => 'A',
-        'Ắ' => 'A',
-        'Ặ' => 'A',
-        'Ằ' => 'A',
-        'Ẳ' => 'A',
-        'Ẵ' => 'A',
-        'Â' => 'A',
-        'Ấ' => 'A',
-        'Ầ' => 'A',
-        'Ẩ' => 'A',
-        'Ẫ' => 'A',
-        'Ậ' => 'A',
-        'É' => 'E',
-        'È' => 'E',
-        'Ẻ' => 'E',
-        'Ẽ' => 'E',
-        'Ẹ' => 'E',
-        'Ê' => 'E',
-        'Ế' => 'E',
-        'Ề' => 'E',
-        'Ể' => 'E',
-        'Ễ' => 'E',
-        'Ệ' => 'E',
-        'Í' => 'I',
-        'Ì' => 'I',
-        'Ỉ' => 'I',
-        'Ĩ' => 'I',
-        'Ị' => 'I',
-        'Ó' => 'O',
-        'Ò' => 'O',
-        'Ỏ' => 'O',
-        'Õ' => 'O',
-        'Ọ' => 'O',
-        'Ô' => 'O',
-        'Ố' => 'O',
-        'Ồ' => 'O',
-        'Ổ' => 'O',
-        'Ỗ' => 'O',
-        'Ộ' => 'O',
-        'Ơ' => 'O',
-        'Ớ' => 'O',
-        'Ờ' => 'O',
-        'Ở' => 'O',
-        'Ỡ' => 'O',
-        'Ợ' => 'O',
-        'Ú' => 'U',
-        'Ù' => 'U',
-        'Ủ' => 'U',
-        'Ũ' => 'U',
-        'Ụ' => 'U',
-        'Ư' => 'U',
-        'Ứ' => 'U',
-        'Ừ' => 'U',
-        'Ử' => 'U',
-        'Ữ' => 'U',
-        'Ự' => 'U',
-        'Ý' => 'Y',
-        'Ỳ' => 'Y',
-        'Ỷ' => 'Y',
-        'Ỹ' => 'Y',
-        'Ỵ' => 'Y',
-        'Đ' => 'D'
-    ];
-
-    // Thay thế các ký tự có dấu bằng không dấu
-    $str = strtr($str, $unicodeMap);
-
-    // Loại bỏ các ký tự không mong muốn (chỉ giữ lại chữ cái, số, dấu gạch ngang)
-    $str = preg_replace('/[^a-zA-Z0-9-\s]/u', '', $str);
+    // Chuyển các ký tự có dấu thành không dấu
+    foreach ($unicode as $nonUnicode => $uni) {
+        $str = preg_replace("/($uni)/i", $nonUnicode, $str);
+    }
 
     // Thay khoảng trắng bằng dấu "-"
-    $str = preg_replace('/\s+/u', '-', trim($str));
+    $str = str_replace(' ', '-', $str);
 
-    // Chuyển tất cả sang chữ thường
-    $str = mb_strtolower($str, 'UTF-8');
+    // Chuyển ký tự thành chữ thường hết
+    $str = strtolower($str);
 
     return $str;
 }
-
 
 
 // Đếm số chữ
@@ -1340,32 +915,7 @@ function checkParentCate($parent)
         return $parent;
     }
 }
-
-
-function KiemTraLoi()
-{
-    ini_set('display_errors', 1);
-    ini_set('display_startup_errors', 1);
-    error_reporting(E_ALL);
-}
-// Hàm lấy IP của khách
-function getUserIP()
-{
-    if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-        $ip = $_SERVER['HTTP_CLIENT_IP'];
-    } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-        $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
-    } else {
-        $ip = $_SERVER['REMOTE_ADDR'];
-    }
-
-    // Chuyển đổi IPv6 ::1 sang IPv4 127.0.0.1
-    if ($ip === '::1') {
-        $ip = '127.0.0.1';
-    }
-
-    return $ip;
-}
+define("LANG",  get_json('lang', '0', 'code'));
 
 function update_sitemap()
 {
@@ -1459,31 +1009,4 @@ function update_sitemap()
         error_log("Lỗi cập nhật sitemap: " . $e->getMessage());
         return false;
     }
-}
-
-
-define("LANG",  get_json('lang', '0', 'code'));
-
-
-
-function pnvn_remove_ptag($content) {
-    // Sử dụng biểu thức chính quy để tìm và thay thế
-    $patterns = array(
-        '/<p[^>]*>(.*?)<\/p>/is', // Tìm tất cả thẻ p có thuộc tính
-        '/<p>(.*?)<\/p>/is'       // Tìm tất cả thẻ p không có thuộc tính
-    );
-    
-    // Thay thế bằng nội dung bên trong
-    $replacements = array(
-        '$1', // Giữ lại nội dung bên trong
-        '$1'  // Giữ lại nội dung bên trong
-    );
-    
-    // Thực hiện thay thế
-    $content = preg_replace($patterns, $replacements, $content);
-    
-    // Loại bỏ khoảng trắng và xuống dòng dư thừa
-    $content = trim($content);
-    
-    return $content;
 }

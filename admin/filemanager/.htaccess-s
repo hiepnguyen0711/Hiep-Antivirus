@@ -1,0 +1,54 @@
+# HiepSecurity File Manager Protection
+# Bảo vệ File Manager khỏi các cuộc tấn công
+
+# Deny access to sensitive files
+<FilesMatch "\.(log|sql|bak|backup|old|tmp|conf|config|ini)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block malicious file uploads
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phar|phps|exe|bat|cmd|com|scr|vbs|js|jar|pl|py|rb|sh)\.(txt|gif|jpg|jpeg|png|bmp|ico)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Prevent execution of uploaded PHP files
+<Directory "source">
+    <FilesMatch "\.php$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</Directory>
+
+<Directory "thumbs">
+    <FilesMatch "\.php$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</Directory>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options SAMEORIGIN
+    Header always set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# Block suspicious requests
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Block file injection
+    RewriteCond %{QUERY_STRING} \.\./\.\. [NC,OR]
+    RewriteCond %{QUERY_STRING} (eval\(|base64_decode|gzinflate) [NC,OR]
+    RewriteCond %{QUERY_STRING} (<script|<iframe|<object) [NC]
+    RewriteRule ^(.*)$ - [F,L]
+    
+    # Block dangerous file extensions in uploads
+    RewriteCond %{REQUEST_FILENAME} \.(php|phtml|php3|php4|php5|php7|phar|phps|exe|bat|cmd|com|scr|vbs|js|jar|pl|py|rb|sh)$ [NC]
+    RewriteRule ^(.*)$ - [F,L]
+</IfModule>
+
+# Limit file upload size (100MB)
+LimitRequestBody 104857600

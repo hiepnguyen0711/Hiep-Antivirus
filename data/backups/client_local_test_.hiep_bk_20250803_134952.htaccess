@@ -1,0 +1,79 @@
+# HiepSecurity Balanced Admin Protection
+# Moderate security without breaking functionality
+
+# Deny access to sensitive files
+<FilesMatch "\.(log|sql|bak|backup|old|tmp)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Basic bot protection
+RewriteEngine On
+RewriteCond %{HTTP_USER_AGENT} ^$ [OR]
+RewriteCond %{HTTP_USER_AGENT} (bot|crawler|spider) [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# Rate limiting (basic)
+RewriteCond %{REMOTE_ADDR} !^127\.0\.0\.1$
+RewriteCond %{REQUEST_METHOD} POST
+RewriteCond %{THE_REQUEST} \s[A-Z]{3,9}\s/.*\sHTTP/
+RewriteRule ^(.*)$ - [E=RATE_LIMITED:1]
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options SAMEORIGIN
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Original content below
+
+# ==========================================
+# HIEP SECURITY - ADMIN CMS PROTECTION (BALANCED)
+# ==========================================
+# Cân bằng giữa bảo mật và usability
+# Tested: 2025-01-03 - Admin và File Manager hoạt động
+# ==========================================
+
+# Ngăn chặn directory listing
+Options -Indexes
+
+# ==========================================
+# BẢO VỆ FILES NHẠY CẢM
+# ==========================================
+
+# Bảo vệ file config
+<Files "config.php">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+<Files "config.json">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Bảo vệ file log và backup
+<FilesMatch "\.(log|txt|bak|backup|old|tmp|save)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
+
+# ==========================================
+# HEADERS BẢO MẬT
+# ==========================================
+<IfModule mod_headers.c>
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# ==========================================
+# GIỚI HẠN UPLOAD FILE (50MB)
+# ==========================================
+LimitRequestBody 52428800
+
+# ==========================================
+# END HIEP SECURITY PROTECTION
+# ==========================================

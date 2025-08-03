@@ -1,0 +1,37 @@
+# ==========================================
+# HIEP SECURITY - LIB DIRECTORY PROTECTION
+# ==========================================
+# Bảo vệ thư mục lib/ chứa config và functions quan trọng
+# ==========================================
+
+# Ngăn chặn tất cả truy cập trực tiếp
+Order Deny,Allow
+Deny from all
+
+# Chỉ cho phép localhost và server
+Allow from 127.0.0.1
+Allow from ::1
+
+# Ngăn chặn directory listing
+Options -Indexes
+
+# Bảo vệ file config đặc biệt
+<Files "config.php">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+<Files "config.json">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Ngăn chặn download file class và function
+<Files "*.php">
+    <IfModule mod_headers.c>
+        Header set Content-Disposition "attachment"
+    </IfModule>
+</Files>
+
+# Error pages
+ErrorDocument 403 "Library Access Denied - Hiep Security"

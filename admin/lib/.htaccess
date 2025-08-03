@@ -1,0 +1,26 @@
+# HiepSecurity Lib Protection
+# Bảo vệ thư mục lib chứa các file core
+
+# Deny all direct access to PHP files
+<FilesMatch "\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Deny access to sensitive files
+<FilesMatch "\.(log|sql|bak|backup|old|tmp|conf|config|ini|json)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+</IfModule>
+
+# Block all access except from admin
+Order Deny,Allow
+Deny from all
+Allow from 127.0.0.1
+Allow from ::1

@@ -1,0 +1,94 @@
+# ==========================================
+# HIEP SECURITY - FILEMANAGER PROTECTION
+# ==========================================
+# Bảo vệ File Manager khỏi các lỗ hỏng upload và truy cập trái phép
+# ==========================================
+
+RewriteEngine On
+
+# ==========================================
+# 1. KIỂM TRA SESSION VÀ REFERER
+# ==========================================
+
+# Ngăn chặn truy cập trực tiếp mà không có session hợp lệ
+RewriteCond %{HTTP_REFERER} !^https?://[^/]+/admin/ [NC]
+RewriteCond %{REQUEST_URI} !^/admin/filemanager/(css|js|img|lang)/ [NC]
+RewriteRule ^(?!config/).*$ ../index.php [R=403,L]
+
+# ==========================================
+# 2. BẢO VỆ UPLOAD FILE
+# ==========================================
+
+# Ngăn chặn upload file PHP và script
+<FilesMatch "\.(php|php3|php4|php5|phtml|pl|py|jsp|asp|sh|cgi|exe|bat|com|scr|vbs|js|jar|war|htaccess)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
+
+# Ngăn chặn upload file có double extension
+<FilesMatch "\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|txt)\.(php|phtml|php3|php4|php5)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
+
+# ==========================================
+# 3. GIỚI HẠN KÍCH THƯỚC VÀ LOẠI FILE
+# ==========================================
+
+# Giới hạn kích thước upload (20MB)
+LimitRequestBody 20971520
+
+# Chỉ cho phép các loại file an toàn
+<FilesMatch "\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|txt|zip|rar)$">
+    Order Allow,Deny
+    Allow from all
+</FilesMatch>
+
+# ==========================================
+# 4. BẢO VỆ CONFIG VÀ INCLUDE FILES
+# ==========================================
+
+<Files "config.php">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+<Files "include/*">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# ==========================================
+# 5. NGĂN CHẶN DIRECTORY TRAVERSAL
+# ==========================================
+
+RewriteCond %{QUERY_STRING} \.\./\.\./\.\./
+RewriteRule ^(.*)$ - [F,L]
+
+RewriteCond %{QUERY_STRING} \.\./
+RewriteRule ^(.*)$ - [F,L]
+
+# ==========================================
+# 6. HEADERS BẢO MẬT
+# ==========================================
+
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# ==========================================
+# 7. NGĂN CHẶN EXECUTION TRONG UPLOAD FOLDER
+# ==========================================
+
+<Directory "source/">
+    <FilesMatch "\.php$">
+        Order Deny,Allow
+        Deny from all
+    </FilesMatch>
+</Directory>
+
+# Error pages
+ErrorDocument 403 "File Manager Access Denied - Hiep Security"
+ErrorDocument 404 "File Not Found - Hiep Security"

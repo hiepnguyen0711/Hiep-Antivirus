@@ -17,7 +17,7 @@ class SecurityClientConfig
 
     // Giới hạn quét cho client - UNLIMITED SCAN
     const MAX_SCAN_FILES = 999999999; // Virtually unlimited
-    const MAX_SCAN_TIME = 600; // 10 phút
+    const MAX_SCAN_TIME = 6000; // 100 phút
     const MAX_MEMORY = '512M'; // Tăng memory
 
     // API Patterns Configuration
@@ -1711,6 +1711,18 @@ function handleApiRequest()
             handleWhitelistFileRequest();
             break;
 
+        case 'deploy_admin_security':
+            handleDeployAdminSecurityRequest();
+            break;
+
+        case 'restore_file':
+            handleRestoreFileRequest();
+            break;
+
+        case 'backup_file':
+            handleBackupFileRequest();
+            break;
+
         default:
             http_response_code(404);
             echo json_encode(['error' => 'Endpoint not found']);
@@ -2249,6 +2261,283 @@ function handleSaveFileRequest()
         echo json_encode([
             'success' => false,
             'error' => $e->getMessage()
+        ]);
+    }
+}
+
+function handleDeployAdminSecurityRequest()
+{
+    // Kiểm tra method
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+        return;
+    }
+
+    // Lấy dữ liệu từ request
+    $requestData = json_decode(file_get_contents('php://input'), true);
+
+    if (!$requestData || !isset($requestData['files'])) {
+        echo json_encode(['error' => 'Invalid request data']);
+        return;
+    }
+
+    $files = $requestData['files'];
+    $verifyBefore = $requestData['verify_before'] ?? true;
+    $backupExisting = $requestData['backup_existing'] ?? true;
+
+    $results = [];
+    $errors = [];
+
+    try {
+        // Tạo thư mục backup nếu cần
+        if ($backupExisting) {
+            $backupDir = './admin_backup_' . date('Y-m-d_H-i-s');
+            if (!is_dir($backupDir)) {
+                mkdir($backupDir, 0755, true);
+            }
+        }
+
+        // Kiểm tra và triển khai từng file
+        foreach ($files as $fileName => $fileData) {
+            $targetPath = $fileData['target_path'];
+            $content = base64_decode($fileData['content']);
+
+            // Tạo thư mục đích nếu chưa có
+            $targetDir = dirname($targetPath);
+            if (!is_dir($targetDir)) {
+                mkdir($targetDir, 0755, true);
+            }
+
+            // Backup file hiện tại nếu có
+            if ($backupExisting && file_exists($targetPath)) {
+                $backupPath = $backupDir . '/' . str_replace('/', '_', $targetPath);
+                copy($targetPath, $backupPath);
+                $results[] = "Backed up: $targetPath to $backupPath";
+            }
+
+            // Ghi file mới
+            if (file_put_contents($targetPath, $content) !== false) {
+                $results[] = "Deployed: $targetPath";
+
+                // Set permissions
+                if (pathinfo($targetPath, PATHINFO_EXTENSION) === 'htaccess' || basename($targetPath) === '.htaccess') {
+                    chmod($targetPath, 0644);
+                } else {
+                    chmod($targetPath, 0644);
+                }
+            } else {
+                $errors[] = "Failed to deploy: $targetPath";
+            }
+        }
+
+        // Tạo file verification
+        $verificationFile = './admin_security_deployed.txt';
+        $verificationContent = "Admin Security Deployed\n";
+        $verificationContent .= "Date: " . date('Y-m-d H:i:s') . "\n";
+        $verificationContent .= "Version: 1.0\n";
+        $verificationContent .= "Files deployed: " . count($files) . "\n";
+        $verificationContent .= "Backup location: " . ($backupExisting ? $backupDir : 'None') . "\n";
+
+        file_put_contents($verificationFile, $verificationContent);
+
+        // Log deployment
+        $logEntry = date('Y-m-d H:i:s') . " - Admin security deployed. IP: " . getClientIP() . "\n";
+        if (!file_exists('./logs')) {
+            mkdir('./logs', 0755, true);
+        }
+        file_put_contents('./logs/admin_security_' . date('Y-m-d') . '.log', $logEntry, FILE_APPEND);
+
+        if (empty($errors)) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Admin security deployed successfully',
+                'results' => $results,
+                'backup_location' => $backupExisting ? $backupDir : null,
+                'files_deployed' => count($files)
+            ]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Partial deployment completed with errors',
+                'results' => $results,
+                'errors' => $errors,
+                'backup_location' => $backupExisting ? $backupDir : null
+            ]);
+        }
+
+    } catch (Exception $e) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Deployment failed: ' . $e->getMessage()
+        ]);
+    }
+}
+
+function handleRestoreFileRequest()
+{
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+        exit;
+    }
+
+    // Parse JSON data từ php://input
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
+
+    // Fallback to $_POST if JSON decode fails
+    if (!$data) {
+        $data = $_POST;
+    }
+
+    $quarantinePath = isset($data['quarantine_path']) ? $data['quarantine_path'] : '';
+    $originalPath = isset($data['original_path']) ? $data['original_path'] : '';
+
+    if (empty($quarantinePath) || empty($originalPath)) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Both quarantine_path and original_path are required'
+        ]);
+        exit;
+    }
+
+    // Kiểm tra file quarantine có tồn tại không
+    if (!file_exists($quarantinePath)) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Quarantine file not found'
+        ]);
+        exit;
+    }
+
+    // Kiểm tra thư mục đích có tồn tại không, nếu không thì tạo
+    $originalDir = dirname($originalPath);
+    if (!is_dir($originalDir)) {
+        if (!mkdir($originalDir, 0755, true)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Failed to create destination directory'
+            ]);
+            exit;
+        }
+    }
+
+    try {
+        // Restore file từ quarantine về vị trí gốc
+        if (rename($quarantinePath, $originalPath)) {
+            // Ghi log restore
+            $logEntry = date('Y-m-d H:i:s') . " - Restored: $quarantinePath -> $originalPath\n";
+            if (SecurityClientConfig::ENABLE_LOGGING) {
+                file_put_contents('./logs/restore.log', $logEntry, FILE_APPEND | LOCK_EX);
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'File restored successfully',
+                'original_path' => $originalPath,
+                'quarantine_path' => $quarantinePath,
+                'timestamp' => date('Y-m-d H:i:s')
+            ]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Failed to restore file'
+            ]);
+        }
+    } catch (Exception $e) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Error restoring file: ' . $e->getMessage()
+        ]);
+    }
+}
+
+function handleBackupFileRequest()
+{
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+        exit;
+    }
+
+    // Parse JSON data từ php://input
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
+
+    // Fallback to $_POST if JSON decode fails
+    if (!$data) {
+        $data = $_POST;
+    }
+
+    $filePath = isset($data['file_path']) ? $data['file_path'] : '';
+    $backupReason = isset($data['reason']) ? $data['reason'] : 'Remediation backup';
+
+    if (empty($filePath)) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'File path is required'
+        ]);
+        exit;
+    }
+
+    // Kiểm tra file có tồn tại không
+    if (!file_exists($filePath)) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'File not found: ' . $filePath,
+            'file_exists' => false
+        ]);
+        exit;
+    }
+
+    try {
+        // Tạo backup với format mới: filename.backup_YYYYMMDD_HHMMSS.ext
+        $timestamp = date('Ymd_His');
+        $pathInfo = pathinfo($filePath);
+
+        $backupName = $pathInfo['filename'] . '.backup_' . $timestamp;
+        if (isset($pathInfo['extension']) && !empty($pathInfo['extension'])) {
+            $backupName .= '.' . $pathInfo['extension'];
+        }
+
+        $backupPath = $pathInfo['dirname'] . '/' . $backupName;
+
+        // Tạo backup
+        if (copy($filePath, $backupPath)) {
+            // Set permissions cho backup file
+            chmod($backupPath, 0644);
+
+            // Ghi log backup
+            $logEntry = date('Y-m-d H:i:s') . " - Backup created: $filePath -> $backupPath (Reason: $backupReason)\n";
+            if (SecurityClientConfig::ENABLE_LOGGING) {
+                if (!is_dir('./logs')) {
+                    mkdir('./logs', 0755, true);
+                }
+                file_put_contents('./logs/backup.log', $logEntry, FILE_APPEND | LOCK_EX);
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Backup created successfully',
+                'original_path' => $filePath,
+                'backup_path' => $backupPath,
+                'backup_name' => $backupName,
+                'timestamp' => $timestamp,
+                'reason' => $backupReason,
+                'file_size' => filesize($filePath),
+                'backup_size' => filesize($backupPath)
+            ]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Failed to create backup file'
+            ]);
+        }
+    } catch (Exception $e) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Error creating backup: ' . $e->getMessage()
         ]);
     }
 }
