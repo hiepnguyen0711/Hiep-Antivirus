@@ -772,6 +772,33 @@ if (isset($_GET['api'])) {
             echo json_encode(['success' => true, 'client' => $client]);
             break;
 
+        case 'update_client':
+            $id = $_POST['id'] ?? '';
+            $name = $_POST['name'] ?? '';
+            $url = $_POST['url'] ?? '';
+            $apiKey = $_POST['api_key'] ?? '';
+
+            if (empty($id) || empty($name) || empty($url) || empty($apiKey)) {
+                echo json_encode(['success' => false, 'error' => 'All fields required']);
+                break;
+            }
+
+            $client = $clientManager->getClient($id);
+            if (!$client) {
+                echo json_encode(['success' => false, 'error' => 'Client not found']);
+                break;
+            }
+
+            $clientManager->updateClient($id, [
+                'name' => $name,
+                'url' => $url,
+                'api_key' => $apiKey,
+                'updated_at' => date('Y-m-d H:i:s')
+            ]);
+
+            echo json_encode(['success' => true]);
+            break;
+
         case 'delete_client':
             $id = $_POST['id'] ?? '';
             if (empty($id)) {
@@ -4347,15 +4374,320 @@ if (isset($_GET['api'])) {
         }
 
         function checkHealth(clientId) {
-            // Check client health
+            const client = clients.find(c => c.id === clientId);
+
+            if (!client) {
+                Swal.fire('Lỗi!', 'Không tìm thấy client.', 'error');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Đang kiểm tra...',
+                html: `Đang kiểm tra sức khỏe client: <strong>${client.name}</strong>`,
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                willOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch(`?api=check_client&id=${clientId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const status = data.online ? 'Online' : 'Offline';
+                        const icon = data.online ? 'success' : 'warning';
+                        const color = data.online ? '#28a745' : '#ffc107';
+
+                        Swal.fire({
+                            icon: icon,
+                            title: `Client ${status}`,
+                            html: `
+                                <div style="text-align: left;">
+                                    <p><strong>Tên:</strong> ${client.name}</p>
+                                    <p><strong>URL:</strong> ${client.url}</p>
+                                    <p><strong>Trạng thái:</strong> <span style="color: ${color}; font-weight: bold;">${status}</span></p>
+                                    <p><strong>Kiểm tra lúc:</strong> ${new Date().toLocaleString('vi-VN')}</p>
+                                </div>
+                            `,
+                            confirmButtonText: 'Đóng'
+                        });
+
+                        // Refresh client list to update status
+                        loadClients();
+                    } else {
+                        Swal.fire('Lỗi!', data.error || 'Không thể kiểm tra client.', 'error');
+                    }
+                })
+                .catch(error => {
+                    Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
+                    console.error('Check health error:', error);
+                });
         }
 
         function viewClient(clientId) {
-            // View client details
+            const client = clients.find(c => c.id === clientId);
+
+            if (!client) {
+                Swal.fire('Lỗi!', 'Không tìm thấy client.', 'error');
+                return;
+            }
+
+            const statusColor = client.status === 'online' ? '#28a745' :
+                               client.status === 'offline' ? '#dc3545' : '#6c757d';
+
+            const lastCheck = client.last_check ?
+                new Date(client.last_check).toLocaleString('vi-VN') : 'Chưa kiểm tra';
+
+            Swal.fire({
+                title: 'Thông tin Client',
+                html: `
+                    <div style="text-align: left; max-width: 500px;">
+                        <div style="margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                            <h4 style="margin: 0 0 10px 0; color: #495057;">
+                                <i class="fas fa-server"></i> ${client.name}
+                            </h4>
+                            <p style="margin: 5px 0;"><strong>ID:</strong> ${client.id}</p>
+                            <p style="margin: 5px 0;"><strong>URL:</strong>
+                                <a href="${client.url}" target="_blank" style="color: #007bff;">${client.url}</a>
+                            </p>
+                            <p style="margin: 5px 0;"><strong>API Key:</strong>
+                                <code style="background: #e9ecef; padding: 2px 6px; border-radius: 4px; font-size: 12px;">
+                                    ${client.api_key}
+                                </code>
+                            </p>
+                        </div>
+
+                        <div style="margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                            <h5 style="margin: 0 0 10px 0; color: #495057;">
+                                <i class="fas fa-info-circle"></i> Trạng thái
+                            </h5>
+                            <p style="margin: 5px 0;"><strong>Trạng thái:</strong>
+                                <span style="color: ${statusColor}; font-weight: bold; text-transform: capitalize;">
+                                    ${client.status || 'unknown'}
+                                </span>
+                            </p>
+                            <p style="margin: 5px 0;"><strong>Lần kiểm tra cuối:</strong> ${lastCheck}</p>
+                            <p style="margin: 5px 0;"><strong>Ngày thêm:</strong>
+                                ${client.created_at ? new Date(client.created_at).toLocaleString('vi-VN') : 'N/A'}
+                            </p>
+                        </div>
+
+                        <div style="margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                            <h5 style="margin: 0 0 10px 0; color: #495057;">
+                                <i class="fas fa-cogs"></i> Thao tác nhanh
+                            </h5>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <button onclick="checkHealth('${client.id}')"
+                                        style="padding: 8px 16px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    <i class="fas fa-heartbeat"></i> Kiểm tra
+                                </button>
+                                <button onclick="scanClient('${client.id}')"
+                                        style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    <i class="fas fa-search"></i> Quét
+                                </button>
+                                <button onclick="window.open('${client.url}', '_blank')"
+                                        style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    <i class="fas fa-external-link-alt"></i> Mở
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `,
+                width: 600,
+                showConfirmButton: true,
+                confirmButtonText: 'Đóng',
+                showCancelButton: true,
+                cancelButtonText: 'Chỉnh sửa',
+                cancelButtonColor: '#ffc107'
+            }).then((result) => {
+                if (result.dismiss === Swal.DismissReason.cancel) {
+                    // Open edit modal
+                    editClient(client);
+                }
+            });
         }
 
         function deleteClient(clientId) {
-            // Delete client
+            const client = clients.find(c => c.id === clientId);
+
+            if (!client) {
+                Swal.fire('Lỗi!', 'Không tìm thấy client.', 'error');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Xác nhận xóa',
+                html: `
+                    <div style="text-align: left;">
+                        <p>Bạn có chắc chắn muốn xóa client này không?</p>
+                        <div style="background: #f8d7da; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                            <h5 style="color: #721c24; margin: 0 0 10px 0;">
+                                <i class="fas fa-exclamation-triangle"></i> Thông tin client sẽ bị xóa:
+                            </h5>
+                            <p style="margin: 5px 0;"><strong>Tên:</strong> ${client.name}</p>
+                            <p style="margin: 5px 0;"><strong>URL:</strong> ${client.url}</p>
+                            <p style="margin: 5px 0;"><strong>ID:</strong> ${client.id}</p>
+                        </div>
+                        <p style="color: #dc3545; font-weight: bold;">
+                            <i class="fas fa-warning"></i> Hành động này không thể hoàn tác!
+                        </p>
+                    </div>
+                `,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Xóa',
+                cancelButtonText: 'Hủy',
+                focusCancel: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Show loading
+                    Swal.fire({
+                        title: 'Đang xóa...',
+                        html: `Đang xóa client: <strong>${client.name}</strong>`,
+                        allowOutsideClick: false,
+                        showConfirmButton: false,
+                        willOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    // Call delete API
+                    const formData = new FormData();
+                    formData.append('id', clientId);
+
+                    fetch('?api=delete_client', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Đã xóa!',
+                                text: `Client "${client.name}" đã được xóa thành công.`,
+                                timer: 2000,
+                                showConfirmButton: false
+                            });
+
+                            // Refresh client list
+                            loadClients();
+                        } else {
+                            Swal.fire('Lỗi!', data.error || 'Không thể xóa client.', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
+                        console.error('Delete client error:', error);
+                    });
+                }
+            });
+        }
+
+        function editClient(client) {
+            Swal.fire({
+                title: 'Chỉnh sửa Client',
+                html: `
+                    <div style="text-align: left;">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Tên Client:</label>
+                            <input type="text" id="editClientName" value="${client.name}"
+                                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">URL:</label>
+                            <input type="url" id="editClientUrl" value="${client.url}"
+                                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">API Key:</label>
+                            <input type="text" id="editClientApiKey" value="${client.api_key}"
+                                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="background: #e7f3ff; padding: 10px; border-radius: 4px; font-size: 14px;">
+                            <i class="fas fa-info-circle"></i>
+                            Lưu ý: Thay đổi URL hoặc API Key có thể ảnh hưởng đến kết nối với client.
+                        </div>
+                    </div>
+                `,
+                width: 500,
+                showCancelButton: true,
+                confirmButtonText: 'Lưu thay đổi',
+                cancelButtonText: 'Hủy',
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                preConfirm: () => {
+                    const name = document.getElementById('editClientName').value.trim();
+                    const url = document.getElementById('editClientUrl').value.trim();
+                    const apiKey = document.getElementById('editClientApiKey').value.trim();
+
+                    if (!name || !url || !apiKey) {
+                        Swal.showValidationMessage('Vui lòng điền đầy đủ thông tin');
+                        return false;
+                    }
+
+                    // Validate URL format
+                    try {
+                        new URL(url);
+                    } catch (e) {
+                        Swal.showValidationMessage('URL không hợp lệ');
+                        return false;
+                    }
+
+                    return { name, url, apiKey };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const { name, url, apiKey } = result.value;
+
+                    // Show loading
+                    Swal.fire({
+                        title: 'Đang cập nhật...',
+                        html: 'Đang lưu thay đổi...',
+                        allowOutsideClick: false,
+                        showConfirmButton: false,
+                        willOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    // Call update API (we need to add this endpoint)
+                    const formData = new FormData();
+                    formData.append('id', client.id);
+                    formData.append('name', name);
+                    formData.append('url', url);
+                    formData.append('api_key', apiKey);
+
+                    fetch('?api=update_client', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Đã cập nhật!',
+                                text: 'Thông tin client đã được cập nhật thành công.',
+                                timer: 2000,
+                                showConfirmButton: false
+                            });
+
+                            // Refresh client list
+                            loadClients();
+                        } else {
+                            Swal.fire('Lỗi!', data.error || 'Không thể cập nhật client.', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        Swal.fire('Lỗi!', 'Không thể kết nối tới server.', 'error');
+                        console.error('Update client error:', error);
+                    });
+                }
+            });
         }
 
         // Priority Files Functions
